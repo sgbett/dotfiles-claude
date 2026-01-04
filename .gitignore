@@ -1,0 +1,25 @@
+# Ephemeral/generated - managed by Claude Code
+debug/
+file-history/
+plans/
+session-env/
+shell-snapshots/
+todos/
+stats-cache.json
+statsig/
+history.jsonl
+
+# Per-project memory - potentially sensitive
+projects/
+
+# Plugin marketplace cache
+plugins/
+
+# External framework (reinstall from https://github.com/codenamev/ai-software-architect)
+skills/
+
+# Cleanup holding area
+.trash/
+
+# macOS
+.DS_Store
