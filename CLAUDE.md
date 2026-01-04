@@ -44,3 +44,11 @@
 - Be direct and concise
 - Skip unnecessary praise or validation
 - Focus on facts and problem-solving
+
+## Web Fetching
+
+If `WebFetch` fails (403, Cloudflare block, etc.), try `mcp__ruby-fetch__fetch_url` as a fallback:
+- Supports custom headers and User-Agent
+- For Cloudflare-protected sites, use `mcp__ruby-fetch__fetch_url_flaresolverr` (requires FlareSolverr running: `docker run -d -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest`)
+
+**Note:** Claude.ai shared conversations cannot be fetched programmatically - the content is loaded client-side via authenticated API calls with IP/fingerprint-bound sessions. See [GitHub issue #15542](https://github.com/anthropics/claude-code/issues/15542) for feature request.
