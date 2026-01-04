@@ -11,7 +11,16 @@ require 'uri'
 class MCPFetchServer
   PROTOCOL_VERSION = '2024-11-05'
   SERVER_NAME = 'ruby-fetch'
-  SERVER_VERSION = '1.0.0'
+  SERVER_VERSION = '1.1.0'
+
+  DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15 (mcp:ruby-fetch +https://github.com/sgbett/dotfiles-claude/issues)'
+
+  DEFAULT_HEADERS = {
+    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language' => 'en-GB,en;q=0.9',
+    'Connection' => 'keep-alive',
+    'Upgrade-Insecure-Requests' => '1'
+  }.freeze
 
   def initialize
     @tools = [
@@ -45,6 +54,10 @@ class MCPFetchServer
             follow_redirects: {
               type: 'boolean',
               description: 'Follow HTTP redirects (default: true)'
+            },
+            proxy: {
+              type: 'string',
+              description: 'Proxy URL (e.g., http://user:pass@proxy:port)'
             }
           },
           required: ['url']
@@ -138,11 +151,12 @@ class MCPFetchServer
     url = args['url']
     return error_content('URL is required') if url.nil? || url.empty?
 
-    user_agent = args['user_agent'] || 'Ruby-MCP-Fetch/1.0'
+    user_agent = args['user_agent'] || DEFAULT_USER_AGENT
     extra_headers = args['headers'] || {}
     method = (args['method'] || 'GET').upcase
     body = args['body']
     follow_redirects = args.fetch('follow_redirects', true)
+    proxy_url = args['proxy']
     max_redirects = 10
 
     begin
@@ -150,13 +164,18 @@ class MCPFetchServer
       redirect_count = 0
 
       loop do
-        http = Net::HTTP.new(uri.host, uri.port)
+        http = if proxy_url
+          proxy_uri = URI.parse(proxy_url)
+          Net::HTTP.new(uri.host, uri.port, proxy_uri.host, proxy_uri.port, proxy_uri.user, proxy_uri.password)
+        else
+          Net::HTTP.new(uri.host, uri.port)
+        end
         http.use_ssl = uri.scheme == 'https'
         http.open_timeout = 10
         http.read_timeout = 30
         http.verify_mode = OpenSSL::SSL::VERIFY_PEER if http.use_ssl?
 
-        headers = { 'User-Agent' => user_agent }.merge(extra_headers)
+        headers = DEFAULT_HEADERS.merge('User-Agent' => user_agent).merge(extra_headers)
 
         request = case method
         when 'GET'

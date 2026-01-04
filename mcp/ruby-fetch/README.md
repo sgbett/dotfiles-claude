@@ -15,11 +15,12 @@ Fetch a URL with custom headers and User-Agent.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `url` | string | Yes | - | The URL to fetch |
-| `user_agent` | string | No | `Ruby-MCP-Fetch/1.0` | Custom User-Agent string |
-| `headers` | object | No | `{}` | Additional HTTP headers as key-value pairs |
+| `user_agent` | string | No | Safari UA | Custom User-Agent string |
+| `headers` | object | No | `{}` | Additional HTTP headers (merged with defaults) |
 | `method` | string | No | `GET` | HTTP method: GET, POST, PUT, DELETE, HEAD |
 | `body` | string | No | - | Request body for POST/PUT requests |
 | `follow_redirects` | boolean | No | `true` | Follow HTTP redirects |
+| `proxy` | string | No | - | Proxy URL (e.g., `http://user:pass@proxy:port`) |
 
 ### Examples
 
@@ -49,14 +50,42 @@ url: "https://example.com/large-file.zip"
 method: "HEAD"
 ```
 
+**Fetch via proxy:**
+```
+url: "https://example.com"
+proxy: "http://proxy.example.com:8080"
+```
+
+**Fetch via authenticated proxy:**
+```
+url: "https://example.com"
+proxy: "http://user:password@proxy.example.com:8080"
+```
+
 ## Features
 
-- **Custom User-Agent**: Override the default User-Agent for sites that block bots
+- **Browser-like defaults**: Realistic Safari User-Agent and standard browser headers (Accept, Accept-Language, etc.) to reduce bot detection
+- **Custom User-Agent**: Override the default User-Agent if needed
+- **Proxy support**: Route requests through HTTP proxies with optional authentication
 - **Additional headers**: Set any HTTP headers (auth tokens, content types, etc.)
 - **Multiple HTTP methods**: GET, POST, PUT, DELETE, HEAD
 - **Redirect handling**: Follows redirects by default (up to 10 hops)
 - **SSL/TLS**: HTTPS with certificate verification
 - **Timeouts**: 10s connection, 30s read
+
+## Default Headers
+
+The server sends browser-like headers by default:
+
+```
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15 (mcp:ruby-fetch +https://github.com/sgbett/dotfiles-claude/issues)
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-GB,en;q=0.9
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+```
+
+These can be overridden using the `user_agent` and `headers` parameters.
 
 ## Configuration
 
