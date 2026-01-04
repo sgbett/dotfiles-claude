@@ -11,7 +11,9 @@ require 'uri'
 class MCPFetchServer
   PROTOCOL_VERSION = '2024-11-05'
   SERVER_NAME = 'ruby-fetch'
-  SERVER_VERSION = '1.1.0'
+  SERVER_VERSION = '1.2.0'
+
+  FLARESOLVERR_DEFAULT_URL = 'http://localhost:8191/v1'
 
   DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15 (mcp:ruby-fetch +https://github.com/sgbett/dotfiles-claude/issues)'
 
@@ -58,6 +60,28 @@ class MCPFetchServer
             proxy: {
               type: 'string',
               description: 'Proxy URL (e.g., http://user:pass@proxy:port)'
+            }
+          },
+          required: ['url']
+        }
+      },
+      {
+        name: 'fetch_url_flaresolverr',
+        description: 'Fetch a Cloudflare-protected URL using FlareSolverr. Requires FlareSolverr running (Docker). Use this when fetch_url returns a Cloudflare challenge page.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'The URL to fetch'
+            },
+            flaresolverr_url: {
+              type: 'string',
+              description: "FlareSolverr endpoint (default: #{FLARESOLVERR_DEFAULT_URL})"
+            },
+            max_timeout: {
+              type: 'integer',
+              description: 'Max timeout in milliseconds (default: 60000)'
             }
           },
           required: ['url']
@@ -142,6 +166,8 @@ class MCPFetchServer
     case tool_name
     when 'fetch_url'
       fetch_url(arguments)
+    when 'fetch_url_flaresolverr'
+      fetch_url_flaresolverr(arguments)
     else
       error_content("Unknown tool: #{tool_name}")
     end
@@ -213,6 +239,12 @@ class MCPFetchServer
           response.body || ''
         end
 
+        # Auto-fallback to FlareSolverr if Cloudflare challenge detected
+        if cloudflare_challenge?(content) && flaresolverr_available?
+          $stderr.puts "Cloudflare challenge detected, attempting FlareSolverr fallback..."
+          return fetch_url_flaresolverr({ 'url' => url })
+        end
+
         return {
           content: [
             {
@@ -236,6 +268,77 @@ class MCPFetchServer
     rescue StandardError => e
       error_content("Error: #{e.class} - #{e.message}")
     end
+  end
+
+  def fetch_url_flaresolverr(args)
+    url = args['url']
+    return error_content('URL is required') if url.nil? || url.empty?
+
+    flaresolverr_url = args['flaresolverr_url'] || FLARESOLVERR_DEFAULT_URL
+    max_timeout = args['max_timeout'] || 60_000
+
+    begin
+      uri = URI.parse(flaresolverr_url)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = uri.scheme == 'https'
+      http.open_timeout = 10
+      http.read_timeout = (max_timeout / 1000) + 30 # Allow extra time beyond max_timeout
+
+      payload = {
+        cmd: 'request.get',
+        url: url,
+        maxTimeout: max_timeout
+      }
+
+      request = Net::HTTP::Post.new(uri.path.empty? ? '/' : uri.path)
+      request['Content-Type'] = 'application/json'
+      request.body = JSON.generate(payload)
+
+      response = http.request(request)
+      result = JSON.parse(response.body)
+
+      if result['status'] == 'ok'
+        solution = result['solution'] || {}
+        {
+          content: [
+            {
+              type: 'text',
+              text: solution['response'] || ''
+            }
+          ]
+        }
+      else
+        error_content("FlareSolverr error: #{result['message'] || 'Unknown error'}")
+      end
+
+    rescue Errno::ECONNREFUSED
+      error_content("FlareSolverr not running at #{flaresolverr_url}. Start it with: docker run -d -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest")
+    rescue JSON::ParserError => e
+      error_content("FlareSolverr returned invalid JSON: #{e.message}")
+    rescue StandardError => e
+      error_content("FlareSolverr error: #{e.class} - #{e.message}")
+    end
+  end
+
+  def cloudflare_challenge?(content)
+    return false if content.nil? || content.empty?
+
+    content.include?('Just a moment...') &&
+      (content.include?('cf_chl') || content.include?('challenge-platform'))
+  end
+
+  def flaresolverr_available?
+    uri = URI.parse(FLARESOLVERR_DEFAULT_URL)
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.open_timeout = 2
+    http.read_timeout = 2
+
+    # FlareSolverr health check
+    request = Net::HTTP::Get.new('/')
+    response = http.request(request)
+    response.code == '200'
+  rescue StandardError
+    false
   end
 
   def format_headers(response)

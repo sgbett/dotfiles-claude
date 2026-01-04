@@ -62,9 +62,38 @@ url: "https://example.com"
 proxy: "http://user:password@proxy.example.com:8080"
 ```
 
+## Tool: fetch_url_flaresolverr
+
+Fetch Cloudflare-protected URLs using [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr). Requires FlareSolverr running as a Docker container.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `url` | string | Yes | - | The URL to fetch |
+| `flaresolverr_url` | string | No | `http://localhost:8191/v1` | FlareSolverr endpoint |
+| `max_timeout` | integer | No | `60000` | Max timeout in milliseconds |
+
+### Example
+
+```
+url: "https://cloudflare-protected-site.com"
+```
+
+### FlareSolverr Setup
+
+```bash
+# Start FlareSolverr (runs on port 8191)
+docker run -d --name flaresolverr -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest
+
+# Check it's running
+curl http://localhost:8191/
+```
+
 ## Features
 
 - **Browser-like defaults**: Realistic Safari User-Agent and standard browser headers (Accept, Accept-Language, etc.) to reduce bot detection
+- **Cloudflare bypass**: Auto-fallback to FlareSolverr when Cloudflare challenge detected (if FlareSolverr is running)
 - **Custom User-Agent**: Override the default User-Agent if needed
 - **Proxy support**: Route requests through HTTP proxies with optional authentication
 - **Additional headers**: Set any HTTP headers (auth tokens, content types, etc.)
