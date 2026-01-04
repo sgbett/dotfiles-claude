@@ -21,5 +21,8 @@ skills/
 # Cleanup holding area
 .trash/
 
+# Temporary files (may contain sensitive data)
+tmp/
+
 # macOS
 .DS_Store
