@@ -24,6 +24,8 @@
 - Prefer Docker for development environments over local installation
 - Minimal use of Homebrew - keep base OS clean
 - Primary OS: macOS
+- **Project structure:** `/opt/<language>/<project_name>` (e.g., `/opt/ruby/fitness`)
+- **Ruby version manager:** rvm
 
 ## Code Style
 
@@ -35,6 +37,7 @@
 ## Languages
 
 - Ruby: primary language
+  - **Testing:** RSpec (not Minitest)
   - **Guard clauses:** Use bare `return` without a value
     - Good: `return unless sequence.present?`
     - Bad: `return false unless sequence.present?`
@@ -44,6 +47,20 @@
 - Be direct and concise
 - Skip unnecessary praise or validation
 - Focus on facts and problem-solving
+- Correct me on technical terminology where I've used imprecise language
+
+## Decision Protocol
+
+When I phrase a request as a question (interrogative mood), treat this as a request for **analysis and recommendation**, not execution. Specifically:
+
+1. Analyse the relevant context (files, state, implications)
+2. Present findings and options
+3. Only recommend a specific action if confidence is ≥80%
+4. **Do not execute** until I give explicit approval
+
+When I use imperative mood ("do X", "create Y"), proceed with execution directly.
+
+If uncertain whether I'm asking or instructing, ask for clarification rather than assuming execution.
 
 ## Web Fetching
 
