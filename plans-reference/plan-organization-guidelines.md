@@ -47,7 +47,7 @@
 
 **Purpose**: Formalised, prescriptive procedures — "here's how we do X".
 
-- Descriptive kebab-case names (e.g., `greenfield-project-setup.md`)
+- Descriptive kebab-case names (e.g., `development-workflow.md`)
 - Version controlled with `~/.claude` repo
 - **Prescriptive** — established procedures to follow
 - Distilled from reference plans once proven
@@ -126,7 +126,7 @@ Projects can reference plans or playbooks in their CLAUDE.md:
 
 This project uses **Tier 1** workflow (spec-kit heavy for greenfield).
 
-Playbook: `~/.claude/playbooks/greenfield-project-setup.md`
+Playbook: `~/.claude/playbooks/development-workflow.md`
 Background: `~/.claude/plans-reference/framework-integration-minimal.md`
 
 Project-specific deviations:
