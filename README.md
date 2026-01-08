@@ -14,6 +14,28 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 - `plans-reference/` - Reference documentation
 - `playbooks/` - Formalised procedures
 
+## What Claude Code Auto-Loads
+
+When starting a session in **any project**, Claude Code automatically injects:
+
+| File | Behaviour |
+|------|-----------|
+| `CLAUDE.md` | Always loaded into context |
+| `rules/*.md` | Always loaded (if directory exists) |
+| `settings.json` | Applied as configuration |
+
+Everything else requires explicit action:
+
+| File/Folder | Requires |
+|-------------|----------|
+| `INSTALLING-RAILS.md` | Read tool or `@` import |
+| `playbooks/*.md` | Read tool or `@` import |
+| `plans-reference/*.md` | Read tool or `@` import |
+| `skills/` | Invoke with `/skill-name` |
+| `commands/` | Invoke with `/command-name` |
+
+**Tip**: Reference files in `CLAUDE.md` (e.g., "Follow `~/.claude/INSTALLING-RAILS.md`") without importing them. They'll only be read when needed, keeping context lean.
+
 ## Setup on New Machine
 
 1. Clone this repo to `~/.claude`:
