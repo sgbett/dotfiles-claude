@@ -26,6 +26,7 @@
 - Primary OS: macOS
 - **Project structure:** `/opt/<language>/<project_name>` (e.g., `/opt/ruby/fitness`)
 - **Ruby version manager:** rvm
+- **Database:** PostgreSQL (not SQLite)
 
 ## Code Style
 
@@ -41,10 +42,14 @@
   - **Guard clauses:** Use bare `return` without a value
     - Good: `return unless sequence.present?`
     - Bad: `return false unless sequence.present?`
+  - **Rails:** Follow `~/.claude/INSTALLING-RAILS.md` when creating new Rails projects
 
 ## Communication
 
 - Be direct and concise
+- Lead with conclusions, then reasoning
+- Assume technical competence—don't over-explain fundamentals
+- Illustrate non-trivial concepts with concrete examples
 - Skip unnecessary praise or validation
 - Focus on facts and problem-solving
 - Correct me on technical terminology where I've used imprecise language
