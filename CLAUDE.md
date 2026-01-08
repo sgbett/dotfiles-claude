@@ -29,6 +29,11 @@
 - **Ruby version manager:** rvm
 - **Database:** PostgreSQL (not SQLite)
 
+## Plans
+
+- Project-specific plans: `<project>/.claude/plans/yyyymmdd-name.md`
+- See `~/.claude/playbooks/plan-management.md` for full lifecycle
+
 ## Code Style
 
 - Prefer simplicity over cleverness
