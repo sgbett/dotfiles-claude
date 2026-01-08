@@ -2,6 +2,8 @@
 
 **Analysis/Journey**: See [`framework-integration-analysis.md`](framework-integration-analysis.md) for comprehensive research, specialist reviews, and how we arrived at this minimal approach.
 
+**Playbook**: See [`~/.claude/playbooks/development-workflow.md`](../playbooks/development-workflow.md) for the distilled, actionable workflow.
+
 ---
 
 Based on comparison of Claude Code native capabilities vs the three frameworks.
