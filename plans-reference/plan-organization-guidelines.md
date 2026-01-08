@@ -1,5 +1,7 @@
 # Plan Organisation Guidelines
 
+**Playbook**: See [`~/.claude/playbooks/plan-management.md`](../playbooks/plan-management.md) for the distilled, actionable workflow.
+
 ## Directory Convention
 
 | Directory | Purpose | Version Control | Naming |
