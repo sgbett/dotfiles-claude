@@ -55,22 +55,7 @@ Using `--skip-test` (RSpec) and `-d postgresql` (not SQLite):
 rails new . --skip-test -d postgresql
 ```
 
-### 6. Install Importmap
-
-Rails 8 includes `importmap-rails` in the Gemfile but doesn't run the installer. The generated CI workflow expects `bin/importmap audit` to work:
-
-```bash
-bin/rails importmap:install
-```
-
-This creates:
-- `bin/importmap` (binstub)
-- `config/importmap.rb` (configuration)
-- `app/javascript/application.js` (JS entrypoint)
-- `vendor/javascript/` (for vendored JS)
-- Adds `javascript_importmap_tags` to the layout
-
-### 7. Add RSpec
+### 6. Add RSpec
 
 Add to `Gemfile` in the `:development, :test` group:
 ```ruby
@@ -83,14 +68,14 @@ bundle install
 rails generate rspec:install
 ```
 
-### 8. Rename branch to master
+### 7. Rename branch to master
 
 `rails new` initialises git with `main`. Rename to `master`:
 ```bash
 git branch -m main master
 ```
 
-### 9. Fix CI workflow
+### 8. Fix CI workflow
 
 Rails defaults to `main`. Check and fix any references:
 ```bash
@@ -117,20 +102,20 @@ echo -e "\n# Ignore Claude Code local settings.\n/.claude/settings.local.json" >
 
 Note: The rest of `.claude/` (settings.json, commands/, agents/) is designed for version control.
 
-### 10. Update gems
+### 9. Update gems
 
 ```bash
 bundle update
 ```
 
-### 11. Verify setup
+### 10. Verify setup
 
 ```bash
 bin/rspec              # should pass (no tests yet)
 bin/rails server       # should start on localhost:3000
 ```
 
-### 12. Create GitHub repo and push
+### 11. Create GitHub repo and push
 
 ```bash
 git add .
@@ -211,6 +196,33 @@ The RSpec binstub isn't generated automatically. Create it with:
 bundle binstubs rspec-core
 ```
 
+### `.pgpass` not working
+
+PostgreSQL ignores `.pgpass` if permissions are too open. Must be `600`:
+```bash
+chmod 600 ~/.pgpass
+```
+
+### `.pgpass` ignored despite correct permissions
+
+Check for a `PGPASSWORD` environment variable — it takes precedence over `.pgpass`:
+```bash
+env | grep PGPASSWORD
+unset PGPASSWORD
+```
+
+### Database connection fails for new app
+
+The shared PostgreSQL `pg_hba.conf` may need a rule for the `rails` user. Add:
+```
+host    all    rails    0.0.0.0/0    scram-sha-256
+```
+
+Then reload:
+```bash
+docker exec postgres-db-1 psql -U postgres -c "SELECT pg_reload_conf()"
+```
+
 ---
 
 ## Quick Reference
@@ -226,6 +238,6 @@ bundle binstubs rspec-core
 
 ---
 
-*Last updated: January 2026*
+*Last updated: January 2026 (removed importmap:install step - now automatic)*
 *Rails version: 8.1.1*
 *Ruby version: 3.4.2*
