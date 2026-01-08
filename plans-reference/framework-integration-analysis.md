@@ -698,7 +698,7 @@ The integration plan demonstrates solid architectural thinking with clear separa
 ### Review Scope
 
 **What Was Reviewed**:
-- Integration plan document (`~/.claude/plans/flickering-wishing-key.md`)
+- Integration plan document (this file, originally `flickering-wishing-key.md`)
 - Framework purpose and capabilities (from earlier research)
 - Proposed workflow and artifact structure
 
