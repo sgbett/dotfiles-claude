@@ -102,6 +102,8 @@ echo -e "\n# Ignore Claude Code local settings.\n/.claude/settings.local.json" >
 
 Note: The rest of `.claude/` (settings.json, commands/, agents/) is designed for version control.
 
+For optional project setup (plans folder, rules), see `~/.claude/playbooks/`.
+
 ### 9. Update gems
 
 ```bash
