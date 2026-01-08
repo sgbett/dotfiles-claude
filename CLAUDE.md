@@ -21,7 +21,8 @@
 
 ## Development Environment
 
-- Prefer Docker for development environments over local installation
+- Prefer Docker for services (databases, caches, message queues) over local installation
+- Use rvm for Ruby version management (not Docker)
 - Minimal use of Homebrew - keep base OS clean
 - Primary OS: macOS
 - **Project structure:** `/opt/<language>/<project_name>` (e.g., `/opt/ruby/fitness`)
