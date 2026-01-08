@@ -40,11 +40,20 @@ Everything else requires explicit action:
 
 1. Clone this repo to `~/.claude`:
    ```bash
-   git clone git@github.com:USERNAME/dotfiles-claude.git ~/.claude
+   git clone git@github.com:sgbett/dotfiles-claude.git ~/.claude
    ```
 
-2. Install external dependencies (optional):
-   - [ai-software-architect](https://github.com/codenamev/ai-software-architect) skills
+2. Install [ai-software-architect](https://github.com/codenamev/ai-software-architect) skills (required for `playbooks/development-workflow.md`):
+   ```bash
+   git clone https://github.com/codenamev/ai-software-architect /tmp/ai-architect-$$
+   cp -r /tmp/ai-architect-$$/.claude/skills ~/.claude/
+   ```
+
+   This provides the following skills used by the development workflow:
+   - `architecture-review` — multi-specialist architectural review
+   - `specialist-review` — focused domain expert review
+   - `create-adr` — document architectural decisions
+   - `pragmatic-guard` — YAGNI enforcement
 
 ## What's NOT Tracked
 
