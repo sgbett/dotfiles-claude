@@ -62,8 +62,15 @@
 plans-reference/framework-integration-minimal.md  (the journey, rationale)
          │
          ▼ (formalise when proven)
-playbooks/greenfield-project-setup.md             (the procedure)
+playbooks/development-workflow.md                 (the procedure)
 ```
+
+**Cross-referencing**: When a playbook is created from a plan, add a link in the source plan's header:
+```markdown
+**Playbook**: See [`~/.claude/playbooks/<name>.md`](../playbooks/<name>.md)
+```
+
+This maintains traceability from rationale → procedure.
 
 ---
 
