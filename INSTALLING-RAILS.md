@@ -213,6 +213,8 @@ volumes:
   postgres_data:
 ```
 
+> **Security Note**: The `rails`/`rails` credentials above are for local development only. Never commit real credentials to version control. For production, use environment variables from a secure vault, Docker secrets, or your cloud provider's secrets management service.
+
 Create `.dockerignore`:
 
 ```
@@ -252,6 +254,8 @@ Create `.env` file (add to `.gitignore`):
 ```
 RAILS_MASTER_KEY=<value from config/master.key>
 ```
+
+> **Security Warning**: The master key decrypts all Rails credentials (`config/credentials.yml.enc`). Never commit `config/master.key` or share the key value. For production, use your deployment platform's secrets management rather than `.env` files.
 
 ### 11. Verify setup
 
@@ -349,6 +353,8 @@ volumes:
   postgres_data:
   bundle_cache:
 ```
+
+> **Security Note**: Same as production—these `rails`/`rails` credentials are for local development only.
 
 Key differences from production:
 - `volumes: - .:/rails` - Bind mount replaces copied code
@@ -555,6 +561,6 @@ docker exec postgres-db-1 psql -U postgres -c "SELECT pg_reload_conf()"
 
 ---
 
-*Last updated: January 2026 (added bind mount development workflow)*
+*Last updated: January 2026 (added security warnings for credentials)*
 *Rails version: 8.1.1*
 *Ruby version: 3.4.2*
