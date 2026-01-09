@@ -110,14 +110,305 @@ For optional project setup (plans folder, rules), see `~/.claude/playbooks/`.
 bundle update
 ```
 
-### 10. Verify setup
+### 10. Add Docker support
 
+Create `Dockerfile`:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+ARG RUBY_VERSION=3.4.2
+FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
+
+WORKDIR /rails
+
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y \
+      curl libjemalloc2 libvips postgresql-client && \
+    ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+ENV RAILS_ENV="production" \
+    BUNDLE_DEPLOYMENT="1" \
+    BUNDLE_PATH="/usr/local/bundle" \
+    BUNDLE_WITHOUT="development:test" \
+    LD_PRELOAD=/usr/local/lib/libjemalloc.so
+
+FROM base AS build
+
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential git libpq-dev libyaml-dev pkg-config && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+COPY Gemfile Gemfile.lock vendor ./
+RUN bundle install && \
+    rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
+    bundle exec bootsnap precompile -j 1 --gemfile
+
+COPY . .
+
+RUN bundle exec bootsnap precompile -j 1 app/ lib/
+RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
+
+FROM base
+
+RUN groupadd --system --gid 1000 rails && \
+    useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
+COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
+COPY --chown=rails:rails --from=build /rails /rails
+
+USER 1000:1000
+
+ENTRYPOINT ["/rails/bin/docker-entrypoint"]
+EXPOSE 80
+CMD ["./bin/thrust", "./bin/rails", "server", "-p", "80"]
+```
+
+Create `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "3000:80"
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_USERNAME=rails
+      - DATABASE_PASSWORD=rails
+      - RAILS_MASTER_KEY=${RAILS_MASTER_KEY}
+    volumes:
+      - ./storage:/rails/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: bin/jobs
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_USERNAME=rails
+      - DATABASE_PASSWORD=rails
+      - RAILS_MASTER_KEY=${RAILS_MASTER_KEY}
+    volumes:
+      - ./storage:/rails/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: rails
+      POSTGRES_PASSWORD: rails
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rails"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+```
+
+Create `.dockerignore`:
+
+```
+.git
+.gitignore
+log/*
+tmp/*
+storage/*
+.env*
+*.md
+.rspec
+spec/
+.claude/
+```
+
+Update `config/database.yml` production section:
+
+```yaml
+production:
+  primary:
+    <<: *default
+    database: <app_name>_production
+    username: <%= ENV["DATABASE_USERNAME"] %>
+    password: <%= ENV["DATABASE_PASSWORD"] %>
+    host: <%= ENV["DATABASE_HOST"] %>
+  queue:
+    <<: *default
+    database: <app_name>_production
+    username: <%= ENV["DATABASE_USERNAME"] %>
+    password: <%= ENV["DATABASE_PASSWORD"] %>
+    host: <%= ENV["DATABASE_HOST"] %>
+    migrations_paths: db/queue_migrate
+```
+
+Create `.env` file (add to `.gitignore`):
+
+```
+RAILS_MASTER_KEY=<value from config/master.key>
+```
+
+### 11. Verify setup
+
+**Local development:**
 ```bash
 bin/rspec              # should pass (no tests yet)
 bin/rails server       # should start on localhost:3000
 ```
 
-### 11. Create GitHub repo and push
+**Docker:**
+```bash
+docker compose up -d   # starts app, worker, postgres
+```
+
+App available at http://localhost:3000
+
+---
+
+## Docker Development with Bind Mounts
+
+The Docker setup above is optimised for **production** (multi-stage builds, minimal images). For **development**, use bind mounts to enable live code editing without rebuilding containers.
+
+### The Bind Mount Pattern
+
+Bind mounts map a host directory into a container. When you edit files on your machine, changes are immediately visible inside the container:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      HOST MACHINE                            │
+│                                                              │
+│  /opt/ruby/myapp/                                            │
+│  ├── app/                                                    │
+│  ├── config/            ◄──── Edit code here                 │
+│  └── ...                                                     │
+│         │                                                    │
+│         │ bind mount (.:/rails)                              │
+│         ▼                                                    │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │                  DOCKER CONTAINER                       │ │
+│  │                                                         │ │
+│  │  /rails/ ◄──── Container sees your live changes        │ │
+│  │                                                         │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### What This Enables
+
+| Action | Rebuild Required? |
+|--------|-------------------|
+| Edit Ruby files | No - Rails reloads automatically |
+| Edit views/templates | No - Rendered on each request |
+| Edit JavaScript/CSS | No - Asset pipeline recompiles |
+| Add/remove gems | **Yes** - Gemfile changed |
+| Change Dockerfile | **Yes** - Image must be rebuilt |
+
+### Development Docker Compose
+
+Create `docker-compose.dev.yml` alongside the production one:
+
+```yaml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_USERNAME=rails
+      - DATABASE_PASSWORD=rails
+      - RAILS_ENV=development
+    volumes:
+      - .:/rails                    # <-- Bind mount for live editing
+      - bundle_cache:/usr/local/bundle
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: rails
+      POSTGRES_PASSWORD: rails
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rails"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  bundle_cache:
+```
+
+Key differences from production:
+- `volumes: - .:/rails` - Bind mount replaces copied code
+- `bundle_cache` volume - Persists gems across container restarts
+- `RAILS_ENV=development` - Enables auto-reload
+- Port `3000:3000` - Standard Rails dev port
+
+### Development Dockerfile
+
+Create `Dockerfile.dev` (simpler than production):
+
+```dockerfile
+ARG RUBY_VERSION=3.4.2
+FROM docker.io/library/ruby:$RUBY_VERSION-slim
+
+WORKDIR /rails
+
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y \
+      build-essential git libpq-dev libyaml-dev curl && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+# Install gems (will be cached in volume)
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+
+# Bind mount will overlay this at runtime
+COPY . .
+
+EXPOSE 3000
+CMD ["bin/rails", "server", "-b", "0.0.0.0"]
+```
+
+### Usage
+
+```bash
+# Start development environment
+docker compose -f docker-compose.dev.yml up
+
+# After changing Gemfile
+docker compose -f docker-compose.dev.yml up --build
+
+# Run rails commands
+docker compose -f docker-compose.dev.yml exec app bin/rails db:migrate
+docker compose -f docker-compose.dev.yml exec app bin/rspec
+```
+
+### Advanced: Separate Services
+
+For larger projects, consider separating services from the application (like PortfolioBuilder does):
+
+1. **Services** run independently (postgres, redis, elasticsearch) in their own compose files
+2. **Application** connects via external Docker networks
+3. Benefits: Restart app without losing DB connections, share services across projects
+
+See `/opt/ruby/portfoliobuilder/DEVELOPMENT.md` for a comprehensive example of this pattern.
+
+---
+
+### 12. Create GitHub repo and push
 
 ```bash
 git add .
@@ -129,17 +420,24 @@ gh repo create <username>/<project_name> --public --source=. --push
 
 ## PostgreSQL Setup
 
-All Rails projects share a single PostgreSQL instance running in Docker (container: `postgres-db-1`).
+### Docker (Recommended)
 
-### Database User
+Each project has its own PostgreSQL container via `docker-compose.yml`. Database is created automatically on first run.
 
-A shared `rails` user with `CREATEDB` privileges is used for all Rails development databases.
+To access the database directly:
+```bash
+docker compose exec postgres psql -U rails -d <app_name>_production
+```
 
-Password is stored in `~/.pgpass` (format: `*:*:*:rails:<password>`).
+### Local Development
+
+For local development (without Docker), a shared PostgreSQL instance runs in Docker (container: `postgres-db-1`).
+
+A shared `rails` user with `CREATEDB` privileges is used. Password stored in `~/.pgpass` (format: `*:*:*:rails:<password>`).
 
 ### database.yml Configuration
 
-When using `rails new . -d postgresql`, it generates a default config. Update it to use the shared `rails` user:
+When using `rails new . -d postgresql`, update the generated config:
 
 ```yaml
 default: &default
@@ -161,15 +459,30 @@ production:
   primary:
     <<: *default
     database: <app_name>_production
+    username: <%= ENV["DATABASE_USERNAME"] %>
     password: <%= ENV["DATABASE_PASSWORD"] %>
+    host: <%= ENV["DATABASE_HOST"] %>
+  queue:
+    <<: *default
+    database: <app_name>_production
+    username: <%= ENV["DATABASE_USERNAME"] %>
+    password: <%= ENV["DATABASE_PASSWORD"] %>
+    host: <%= ENV["DATABASE_HOST"] %>
+    migrations_paths: db/queue_migrate
 ```
 
 **Note:** No password in development/test sections - `~/.pgpass` handles authentication automatically.
 
 ### Creating Databases
 
+**Local:**
 ```bash
 bin/rails db:create
+```
+
+**Docker:**
+```bash
+docker compose exec app bin/rails db:create db:migrate
 ```
 
 ---
@@ -231,15 +544,17 @@ docker exec postgres-db-1 psql -U postgres -c "SELECT pg_reload_conf()"
 
 | Item | Preference |
 |------|------------|
-| Ruby manager | rvm |
+| Ruby manager | rvm (local dev) |
 | Project location | `/opt/ruby/<project_name>` |
 | Default branch | `master` |
 | Testing framework | RSpec |
-| Database | PostgreSQL |
+| Database | PostgreSQL 17 (Docker) |
 | Rails install | `--skip-test -d postgresql` |
+| Production Docker | Multi-stage Dockerfile |
+| Development Docker | Bind mounts (`docker-compose.dev.yml`) |
 
 ---
 
-*Last updated: January 2026 (removed importmap:install step - now automatic)*
+*Last updated: January 2026 (added bind mount development workflow)*
 *Rails version: 8.1.1*
 *Ruby version: 3.4.2*
