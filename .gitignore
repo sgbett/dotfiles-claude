@@ -24,5 +24,8 @@ skills/
 # Temporary files (may contain sensitive data)
 tmp/
 
+# Local settings overrides
+settings.local.json
+
 # macOS
 .DS_Store
