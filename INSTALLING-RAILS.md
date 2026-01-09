@@ -283,7 +283,7 @@ The Docker setup above is optimised for **production** (multi-stage builds, mini
 Bind mounts map a host directory into a container. When you edit files on your machine, changes are immediately visible inside the container:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │                      HOST MACHINE                            │
 │                                                              │
 │  /opt/ruby/myapp/                                            │
@@ -293,13 +293,13 @@ Bind mounts map a host directory into a container. When you edit files on your m
 │         │                                                    │
 │         │ bind mount (.:/rails)                              │
 │         ▼                                                    │
-│  ┌────────────────────────────────────────────────────────┐ │
+│  ┌─────────────────────────────────────────────────────────┐ │
 │  │                  DOCKER CONTAINER                       │ │
 │  │                                                         │ │
-│  │  /rails/ ◄──── Container sees your live changes        │ │
+│  │  /rails/ ◄──── Container sees your live changes         │ │
 │  │                                                         │ │
-│  └────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+│  └─────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### What This Enables
