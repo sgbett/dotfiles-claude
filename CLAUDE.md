@@ -4,6 +4,7 @@
 
 - Default branch: `master` (not `main`)
 - No git submodules
+- **Never auto-commit** - wait for explicit instruction before running `git commit`
 
 **Commit Messages:** Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `feat:` - new feature (MINOR version)
