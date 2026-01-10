@@ -224,6 +224,15 @@ Key features:
 - **DATABASE_PORT=5432** - Inside Docker network, postgres listens on 5432 (not the host-exposed 55432)
 - **RAILS_ENV=development** - Enables auto-reload and development features
 
+If using a separate worker container for background jobs, add to `config/environments/development.rb`:
+
+```ruby
+# Use SolidQueue for background jobs (same as production)
+config.active_job.queue_adapter = :solid_queue
+```
+
+Without this, Rails uses the Async adapter in development, which runs jobs in-process and the worker container does nothing.
+
 Create `.dockerignore`:
 
 ```
