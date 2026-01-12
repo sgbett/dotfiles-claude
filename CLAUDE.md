@@ -5,6 +5,7 @@
 - Default branch: `master` (not `main`)
 - No git submodules
 - **Never auto-commit** - wait for explicit instruction before running `git commit`
+- **Never discard uncommitted changes** - before switching branches with uncommitted changes, ALWAYS `git stash` first. Never use `git checkout -f` or `git checkout .` or `git reset --hard` without stashing.
 
 **Commit Messages:** Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `feat:` - new feature (MINOR version)
@@ -34,6 +35,7 @@
 
 - Project-specific plans: `<project>/.claude/plans/yyyymmdd-name.md`
 - See `~/.claude/playbooks/plan-management.md` for full lifecycle
+- **Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing".
 
 ## Code Style
 

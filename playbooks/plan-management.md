@@ -8,30 +8,28 @@ How to manage plans throughout their lifecycle.
 
 | If the plan is... | Put it in... |
 |-------------------|--------------|
-| Active work, scratch, in-progress | `~/.claude/plans/` |
-| Worth keeping as reference | `~/.claude/plans-reference/` |
+| Ad-hoc / scratch / in-progress | `~/.claude/plans/` |
+| Linked to a GitHub Issue | `<project>/.claude/plans/` |
 | A formalised procedure | `~/.claude/playbooks/` |
-| Specific to a project | `<project>/.claude/plans/` |
+
+**Default**: Plans start in `~/.claude/plans/`. When a plan becomes linked to a specific issue, move it to the project (current working project unless specified otherwise) and rename with date prefix.
 
 ---
 
 ## Lifecycle Actions
 
-### Finishing a Working Plan
+### Finishing a Plan
 
-When done with a plan in `~/.claude/plans/`:
+When a plan is marked as completed, move it to a `completed/` subfolder within its current directory:
 
 ```
-1. Is it worth keeping?
-   ├── No  → Delete it
-   └── Yes → Is it project-specific?
-             ├── Yes → Move to <project>/.claude/plans/yyyymmdd-name.md
-             └── No  → Move to ~/.claude/plans-reference/name.md
+~/.claude/plans/foo.md           → ~/.claude/plans/completed/foo.md
+<project>/.claude/plans/bar.md   → <project>/.claude/plans/completed/bar.md
 ```
 
 ### Promoting to Playbook
 
-When a reference plan proves stable:
+When a completed plan proves stable and reusable:
 
 ```
 1. Create ~/.claude/playbooks/<name>.md
@@ -39,10 +37,7 @@ When a reference plan proves stable:
    - Remove research/rationale context
    - Keep it concise
 
-2. Update source plan header:
-   **Playbook**: See [`~/.claude/playbooks/<name>.md`](../playbooks/<name>.md)
-
-3. Commit both files together
+2. Delete or keep the original plan as reference
 ```
 
 ---
@@ -51,23 +46,16 @@ When a reference plan proves stable:
 
 | Location | Format | Example |
 |----------|--------|---------|
-| `plans/` | Auto-generated | `flickering-wishing-key.md` |
-| `plans-reference/` | Descriptive kebab-case | `framework-integration-minimal.md` |
-| `playbooks/` | Descriptive kebab-case | `development-workflow.md` |
+| `~/.claude/plans/` | Auto-generated | `flickering-wishing-key.md` |
+| `~/.claude/playbooks/` | Descriptive kebab-case | `development-workflow.md` |
 | `<project>/.claude/plans/` | Date-prefixed | `20260108-initial-architecture.md` |
 
 ---
 
 ## Housekeeping
 
-Periodically review `~/.claude/plans/`:
+Periodically review `~/.claude/plans/completed/`:
 
 - **Delete** — no longer relevant
-- **Rename & move** — worth keeping (→ `plans-reference/`)
-- **Move to project** — project-specific (→ `<project>/.claude/plans/`)
+- **Promote** — stable procedures (→ `~/.claude/playbooks/`)
 
----
-
-## Background
-
-See `~/.claude/plans-reference/plan-organization-guidelines.md` for full rationale.
