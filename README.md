@@ -11,7 +11,6 @@ Personal configuration for [Claude Code](https://claude.ai/code).
   - `project/plan/tasks.md` - GitHub Issue breakdown (from claude-workflow)
   - `speckit/` - Specification commands (from spec-kit)
 - `speckit/` - Spec-kit templates
-- `plans-reference/` - Reference documentation
 - `playbooks/` - Formalised procedures
 
 ## What Claude Code Auto-Loads
@@ -30,7 +29,6 @@ Everything else requires explicit action:
 |-------------|----------|
 | `INSTALLING-RAILS.md` | Read tool or `@` import |
 | `playbooks/*.md` | Read tool or `@` import |
-| `plans-reference/*.md` | Read tool or `@` import |
 | `skills/` | Invoke with `/skill-name` |
 | `commands/` | Invoke with `/command-name` |
 
@@ -63,4 +61,4 @@ See `.gitignore` for full list. Key exclusions:
 - `debug/`, `todos/`, `plans/` - ephemeral session data (working memory)
 - `skills/` - ai-software-architect (reinstall from external repo)
 
-**Note**: `plans/` is working memory (gitignored), while `plans-reference/` and `playbooks/` are tracked. See `plans-reference/plan-organization-guidelines.md` for the distinction.
+**Note**: `plans/` is working memory (gitignored), while `playbooks/` is tracked. See `playbooks/plan-management.md` for the plan lifecycle.

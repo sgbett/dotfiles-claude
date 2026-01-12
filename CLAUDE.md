@@ -37,6 +37,11 @@
 - See `~/.claude/playbooks/plan-management.md` for full lifecycle
 - **Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing".
 
+## Reviews
+
+- Use `specialist-review` for focused domain reviews, `architecture-review` for multi-perspective analysis
+- See `~/.claude/playbooks/specialist-review-timing.md` for when to review plans vs PRs
+
 ## Code Style
 
 - Prefer simplicity over cleverness

@@ -83,4 +83,4 @@ Use for bug fixes, small changes, and low-risk modifications.
 
 ## Background
 
-See `~/.claude/plans-reference/framework-integration-minimal.md` for rationale.
+See `~/.claude/plans/completed/framework-integration-minimal.md` for rationale.

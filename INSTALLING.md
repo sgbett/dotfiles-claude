@@ -40,7 +40,6 @@ These dotfiles can be merged into an existing `.claude` directory without overwr
 | `mcp/` | MCP server configurations |
 | `playbooks/` | Playbooks |
 | `docs/` | Documentation |
-| `plans-reference/` | Reference plans |
 | `speckit/` | Spec toolkit |
 
 ## What gets preserved
