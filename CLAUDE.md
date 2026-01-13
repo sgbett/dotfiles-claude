@@ -23,9 +23,6 @@
 - Breaking changes: append `!` (e.g., `feat!:` or `fix(api)!:`)
 - Scope is optional: `feat(auth): add login`
 
-**PR Merges:**
-- Don't squash single-commit PRs - use regular merge to preserve the original commit
-
 ## Development Environment
 
 - Prefer Docker for services (databases, caches, message queues) over local installation
