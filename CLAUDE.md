@@ -1,5 +1,7 @@
 # Personal Preferences
 
+**IMPORTANT: Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing".
+
 ## Git
 
 - Default branch: `master` (not `main`)
@@ -21,6 +23,9 @@
 - Breaking changes: append `!` (e.g., `feat!:` or `fix(api)!:`)
 - Scope is optional: `feat(auth): add login`
 
+**PR Merges:**
+- Don't squash single-commit PRs - use regular merge to preserve the original commit
+
 ## Development Environment
 
 - Prefer Docker for services (databases, caches, message queues) over local installation
@@ -35,7 +40,6 @@
 
 - Project-specific plans: `<project>/.claude/plans/yyyymmdd-name.md`
 - See `~/.claude/playbooks/plan-management.md` for full lifecycle
-- **Never start implementation until explicitly instructed** - after creating a plan, **stop and wait**. Plan approval means the plan is acceptable, not "start now". Only begin implementation when the user explicitly says to start (e.g., "go ahead", "implement this", "start phase 1").
 
 ## Reviews
 
