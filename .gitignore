@@ -24,6 +24,12 @@ skills/
 # Temporary files (may contain sensitive data)
 tmp/
 
+# Session transcripts (exported conversations)
+transcripts/
+
+# Local applications/tools
+apps/
+
 # Local settings overrides
 settings.local.json
 
