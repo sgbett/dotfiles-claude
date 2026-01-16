@@ -128,6 +128,26 @@ technology_examples:
     title: "AWS Specialist"
     origin: Nigerian
 
+  - id: email_integration_specialist
+    name: "Elena Ivanova"            # EI = Email Integration
+    title: "Email Integration Specialist"
+    origin: Russian
+
+  - id: migration_specialist
+    name: "Martin Spencer"           # MS = Migration Specialist
+    title: "Migration Specialist"
+    origin: British
+
+  - id: devops_specialist
+    name: "Derek Sullivan"           # DS = DevOps Specialist
+    title: "DevOps Specialist"
+    origin: British
+
+  - id: ux_specialist
+    name: "Uma Singh"                # US = UX Specialist
+    title: "UX Specialist"
+    origin: Indian
+
 # ============================================================================
 # GENERATING NEW NAMES
 # ============================================================================
