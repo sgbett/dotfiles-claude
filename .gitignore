@@ -15,9 +15,6 @@ projects/
 # Plugin marketplace cache
 plugins/
 
-# External framework (reinstall from https://github.com/codenamev/ai-software-architect)
-skills/
-
 # Cleanup holding area
 .trash/
 
