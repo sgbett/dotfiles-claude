@@ -71,20 +71,39 @@ The core feature - email-based support ticket management.
 | created_at | datetime | |
 | updated_at | datetime | |
 
-#### Ticket Events (Comments/Replies)
+#### Ticket Events (STI Hierarchy)
+
+**Base Class: TicketEvent**
 
 | Field | Type | Notes |
 |-------|------|-------|
 | id | integer | Primary key |
+| type | string | STI discriminator (Reply/Note) |
 | ticket_id | references | Parent ticket |
 | author_id | references | User who created event |
 | body | text | Content (markdown) |
-| public | boolean | true=reply (sent to customer), false=internal note |
+| email_message_id | string | Reply only - for email threading |
+| in_reply_to | string | Reply only - email threading |
 | created_at | datetime | |
 
-**Behaviour**:
-- **Reply** (public=true): Sends email to requester, returns to ticket index (unless "stay on ticket" checked)
-- **Comment** (public=false): No email sent, stays on ticket (unless "leave ticket" checked)
+**Subclasses**:
+- **Reply** (customer-visible): Sends email to requester, returns to ticket index (unless "stay on ticket" checked)
+- **Note** (internal): No email sent, stays on ticket (unless "leave ticket" checked). Staff-only authorship.
+
+**Terminology**: "Reply" (customer-visible) and "Note" (internal) confirmed by support team.
+
+#### Email Reply Correlation
+
+Four-layer hybrid strategy for threading customer replies to existing tickets:
+
+| Priority | Method | Handles |
+|----------|--------|---------|
+| 1 | Message-ID / In-Reply-To / References headers | Standard email threading |
+| 2 | Plus-addressing (`support+t123@domain`) | Header stripping |
+| 3 | Subject token (`[Ticket #123]`) | Forwarded emails |
+| 4 | Body token (HTML comment or visible line) | NHS mail servers |
+
+**Reliability**: ~99% combined. Body token added specifically for NHS mail infrastructure.
 
 #### Views (Ticket Lists)
 
