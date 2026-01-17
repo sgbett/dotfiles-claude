@@ -153,10 +153,58 @@ Think deeply about breaking down this work from issue $ARGUMENTS. Consider all t
 ```
 
 **Set up GitHub relationships and labels:**
-1. **Create sub-issue relationship**: Use GitHub's issue creation with parent relationship
+1. **Create the issue first**: Use `gh issue create` with labels and project
 2. **Add labels**: `task`, `{area}` (frontend/backend/etc.), `{size}` (S/M/L)
-3. **Link to parent**: Ensure proper parent-child relationship is established in GitHub
+3. **Link as sub-issue**: Use the REST API to establish parent-child relationship (see below)
 4. **Reference in description**: Include "Part of #{parent_issue_number}" in the issue body
+
+### Creating Sub-Issues via GitHub API
+
+The `gh issue create` command does not have a native `--parent` flag. Sub-issues must be linked via the REST API after creation:
+
+**Step 1: Create the issue normally**
+```bash
+gh issue create \
+  --repo owner/repo \
+  --title "[Task 1.1] Backend: Create User model" \
+  --label "project:task" \
+  --project "Project Name" \
+  --body "..."
+# Returns: https://github.com/owner/repo/issues/123
+```
+
+**Step 2: Get the database ID (not node_id) of the child issue**
+```bash
+gh api repos/owner/repo/issues/123 --jq '.id'
+# Returns: 1234567890 (integer)
+```
+
+**Step 3: Link as sub-issue of parent**
+```bash
+gh api repos/owner/repo/issues/{parent_number}/sub_issues \
+  -X POST \
+  -F sub_issue_id=1234567890
+```
+
+**Batch linking example:**
+```bash
+# Link multiple issues to parent #5
+for issue_num in 10 11 12 13; do
+  id=$(gh api repos/owner/repo/issues/$issue_num --jq '.id')
+  gh api repos/owner/repo/issues/5/sub_issues -X POST -F sub_issue_id=$id --silent
+done
+```
+
+**Verify sub-issues:**
+```bash
+gh api repos/owner/repo/issues/{parent}/sub_issues --jq '.[] | "#\(.number) \(.title)"'
+```
+
+**Important notes:**
+- The `sub_issue_id` parameter requires the **database ID** (integer), not the issue number or node_id
+- Sub-issue relationships are one-way: child points to parent
+- A sub-issue can only have one parent
+- The API endpoint is: `POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues`
 
 ## Step 6: Organize and Link Tasks
 
