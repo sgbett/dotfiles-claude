@@ -54,7 +54,6 @@ The command will:
 |------|-------------|
 | `CLAUDE.md` | Personal instructions loaded into every session |
 | `SKILLS.md` | Skills reference documentation |
-| `CONTRIBUTING.md` | Contribution guidelines |
 | `NEW-PROJECT-RAILS.md` | Rails project setup guide |
 | `settings.json` | MCP server configuration |
 | `skills/` | User-level skills (invoke with `/skill-name`) |
