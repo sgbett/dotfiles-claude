@@ -71,32 +71,52 @@ git status --porcelain
 
 **If uncommitted changes exist:** Stop and ask user to commit or stash first.
 
-### Step 2: Scan History for Secrets
+**If git-filter-repo not installed:** Provide installation instructions and stop.
 
-Scan git history for sensitive patterns:
+### Step 2: Get Security Scan with History
+
+This skill depends on `/repo-security-scan --history` for findings. Check for an existing scan:
 
 ```bash
-# Search commit history for secrets
-git log -p --all | grep -E "(password|api_key|secret|token)\s*[:=]\s*['\"][^'\"]+['\"]" | head -50
-
-# Find files that contained secrets
-git log --all --full-history -- "*.pem" "*.key" ".env" "*credentials*"
-
-# Use git-filter-repo --analyze for comprehensive view
-git-filter-repo --analyze
-cat .git/filter-repo/analysis/path-deleted-sizes.txt
+# Look for today's scan report
+ls -t security/*-scan.md 2>/dev/null | head -1
 ```
 
-Alternatively, use dedicated tools:
-```bash
-# gitleaks (if installed)
-gitleaks detect --source . --log-opts="--all"
+**If recent scan exists (today):**
+- Read the report
+- Check if it includes history findings (look for "History scanned: Yes")
+- If history was scanned, use this report
+- If history was NOT scanned, need to re-run with history
 
-# trufflehog (if installed)
-trufflehog git file://. --only-verified
+**If no recent scan OR history not scanned:**
+- Inform user: "Running security scan with history to identify items to purge..."
+- Invoke `/repo-security-scan --history`
+- Wait for scan to complete
+- Read the generated report
+
+### Step 3: Parse Scan Report for History Items
+
+Read the scan report and extract items marked as "History" or "HISTORY":
+
+```
+From scan report, extract:
+- Files to remove (marked as History - e.g., "certs/server.key (HISTORY)")
+- Patterns to scrub (secrets found in history)
+- Commit references where secrets were introduced
 ```
 
-### Step 3: Identify Items to Purge
+Build a purge list from the report's history findings.
+
+**If no history findings:**
+```
+No secrets found in git history.
+
+Current file issues (if any) can be fixed with /repo-security-clean.
+Nothing to purge from history.
+```
+Exit gracefully.
+
+### Step 4: Identify Items to Purge
 
 Build a list of:
 
@@ -124,7 +144,7 @@ Patterns to scrub:
   - Password "hunter2" found in 2 commits
 ```
 
-### Step 4: LOUD WARNING
+### Step 5: LOUD WARNING
 
 Display prominent warning:
 
@@ -152,7 +172,7 @@ Display prominent warning:
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-### Step 5: Require Explicit Confirmation
+### Step 6: Require Explicit Confirmation
 
 **Do not proceed with a simple yes/no.** Require the user to type a specific phrase:
 
@@ -171,7 +191,7 @@ Aborted. No changes made.
 To clean secrets without rewriting history, use /repo-security-clean instead.
 ```
 
-### Step 6: Create Backup
+### Step 7: Create Backup
 
 Before purging, create a backup:
 
@@ -190,7 +210,7 @@ Backup created: ../repo-backup-20260118
 If something goes wrong, you can restore from this backup.
 ```
 
-### Step 7: Execute Purge
+### Step 8: Execute Purge
 
 #### Remove Files Entirely
 
@@ -223,7 +243,7 @@ git-filter-repo --replace-text replacements.txt
 git-filter-repo --strip-blobs-bigger-than 10M
 ```
 
-### Step 8: Verify Purge
+### Step 9: Verify Purge
 
 ```bash
 # Verify secrets are gone
@@ -236,7 +256,7 @@ git log --all --full-history -- certs/server.key || echo "✓ File purged"
 # (invoke /repo-security-scan --history)
 ```
 
-### Step 9: Post-Purge Instructions
+### Step 10: Post-Purge Instructions
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -287,7 +307,7 @@ Backup location: ../repo-backup-20260118
 Report saved: security/YYYYMMDD-purge.md
 ```
 
-### Step 10: Generate Report
+### Step 11: Generate Report
 
 Write to `security/YYYYMMDD-purge.md`:
 
