@@ -12,6 +12,9 @@ history.jsonl
 # Per-project memory - potentially sensitive
 projects/
 
+# Project-specific specifications
+specs/
+
 # Plugin marketplace cache
 plugins/
 

@@ -34,24 +34,12 @@ Everything else requires explicit action:
 
 **Tip**: Reference files in `CLAUDE.md` (e.g., "Follow `~/.claude/NEW-PROJECT-RAILS.md`") without importing them. They'll only be read when needed, keeping context lean.
 
-## Setup on New Machine
+## Setup
 
-1. Clone this repo to `~/.claude`:
-   ```bash
-   git clone git@github.com:sgbett/dotfiles-claude.git ~/.claude
-   ```
+See **[SETUP.md](SETUP.md)** for installation options:
 
-2. Install [ai-software-architect](https://github.com/codenamev/ai-software-architect) skills (required for `playbooks/development-workflow.md`):
-   ```bash
-   git clone https://github.com/codenamev/ai-software-architect /tmp/ai-architect-$$
-   cp -r /tmp/ai-architect-$$/.claude/skills ~/.claude/
-   ```
-
-   This provides the following skills used by the development workflow:
-   - `architecture-review` — multi-specialist architectural review
-   - `specialist-review` — focused domain expert review
-   - `create-adr` — document architectural decisions
-   - `pragmatic-guard` — YAGNI enforcement
+- **Option A:** Clone directly to `~/.claude` (for contributors)
+- **Option B:** Use `/dotfiles-setup` command (for users) — selective installation with collision handling
 
 ## What's NOT Tracked
 

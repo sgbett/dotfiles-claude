@@ -1,34 +1,52 @@
 # Setting up dotfiles-claude
 
-These dotfiles can be merged into an existing `.claude` directory without overwriting your credentials, history, or other runtime data.
+Two ways to install these dotfiles, depending on whether you want to manage them as a git repo.
 
-## Installation
+## Option A: Clone directly into ~/.claude (recommended for contributors)
 
-1. Clone the repository to a temporary location:
-   ```bash
-   git clone --depth 1 https://github.com/sgbett/dotfiles-claude /tmp/dotfiles-claude
-   ```
+Clone the repository directly to `~/.claude`. This gives you a fully git-tracked configuration that you can push changes back to.
 
-2. Copy the contents into your `.claude` directory:
-   ```bash
-   cp -r /tmp/dotfiles-claude/* /tmp/dotfiles-claude/.gitignore ~/.claude/
-   ```
+```bash
+# Back up any existing config
+mv ~/.claude ~/.claude.backup
 
-3. Clean up the temporary clone:
-   ```bash
-   rm -rf /tmp/dotfiles-claude
-   ```
+# Clone directly
+git clone https://github.com/sgbett/dotfiles-claude ~/.claude
 
-4. Set up git tracking to keep your config in sync with the repo:
-   ```bash
-   cd ~/.claude
-   git init
-   git remote add origin https://github.com/sgbett/dotfiles-claude
-   git fetch origin
-   git reset origin/master
-   git branch -m master
-   git branch --set-upstream-to=origin/master master
-   ```
+# Restore any runtime data you want to keep
+cp ~/.claude.backup/.credentials.json ~/.claude/
+cp ~/.claude.backup/history.jsonl ~/.claude/
+cp -r ~/.claude.backup/projects ~/.claude/
+```
+
+**Pros:** Full git integration, easy to contribute changes back
+**Cons:** Must back up/restore existing runtime data manually
+
+---
+
+## Option B: Use /dotfiles-setup command (recommended for users)
+
+Clone the repository to your preferred location, then use the setup command to install components selectively.
+
+```bash
+# Clone to your repos folder
+git clone https://github.com/sgbett/dotfiles-claude ~/repos/dotfiles-claude
+
+# Open Claude Code and run the setup command
+claude
+/dotfiles-setup
+```
+
+The command will:
+1. Ask for your clone location
+2. Let you select which components to install (checkboxes)
+3. Handle collisions (replace/merge/skip)
+4. Optionally set up git tracking
+
+**Pros:** Selective installation, handles existing files gracefully, preserves runtime data
+**Cons:** Requires Claude Code to be running
+
+---
 
 ## What gets installed
 
@@ -44,14 +62,14 @@ These dotfiles can be merged into an existing `.claude` directory without overwr
 | `playbooks/` | Formalised procedures |
 | `docs/` | Reference documentation |
 | `speckit/` | Spec-kit templates |
-| `specs/` | Project specifications |
 | `.rvmrc` | Ruby version (rvm) |
 
 ## What gets preserved
 
-Your existing runtime data remains untouched:
+Your existing runtime data remains untouched (protected by `.gitignore`):
 - `.credentials.json` - Authentication credentials
 - `history.jsonl` - Command history
 - `cache/` - Cached data
 - `projects/` - Project-specific settings
 - `plugins/` - Installed plugins
+- `specs/` - Project specifications
