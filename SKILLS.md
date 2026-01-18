@@ -44,6 +44,33 @@ Fetches and displays emails from Gmail using OAuth credentials.
 
 ---
 
+### `/repo-security-scan`
+
+Scans the repository for sensitive information, credentials, and security vulnerabilities.
+
+**Usage:**
+```
+/repo-security-scan
+"scan for security issues"
+"check for sensitive data"
+"make sure there's no sensitive information"
+```
+
+**Scans for:**
+- Hardcoded secrets (API keys, passwords, tokens)
+- Security vulnerabilities (SQL injection, XSS, command injection)
+- Sensitive files that shouldn't be tracked
+- Insecure configuration patterns
+
+**Output:**
+- Report written to `security/YYYYMMDD-scan.md`
+- Remediation plan for Medium+ priority issues
+- Summary with issue counts by priority
+
+**Allowed tools:** Bash, Read, Write, Glob, Grep
+
+---
+
 ## Project Scaffolding
 
 ### `/new-project-rails`
