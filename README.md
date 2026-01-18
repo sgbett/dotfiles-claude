@@ -10,6 +10,7 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 - `commands/` - Custom slash commands
   - `project/plan/tasks.md` - GitHub Issue breakdown (from claude-workflow)
   - `speckit/` - Specification commands (from spec-kit)
+- `skills/` - User-level skills (see `SKILLS.md`)
 - `speckit/` - Spec-kit templates
 - `playbooks/` - Formalised procedures
 
