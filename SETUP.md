@@ -1,4 +1,4 @@
-# Installing dotfiles-claude
+# Setting up dotfiles-claude
 
 These dotfiles can be merged into an existing `.claude` directory without overwriting your credentials, history, or other runtime data.
 
@@ -34,13 +34,18 @@ These dotfiles can be merged into an existing `.claude` directory without overwr
 
 | Item | Description |
 |------|-------------|
-| `CLAUDE.md` | Project instructions |
-| `settings.json` | Claude settings |
-| `commands/` | Custom commands |
-| `mcp/` | MCP server configurations |
-| `playbooks/` | Playbooks |
-| `docs/` | Documentation |
-| `speckit/` | Spec toolkit |
+| `CLAUDE.md` | Personal instructions loaded into every session |
+| `SKILLS.md` | Skills reference documentation |
+| `NEW-PROJECT-RAILS.md` | Rails project setup guide |
+| `settings.json` | MCP server configuration |
+| `skills/` | User-level skills (invoke with `/skill-name`) |
+| `commands/` | Custom slash commands |
+| `mcp/` | Custom MCP servers |
+| `playbooks/` | Formalised procedures |
+| `docs/` | Reference documentation |
+| `speckit/` | Spec-kit templates |
+| `specs/` | Project specifications |
+| `.rvmrc` | Ruby version (rvm) |
 
 ## What gets preserved
 

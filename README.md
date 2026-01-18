@@ -59,6 +59,5 @@ See `.gitignore` for full list. Key exclusions:
 - `history.jsonl` - conversation history
 - `projects/` - per-project memory
 - `debug/`, `todos/`, `plans/` - ephemeral session data (working memory)
-- `skills/` - ai-software-architect (reinstall from external repo)
 
 **Note**: `plans/` is working memory (gitignored), while `playbooks/` is tracked. See `playbooks/plan-management.md` for the plan lifecycle.
