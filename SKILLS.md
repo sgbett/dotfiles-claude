@@ -102,6 +102,36 @@ Scans for security issues and automatically remediates them. Action-oriented com
 
 ---
 
+### `/repo-security-purge`
+
+**⚠️ DESTRUCTIVE** — Rewrites git history to permanently remove sensitive data using `git-filter-repo`.
+
+**Usage:**
+```
+/repo-security-purge
+"purge secrets from git history"
+"remove sensitive data from history"
+```
+
+**Capabilities:**
+- Removes files entirely from all commits
+- Scrubs sensitive patterns (replaces with `[REDACTED]`)
+- Handles all branches and tags
+
+**Safety:**
+- Requires `git-filter-repo` to be installed
+- Creates backup before any changes
+- Displays loud warning with impact summary
+- Requires typing `PURGE HISTORY` to proceed
+- Never force pushes automatically
+- Provides post-purge checklist (rotate creds, notify team)
+
+**Output:** Report to `security/YYYYMMDD-purge.md`
+
+**Allowed tools:** Bash, Read, Write, Glob, Grep, AskUserQuestion
+
+---
+
 ## Project Scaffolding
 
 ### `/new-project-rails`
