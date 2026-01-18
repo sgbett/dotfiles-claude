@@ -50,10 +50,11 @@ Scans the repository for sensitive information, credentials, and security vulner
 
 **Usage:**
 ```
-/repo-security-scan
+/repo-security-scan                  # Current files only (fast)
+/repo-security-scan --history        # Include git history (slower)
 "scan for security issues"
 "check for sensitive data"
-"make sure there's no sensitive information"
+"scan history for secrets"
 ```
 
 **Scans for:**
@@ -61,13 +62,14 @@ Scans the repository for sensitive information, credentials, and security vulner
 - Security vulnerabilities (SQL injection, XSS, command injection)
 - Sensitive files that shouldn't be tracked
 - Insecure configuration patterns
+- **Secrets in git history** (opt-in, uses gitleaks/trufflehog if available)
 
 **Output:**
 - Report written to `security/YYYYMMDD-scan.md`
+- Findings labelled as "Current" or "History"
 - Remediation plan for Medium+ priority issues
-- Summary with issue counts by priority
 
-**Allowed tools:** Bash, Read, Write, Glob, Grep
+**Allowed tools:** Bash, Read, Write, Glob, Grep, AskUserQuestion
 
 ---
 
