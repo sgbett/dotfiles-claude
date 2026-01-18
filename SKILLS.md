@@ -134,6 +134,34 @@ Scans for security issues and automatically remediates them. Action-oriented com
 
 ---
 
+### `/repo-consistency`
+
+Checks documentation consistency across the repository—ensures docs are aligned, references are valid, and nothing is stale.
+
+**Usage:**
+```
+/repo-consistency
+"check the consistency of the repo"
+"are the documents consistent"
+"is everything aligned"
+```
+
+**Checks:**
+- Cross-references between files are valid
+- SKILLS.md matches actual skills
+- SETUP.md accurately reflects repo contents
+- No broken links or orphaned documentation
+- Naming conventions followed (kebab-case, British English)
+
+**Behaviour:**
+- Prefers fixing local docs over contributed files (speckit, ai-software-architect)
+- Offers to auto-fix common issues
+- Reports errors, warnings, and suggestions
+
+**Allowed tools:** Bash, Read, Glob, Grep, Write, Edit, AskUserQuestion
+
+---
+
 ## Project Scaffolding
 
 ### `/new-project-rails`
