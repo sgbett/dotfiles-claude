@@ -71,6 +71,37 @@ Scans the repository for sensitive information, credentials, and security vulner
 
 ---
 
+### `/repo-security-clean`
+
+Scans for security issues and automatically remediates them. Action-oriented companion to `/repo-security-scan`.
+
+**Usage:**
+```
+/repo-security-clean
+"clean up security issues"
+"fix the security problems"
+"remove sensitive data"
+```
+
+**Actions:**
+- Moves hardcoded secrets to environment variables
+- Untracks sensitive files (preserves locally)
+- Fixes SQL injection with parameterised queries
+- Fixes XSS vulnerabilities
+- Updates .gitignore with security patterns
+
+**Safety:**
+- Asks before committing or modifying git history
+- Preserves original files (untracks, doesn't delete)
+- Warns about credentials that need rotation
+- Never force pushes automatically
+
+**Output:** Report to `security/YYYYMMDD-clean.md` with actions taken and manual follow-ups
+
+**Allowed tools:** Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
+
+---
+
 ## Project Scaffolding
 
 ### `/new-project-rails`
