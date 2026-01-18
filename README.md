@@ -49,3 +49,12 @@ See `.gitignore` for full list. Key exclusions:
 - `debug/`, `todos/`, `plans/` - ephemeral session data (working memory)
 
 **Note**: `plans/` is working memory (gitignored), while `playbooks/` is tracked. See `playbooks/plan-management.md` for the plan lifecycle.
+
+## Reference Documentation
+
+The `docs/` folder contains reference guides:
+
+- `worktree-setup.md` - Git worktrees for parallel Claude sessions
+- `spotlight.md` - macOS Spotlight re-indexing commands
+- `terminal-basics.md` - Terminal fundamentals
+- `wsl-git.md` - Git configuration for WSL
