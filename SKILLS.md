@@ -44,6 +44,37 @@ Fetches and displays emails from Gmail using OAuth credentials.
 
 ---
 
+## Project Scaffolding
+
+### `/new-project-rails`
+
+Creates a new Rails project with personal conventions (RSpec, PostgreSQL, Docker, master branch).
+
+**Usage:**
+```
+/new-project-rails                    # Interactive - prompt for name
+/new-project-rails <project-name>     # Create with specified name
+```
+
+**Conventions:**
+- Location: `/opt/ruby/<project-name>`
+- Ruby/Rails: Latest stable (auto-detected)
+- Testing: RSpec (not Minitest)
+- Database: PostgreSQL via Docker
+- Branch: `master` (not main)
+
+**Creates:**
+- Rails app with RSpec configured
+- Dockerfile and docker-compose.yml for local dev
+- Proper database.yml for Docker/local switching
+- CI workflow with correct branch references
+
+**Reference:** `~/.claude/INSTALLING-RAILS.md` (troubleshooting, details)
+
+**Allowed tools:** Bash, Read, Write, Edit, AskUserQuestion
+
+---
+
 ## AI Software Architect Framework
 
 A suite of skills for managing architecture documentation, reviews, and decisions. Requires the framework to be set up in a project first.
