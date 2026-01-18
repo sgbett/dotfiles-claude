@@ -15,6 +15,10 @@ projects/
 # Project-specific specifications
 specs/
 
+# Security scan reports (project-specific)
+security/*
+!security/.gitkeep
+
 # Plugin marketplace cache
 plugins/
 
