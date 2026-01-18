@@ -50,6 +50,14 @@ See `.gitignore` for full list. Key exclusions:
 
 **Note**: `plans/` is working memory (gitignored), while `playbooks/` is tracked. See `playbooks/plan-management.md` for the plan lifecycle.
 
+## Attribution
+
+This project incorporates work from:
+
+- **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** — Architecture review skills, ADR creation, specialist reviews
+- **[claude-workflow](https://github.com/anthropics/claude-workflow)** — Task breakdown commands (`/project:plan:tasks`)
+- **[spec-kit](https://github.com/expnt/spec-kit)** — Specification templates and commands (`/speckit:*`)
+
 ## Reference Documentation
 
 The `docs/` folder contains reference guides:
