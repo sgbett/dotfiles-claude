@@ -57,7 +57,7 @@
   - **Guard clauses:** Use bare `return` without a value
     - Good: `return unless sequence.present?`
     - Bad: `return false unless sequence.present?`
-  - **Rails:** Follow `~/.claude/INSTALLING-RAILS.md` when creating new Rails projects
+  - **Rails:** Follow `~/.claude/NEW-PROJECT-RAILS.md` when creating new Rails projects
 
 ## Communication
 

@@ -69,7 +69,7 @@ Creates a new Rails project with personal conventions (RSpec, PostgreSQL, Docker
 - Proper database.yml for Docker/local switching
 - CI workflow with correct branch references
 
-**Reference:** `~/.claude/INSTALLING-RAILS.md` (troubleshooting, details)
+**Reference:** `~/.claude/NEW-PROJECT-RAILS.md` (troubleshooting, details)
 
 **Allowed tools:** Bash, Read, Write, Edit, AskUserQuestion
 

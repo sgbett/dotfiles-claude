@@ -6,7 +6,7 @@ allowed-tools: Bash,Read,Write,Edit,AskUserQuestion
 
 # New Rails Project
 
-Creates a new Rails project following personal conventions from `~/.claude/INSTALLING-RAILS.md`.
+Creates a new Rails project following personal conventions from `~/.claude/NEW-PROJECT-RAILS.md`.
 
 ## Invocation
 
@@ -118,7 +118,7 @@ Add to `.gitignore`:
 
 ### Step 8: Create Docker Files
 
-Read templates from `~/.claude/INSTALLING-RAILS.md` and create:
+Read templates from `~/.claude/NEW-PROJECT-RAILS.md` and create:
 
 1. **Dockerfile** - Multi-stage build with bind mount support
 2. **docker-compose.yml** - App, worker, postgres services
@@ -206,7 +206,7 @@ kill %1
     git commit -m "chore: initial Rails <rails-version> project with RSpec"
     gh repo create <username>/<project-name> --public --source=. --push
 
-  Troubleshooting: ~/.claude/INSTALLING-RAILS.md
+  Troubleshooting: ~/.claude/NEW-PROJECT-RAILS.md
 ```
 
 ## Error Handling
@@ -215,12 +215,12 @@ kill %1
 |-------|------------|
 | Directory exists | Warn and ask to proceed or choose different name |
 | Ruby version not found | Offer to install via rvm |
-| Bundle install fails | Check for OpenSSL issues (see INSTALLING-RAILS.md troubleshooting) |
+| Bundle install fails | Check for OpenSSL issues (see NEW-PROJECT-RAILS.md troubleshooting) |
 | Port 3000 in use | Note in output, suggest killing process |
 
 ## Templates Reference
 
-All file templates are defined in `~/.claude/INSTALLING-RAILS.md`. Read that file to get the exact content for:
+All file templates are defined in `~/.claude/NEW-PROJECT-RAILS.md`. Read that file to get the exact content for:
 - Dockerfile (Step 10)
 - docker-compose.yml (Step 10)
 - .dockerignore (Step 10)

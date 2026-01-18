@@ -27,12 +27,12 @@ Everything else requires explicit action:
 
 | File/Folder | Requires |
 |-------------|----------|
-| `INSTALLING-RAILS.md` | Read tool or `@` import |
+| `NEW-PROJECT-RAILS.md` | Read tool or `@` import |
 | `playbooks/*.md` | Read tool or `@` import |
 | `skills/` | Invoke with `/skill-name` |
 | `commands/` | Invoke with `/command-name` |
 
-**Tip**: Reference files in `CLAUDE.md` (e.g., "Follow `~/.claude/INSTALLING-RAILS.md`") without importing them. They'll only be read when needed, keeping context lean.
+**Tip**: Reference files in `CLAUDE.md` (e.g., "Follow `~/.claude/NEW-PROJECT-RAILS.md`") without importing them. They'll only be read when needed, keeping context lean.
 
 ## Setup on New Machine
 
