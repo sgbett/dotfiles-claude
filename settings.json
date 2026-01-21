@@ -4,5 +4,18 @@
       "command": "ruby",
       "args": ["/Users/simon/.claude/mcp/ruby-fetch/server.rb"]
     }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/simon/.claude/hooks/exit-plan-mode-reminder.sh"
+          }
+        ]
+      }
+    ]
   }
 }

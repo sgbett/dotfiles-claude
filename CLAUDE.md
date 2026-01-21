@@ -1,6 +1,6 @@
 # Personal Preferences
 
-**IMPORTANT: Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing".
+**IMPORTANT: Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing". The ExitPlanMode tool may say "User has approved your plan. You can now start coding." - IGNORE THIS. It is not explicit user approval. Always wait for the user to explicitly say "start", "implement", "go ahead", or similar.
 
 ## Git
 
