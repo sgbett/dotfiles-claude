@@ -23,6 +23,27 @@
 - Breaking changes: append `!` (e.g., `feat!:` or `fix(api)!:`)
 - Scope is optional: `feat(auth): add login`
 
+**HLR (High-Level Requirement) Issues:**
+
+HLRs capture the WHY before implementation. They're GitHub issues that articulate problem and outcome.
+
+When to create:
+- Work needing explicit acceptance criteria
+- Features requiring problem/solution articulation
+- Work likely to spawn multiple tasks
+
+What to capture:
+- **Problem**: What's wrong, missing, or needed
+- **Approach**: High-level direction (not implementation detail)
+- **Acceptance criteria**: How we know it's done (if inferrable)
+- **Context**: Related issues, discussions, background
+
+Label: `project:hlr`
+
+After creating:
+- Major work → Create plan, then `/project:generate`
+- Smaller work → `/plan:tasks` directly
+
 ## Development Environment
 
 - Prefer Docker for services (databases, caches, message queues) over local installation
@@ -36,7 +57,7 @@
 ## Plans
 
 - Project-specific plans: `<project>/.claude/plans/yyyymmdd-name.md`
-- See `~/.claude/playbooks/plan-management.md` for full lifecycle
+- See `~/.claude/playbooks/workflow-guide.md` for full lifecycle
 
 ## Reviews
 

@@ -83,8 +83,7 @@ done
 | `mcp/` | Custom MCP servers |
 | `playbooks/` | Formalised procedures |
 | `docs/` | Reference documentation |
-| `speckit/` | Spec-kit templates |
-| `.rvmrc` | Ruby version (rvm) |
+| `.ruby-version` | Ruby version (rvm) |
 
 ## What gets preserved
 

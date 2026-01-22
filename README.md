@@ -56,7 +56,7 @@ See `.gitignore` for full list. Key exclusions:
 - `projects/` - per-project memory
 - `debug/`, `todos/`, `plans/` - ephemeral session data (working memory)
 
-**Note**: `plans/` is working memory (gitignored), while `playbooks/` is tracked. See `playbooks/plan-management.md` for the plan lifecycle.
+**Note**: `plans/` is working memory (gitignored), while `playbooks/` is tracked. See `playbooks/workflow-guide.md` for the plan lifecycle.
 
 ## Attribution
 

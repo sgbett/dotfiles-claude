@@ -18,6 +18,11 @@ require "googleauth/stores/file_token_store"
 require "json"
 require "optparse"
 
+# Retry configuration
+MAX_RETRIES = 5
+BASE_DELAY = 1.0  # seconds
+MAX_DELAY = 60.0  # seconds
+
 TOKEN_PATH = ENV.fetch("GMAIL_TOKEN_PATH", File.expand_path("~/.claude/gmail_token.yaml"))
 SCOPE = Google::Apis::GmailV1::AUTH_GMAIL_READONLY
 USER_ID = "me"
@@ -46,6 +51,35 @@ def authorizer
   end
 
   credentials
+end
+
+def with_retry(description: "API call")
+  retries = 0
+  begin
+    yield
+  rescue Google::Apis::RateLimitError => e
+    retries += 1
+    if retries <= MAX_RETRIES
+      delay = [BASE_DELAY * (2 ** (retries - 1)), MAX_DELAY].min
+      warn "Rate limited on #{description}, retry #{retries}/#{MAX_RETRIES} after #{delay}s..."
+      sleep(delay)
+      retry
+    else
+      warn "Rate limit exceeded after #{MAX_RETRIES} retries on #{description}"
+      raise
+    end
+  rescue Google::Apis::ServerError, Google::Apis::TransmissionError => e
+    retries += 1
+    if retries <= MAX_RETRIES
+      delay = [BASE_DELAY * (2 ** (retries - 1)), MAX_DELAY].min
+      warn "Transient error on #{description}: #{e.message}, retry #{retries}/#{MAX_RETRIES} after #{delay}s..."
+      sleep(delay)
+      retry
+    else
+      warn "Failed after #{MAX_RETRIES} retries on #{description}: #{e.message}"
+      raise
+    end
+  end
 end
 
 def extract_body(payload)
@@ -144,7 +178,9 @@ def fetch_emails(sender:, limit: 10, query: nil)
   page_token = nil
 
   loop do
-    result = service.list_user_messages(USER_ID, q: q, page_token: page_token, max_results: [limit - messages.length, 100].min)
+    result = with_retry(description: "list messages") do
+      service.list_user_messages(USER_ID, q: q, page_token: page_token, max_results: [limit - messages.length, 100].min)
+    end
     break unless result.messages
 
     messages.concat(result.messages)
@@ -154,8 +190,13 @@ def fetch_emails(sender:, limit: 10, query: nil)
     break unless page_token
   end
 
-  messages.first(limit).map do |msg|
-    full_message = service.get_user_message(USER_ID, msg.id)
+  total = [messages.length, limit].min
+  messages.first(limit).each_with_index.map do |msg, idx|
+    warn "Fetching message #{idx + 1}/#{total}..." if (idx + 1) % 50 == 0 || idx == 0
+
+    full_message = with_retry(description: "get message #{msg.id}") do
+      service.get_user_message(USER_ID, msg.id)
+    end
     headers = extract_headers(full_message)
     body = extract_body(full_message.payload)
 

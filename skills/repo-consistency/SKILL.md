@@ -176,7 +176,7 @@ find . -name "*.md" -type f | grep -v node_modules | grep -v .git
 # Build inventory
 - Root: CLAUDE.md, README.md, SETUP.md, SKILLS.md, CONTRIBUTING.md, etc.
 - docs/: spotlight.md, worktree-setup.md, etc.
-- playbooks/: development-workflow.md, etc.
+- playbooks/: workflow-guide.md, etc.
 - skills/: SKILL.md files
 - commands/: command definitions
 ```

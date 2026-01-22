@@ -4,6 +4,7 @@ file-history/
 plans/
 session-env/
 shell-snapshots/
+telemetry/
 todos/
 stats-cache.json
 statsig/
@@ -41,3 +42,6 @@ settings.local.json
 .DS_Store
 gmail_token.yaml
 vendor/
+
+# Personal ideas/notes
+ideas/
