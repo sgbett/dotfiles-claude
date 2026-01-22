@@ -82,6 +82,18 @@ When I use imperative mood ("do X", "create Y"), proceed with execution directly
 
 If uncertain whether I'm asking or instructing, ask for clarification rather than assuming execution.
 
+## Brainstorming
+
+When I say "brainstorm", "explore", "let's think about", or similar exploratory language, switch to **idea generation mode**. Always use `ultrathink` for brainstorming sessions.
+
+- **Generate options, not artifacts** — discuss possibilities conversationally; don't create files, run commands, or use tools unless explicitly asked
+- **Code as illustration** — when code is relevant, show inline examples to demonstrate concepts; don't write to files
+- **Apply 80/20 filtering** — if there are many possible approaches, present the top ~20% that adequately cover ~80% of the solution space; don't exhaustively list every option
+- **Structured alternatives** — present options with clear trade-offs (pros/cons, when to use each)
+- **Stay in discussion** — this is exploration, not execution; wait for me to signal when to move to implementation
+
+This mode is for exploring ideas, concepts, architectures, approaches, or trade-offs before committing to a direction.
+
 ## Web Fetching
 
 If `WebFetch` fails (403, Cloudflare block, etc.), try `mcp__ruby-fetch__fetch_url` as a fallback:
