@@ -1,6 +1,37 @@
-# Plan Management Playbook
+# Workflow Guide
 
-How to manage plans throughout their lifecycle—from rough ideas to implementation-ready projects.
+How to approach work—from quick fixes to major initiatives.
+
+---
+
+## Scope Selection
+
+| Work Type | Workflow |
+|-----------|----------|
+| Major feature / initiative | HLR → Plan → `/project:generate` → Implement |
+| Feature with clear scope | HLR → `/plan:tasks` → Implement |
+| Bug fix / small change | Issue → Implement → PR |
+
+**When in doubt:** Start with an HLR issue. The act of writing it will clarify whether you need a full plan.
+
+---
+
+## When to Create a Plan
+
+Plans are for **major work**—multiple phases, architectural decisions, significant scope.
+
+| Starting Point | Action |
+|----------------|--------|
+| HLR issue exists, major scope | Create plan, link to HLR |
+| HLR issue exists, smaller scope | Skip plan, use `/plan:tasks` directly |
+| Exploring an idea (no issue yet) | Draft in `~/.claude/plans/`, create HLR when scope is clear |
+
+**Linking to HLR:**
+When a plan originates from an HLR issue, include in the Context section:
+```
+**Issue**: #1234
+```
+This allows `/project:generate` to use the existing HLR rather than creating a new one.
 
 ---
 
@@ -21,14 +52,14 @@ How to manage plans throughout their lifecycle—from rough ideas to implementat
 Plans progress through distinct states. Each transition requires explicit action.
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   DRAFTING  │────▶│ FIRST DRAFT │────▶│  REVIEWED   │────▶│ PROJECT     │────▶│   READY     │
-│   (WIP)     │     │             │     │             │     │ SETUP       │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-      │                   │                   │                   │                   │
-      ▼                   ▼                   ▼                   ▼                   ▼
-   Iterate            Reviews            Incorporate          Housekeeping       Explicit
-   Refine             Requested          Findings             Complete           Instruction
+              ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+HLR Issue ───▶│   DRAFTING  │────▶│ FIRST DRAFT │────▶│  REVIEWED   │────▶│ PROJECT     │────▶│   READY     │
+              │   (WIP)     │     │             │     │             │     │ SETUP       │     │             │
+              └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                    │                   │                   │                   │                   │
+                    ▼                   ▼                   ▼                   ▼                   ▼
+                 Iterate            Reviews            Incorporate          Housekeeping       Explicit
+                 Refine             Requested          Findings             Complete           Instruction
 ```
 
 ### State Definitions
@@ -59,7 +90,7 @@ During drafting, save progress frequently:
 
 ## State: First Draft → Reviewed
 
-Request specialist reviews based on plan content:
+Request specialist reviews based on plan content. See `~/.claude/playbooks/specialist-review-timing.md` for guidance on when and which reviews to request.
 
 | Plan Involves | Request Review From |
 |---------------|---------------------|
@@ -87,22 +118,24 @@ Request specialist reviews based on plan content:
 
 Before implementation begins, complete project housekeeping:
 
-### 1. Create Tracking Issue
-- Unless an issue already exists
-- This becomes the main project tracking issue
-- Label with `Phase: Project Tracking`
+### 1. Verify HLR Issue Exists
+- The HLR issue should already exist (created before planning)
+- If not, create one now and link it to the plan
 
-### 2. Break Down with `/project:plan:tasks`
-Skip this step only if the plan is obviously a single atomic task.
+### 2. Generate Project Structure
+For major work, use `/project:generate`:
 
 ```
-/project:plan:tasks <tracking-issue-number>
+/project:generate <plan-file-path>
 ```
 
 This creates:
-- **Top-level tasks** — Correlate to Implementation Plan phases
-- **Sub-tasks** — Granular work items within each phase
-- **Issue hierarchy** — Tasks become sub-issues of tracking issue
+- **Phase issues** — Correlate to Implementation Plan phases
+- **Task issues** — Granular work items within each phase
+- **GitHub Project** — With proper field configuration
+- **Issue hierarchy** — Tasks as sub-issues of phases, phases as sub-issues of HLR
+
+For smaller work, use `/plan:tasks` directly on the HLR issue.
 
 ### 3. Update Documentation
 - Add issue references to plan
@@ -185,7 +218,7 @@ When a completed plan proves stable and reusable:
 | Location | Format | Example |
 |----------|--------|---------|
 | `~/.claude/plans/` | Auto-generated | `flickering-wishing-key.md` |
-| `~/.claude/playbooks/` | Descriptive kebab-case | `development-workflow.md` |
+| `~/.claude/playbooks/` | Descriptive kebab-case | `workflow-guide.md` |
 | `<project>/.claude/plans/` | Date-prefixed | `20260108-initial-architecture.md` |
 
 ---
