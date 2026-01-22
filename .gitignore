@@ -40,3 +40,4 @@ settings.local.json
 # macOS
 .DS_Store
 gmail_token.yaml
+vendor/

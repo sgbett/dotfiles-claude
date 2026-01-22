@@ -48,6 +48,18 @@ The command will:
 
 ---
 
+## Vendor dependencies
+
+Some commands are symlinked from external repos in `vendor/` (gitignored). After cloning, run:
+
+```bash
+./scripts/vendor-setup.sh
+```
+
+This clones [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow) which provides `/plan:*`, `/do:*`, and related commands.
+
+---
+
 ## What gets installed
 
 | Item | Description |

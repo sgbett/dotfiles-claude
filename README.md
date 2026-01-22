@@ -7,9 +7,13 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 - `settings.json` - MCP server configuration
 - `mcp/` - Custom MCP servers
   - `ruby-fetch/` - Ruby-based web fetch server
-- `commands/` - Custom slash commands
-  - `project/plan/tasks.md` - GitHub Issue breakdown (from claude-workflow)
+- `commands/` - Custom slash commands (symlinked from `vendor/` where noted)
+  - `do/` → claude-workflow (`/do:task`, `/do:commit`, `/do:changelog`, `/do:create-worktrees`)
+  - `plan/` → claude-workflow (`/plan:tasks`, `/plan:feature`, `/plan:prd`, `/plan:brainstorm`)
+  - `project/` - Custom commands (`/project:generate`, `/project:worktree`) + `current.md` → claude-workflow
   - `speckit/` - Specification commands (from spec-kit)
+- `vendor/` - Upstream repos (gitignored)
+  - `claude-workflow/` - [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow)
 - `skills/` - User-level skills (see `SKILLS.md`)
 - `speckit/` - Spec-kit templates
 - `playbooks/` - Formalised procedures
@@ -56,7 +60,7 @@ See `.gitignore` for full list. Key exclusions:
 This project incorporates work from:
 
 - **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** — Architecture review skills, ADR creation, specialist reviews
-- **[claude-workflow](https://github.com/anthropics/claude-workflow)** — Task breakdown commands (`/project:plan:tasks`)
+- **[claude-workflow](https://github.com/sbusso/claude-workflow)** — Task breakdown, planning, and execution commands (`/plan:*`, `/do:*`)
 - **[spec-kit](https://github.com/expnt/spec-kit)** — Specification templates and commands (`/speckit:*`)
 
 ## Reference Documentation
