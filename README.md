@@ -14,7 +14,10 @@ Personal configuration for [Claude Code](https://claude.ai/code).
   - `speckit/` - Specification commands (from spec-kit)
 - `vendor/` - Upstream repos (gitignored)
   - `claude-workflow/` - [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow)
-- `skills/` - User-level skills (see `SKILLS.md`)
+  - `ai-software-architect/` - [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect)
+- `skills/` - User-level skills (symlinked from `vendor/` where noted)
+  - Architecture skills → ai-software-architect (`/setup-architect`, `/architecture-review`, `/specialist-review`, etc.)
+  - Custom skills: `/new-project-rails`, `/repo-security-*`, `/worktree`, etc.
 - `speckit/` - Spec-kit templates
 - `playbooks/` - Formalised procedures
 

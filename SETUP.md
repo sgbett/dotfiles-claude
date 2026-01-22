@@ -50,13 +50,17 @@ The command will:
 
 ## Vendor dependencies
 
-Some commands are symlinked from external repos in `vendor/` (gitignored). After cloning, run:
+Some commands and skills are symlinked from external repos in `vendor/` (gitignored). After cloning, run:
 
 ```bash
 ./scripts/vendor-setup.sh
 ```
 
-This clones [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow) which provides `/plan:*`, `/do:*`, and related commands.
+This clones:
+- [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow) — `/plan:*`, `/do:*`, and related commands
+- [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect) — architecture review skills
+
+To update vendors: `git -C vendor/claude-workflow pull && git -C vendor/ai-software-architect pull`
 
 ---
 
