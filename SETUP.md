@@ -59,8 +59,14 @@ Some commands and skills are symlinked from external repos in `vendor/` (gitigno
 This clones:
 - [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow) — `/plan:*`, `/do:*`, and related commands
 - [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect) — architecture review skills
+- [github/spec-kit](https://github.com/github/spec-kit) — `/speckit:*` specification commands
 
-To update vendors: `git -C vendor/claude-workflow pull && git -C vendor/ai-software-architect pull`
+To update vendors:
+```bash
+for repo in claude-workflow ai-software-architect spec-kit; do
+  git -C vendor/$repo pull
+done
+```
 
 ---
 

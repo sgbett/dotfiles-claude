@@ -11,14 +11,14 @@ Personal configuration for [Claude Code](https://claude.ai/code).
   - `do/` → claude-workflow (`/do:task`, `/do:commit`, `/do:changelog`, `/do:create-worktrees`)
   - `plan/` → claude-workflow (`/plan:tasks`, `/plan:feature`, `/plan:prd`, `/plan:brainstorm`)
   - `project/` - Custom commands (`/project:generate`, `/project:worktree`) + `current.md` → claude-workflow
-  - `speckit/` - Specification commands (from spec-kit)
+  - `speckit/` → spec-kit (`/speckit:specify`, `/speckit:plan`, `/speckit:tasks`, `/speckit:implement`, etc.)
 - `vendor/` - Upstream repos (gitignored)
   - `claude-workflow/` - [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow)
   - `ai-software-architect/` - [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect)
+  - `spec-kit/` - [github/spec-kit](https://github.com/github/spec-kit)
 - `skills/` - User-level skills (symlinked from `vendor/` where noted)
   - Architecture skills → ai-software-architect (`/setup-architect`, `/architecture-review`, `/specialist-review`, etc.)
   - Custom skills: `/new-project-rails`, `/repo-security-*`, `/worktree`, etc.
-- `speckit/` - Spec-kit templates
 - `playbooks/` - Formalised procedures
 
 ## What Claude Code Auto-Loads
@@ -64,7 +64,7 @@ This project incorporates work from:
 
 - **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** — Architecture review skills, ADR creation, specialist reviews
 - **[claude-workflow](https://github.com/sbusso/claude-workflow)** — Task breakdown, planning, and execution commands (`/plan:*`, `/do:*`)
-- **[spec-kit](https://github.com/expnt/spec-kit)** — Specification templates and commands (`/speckit:*`)
+- **[spec-kit](https://github.com/github/spec-kit)** — Specification-driven development commands (`/speckit:*`)
 
 ## Reference Documentation
 

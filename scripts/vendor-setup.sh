@@ -23,4 +23,12 @@ else
   echo "ai-software-architect already exists (run 'git -C $VENDOR_DIR/ai-software-architect pull' to update)"
 fi
 
+# spec-kit - specification-driven development commands
+if [ ! -d "$VENDOR_DIR/spec-kit" ]; then
+  echo "Cloning spec-kit..."
+  git clone https://github.com/github/spec-kit.git "$VENDOR_DIR/spec-kit"
+else
+  echo "spec-kit already exists (run 'git -C $VENDOR_DIR/spec-kit pull' to update)"
+fi
+
 echo "Done. Symlinks in commands/, contexts/, and skills/ should now resolve."
