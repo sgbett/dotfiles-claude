@@ -25,6 +25,30 @@ Creates git worktrees for parallel development—useful for running multiple Cla
 
 ---
 
+### `/merge-cleanup`
+
+Post-merge cleanup for branches after a PR has been merged. Renames the local branch with `merged/` prefix and deletes the remote branch.
+
+**Usage:**
+```
+/merge-cleanup                      # Clean up current branch
+/merge-cleanup <branch-name>        # Clean up specified branch
+```
+
+**Process:**
+1. Verifies the PR was merged (warns if not)
+2. Deletes the remote branch from origin
+3. Renames local branch to `merged/<branch-name>`
+
+**Safety:**
+- Refuses to touch `master`
+- Never deletes local branches—always renames with `merged/` prefix
+- Preserves branch history locally for reference
+
+**Allowed tools:** Bash, Read, AskUserQuestion
+
+---
+
 ### `/read-email`
 
 Fetches and displays emails from Gmail using OAuth credentials.

@@ -12,6 +12,7 @@ Personal configuration for [Claude Code](https://claude.ai/code).
   - `plan/` → claude-workflow (`/plan:tasks`, `/plan:feature`, `/plan:prd`, `/plan:brainstorm`)
   - `project/` - Custom commands (`/project:generate`, `/project:worktree`) + `current.md` → claude-workflow
   - `speckit/` → spec-kit (`/speckit:specify`, `/speckit:plan`, `/speckit:tasks`, `/speckit:implement`, etc.)
+  - Standalone: `/transcript`, `/dotfiles-setup`, `/merge-cleanup`
 - `vendor/` - Upstream repos (gitignored)
   - `claude-workflow/` - [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow)
   - `ai-software-architect/` - [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect)
