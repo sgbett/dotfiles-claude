@@ -41,7 +41,11 @@ settings.local.json
 # macOS
 .DS_Store
 gmail_token.yaml
+.credentials.json
 vendor/
+
+# Cache
+cache/
 
 # Personal ideas/notes
 ideas/
