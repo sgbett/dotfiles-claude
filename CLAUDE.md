@@ -39,10 +39,40 @@ What to capture:
 - **Context**: Related issues, discussions, background
 
 Label: `project:hlr`
+Title prefix: `[HLR] ` (e.g., `[HLR] Implement incremental analysis capability`)
 
 After creating:
 - Major work → Create plan, then `/project:generate`
 - Smaller work → `/plan:tasks` directly
+
+**Linking Sub-Issues in GitHub:**
+
+Use the GraphQL API to create parent-child relationships between issues:
+
+```bash
+# Get issue node IDs
+gh api graphql -f query='
+{
+  repository(owner: "OWNER", name: "REPO") {
+    parent: issue(number: PARENT_NUM) { id }
+    child: issue(number: CHILD_NUM) { id }
+  }
+}'
+
+# Link child to parent
+gh api graphql -f query='
+mutation {
+  addSubIssue(input: {
+    issueId: "PARENT_NODE_ID",
+    subIssueId: "CHILD_NODE_ID"
+  }) {
+    issue { title }
+    subIssue { title }
+  }
+}'
+```
+
+This creates the sub-issue relationship visible in GitHub's issue UI, enabling progress tracking on parent issues.
 
 ## Development Environment
 
