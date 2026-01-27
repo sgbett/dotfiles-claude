@@ -1,0 +1,459 @@
+#!/usr/bin/env bash
+# Zendesk Sample Export
+# Fetches tickets using the Incremental Exports API for migration validation
+#
+# Usage: /zendesk:sample-export [--limit N] [--since DATE] [--output FILE] [--validate]
+#
+# Options:
+#   --limit N      Maximum tickets to export (default: 100)
+#   --since DATE   Start date (YYYY-MM-DD format, default: 30 days ago)
+#   --output FILE  Output file (default: sample-export-YYYYMMDD.json)
+#   --validate     Run data completeness validation after export
+#
+# Exit codes:
+#   0 - Success
+#   1 - Failure (auth error, network error)
+
+set -euo pipefail
+
+# Source the request library (which also sources auth)
+source "${HOME}/.claude/skills/zendesk/lib/request.sh"
+
+# Parse command line options
+LIMIT=100
+SINCE_DATE=""
+OUTPUT_FILE=""
+VALIDATE=false
+RESUME=false
+RESUME_FROM=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --limit|-l)
+            if [[ -z "${2:-}" ]]; then
+                zendesk_error "--limit requires a number"
+                exit 1
+            fi
+            LIMIT="$2"
+            shift 2
+            ;;
+        --since|-s)
+            if [[ -z "${2:-}" ]]; then
+                zendesk_error "--since requires a date (YYYY-MM-DD)"
+                exit 1
+            fi
+            SINCE_DATE="$2"
+            shift 2
+            ;;
+        --output|-o)
+            if [[ -z "${2:-}" ]]; then
+                zendesk_error "--output requires a filename"
+                exit 1
+            fi
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        --validate|-v)
+            VALIDATE=true
+            shift
+            ;;
+        --resume|-r)
+            RESUME=true
+            shift
+            ;;
+        --resume-from)
+            if [[ -z "${2:-}" ]]; then
+                zendesk_error "--resume-from requires a cursor file or cursor string"
+                exit 1
+            fi
+            RESUME_FROM="$2"
+            RESUME=true
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: /zendesk:sample-export [--limit N] [--since DATE] [--output FILE] [--validate] [--resume]"
+            echo ""
+            echo "Exports tickets using the Zendesk Incremental Exports API."
+            echo "This is for validating the migration approach before bulk export."
+            echo ""
+            echo "Options:"
+            echo "  --limit N          Maximum tickets to export (default: 100)"
+            echo "  --since DATE       Start date YYYY-MM-DD (default: 30 days ago)"
+            echo "  --output FILE      Output file (default: sample-export-YYYYMMDD.json)"
+            echo "  --validate         Run data completeness validation after export"
+            echo "  --resume           Resume from last saved cursor file"
+            echo "  --resume-from FILE Resume from specific cursor file or cursor string"
+            echo ""
+            echo "Examples:"
+            echo "  /zendesk:sample-export                     # Export 100 tickets from last 30 days"
+            echo "  /zendesk:sample-export --limit 50          # Export 50 tickets"
+            echo "  /zendesk:sample-export --since 2026-01-01  # From specific date"
+            echo "  /zendesk:sample-export --validate          # Export and validate data"
+            echo "  /zendesk:sample-export --resume            # Continue from saved cursor"
+            exit 0
+            ;;
+        *)
+            zendesk_error "Unknown option: $1"
+            echo "Use --help for usage information" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Run data completeness validation
+run_validation() {
+    local tickets_json="$1"
+    local ticket_count="$2"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Data Completeness Validation"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Tickets exported: $ticket_count"
+    echo ""
+
+    # Track issues
+    local issues=""
+    local issue_count=0
+
+    # === COMMENTS VALIDATION ===
+    echo "Comments:"
+    local total_comments=0
+    local tickets_with_comments=0
+    local i=0
+
+    while [[ $i -lt $ticket_count ]]; do
+        local ticket_id
+        ticket_id=$(echo "$tickets_json" | jq -r ".[$i].id")
+
+        # Fetch comments for this ticket
+        local comments_response
+        if comments_response=$(zendesk_get "/tickets/${ticket_id}/comments.json" 2>/dev/null); then
+            local comment_count
+            comment_count=$(echo "$comments_response" | jq '.comments | length')
+            total_comments=$((total_comments + comment_count))
+            if [[ $comment_count -gt 0 ]]; then
+                ((tickets_with_comments++))
+            fi
+        fi
+
+        ((i++))
+
+        # Progress indicator every 10 tickets
+        if [[ $((i % 10)) -eq 0 ]]; then
+            echo -ne "  Checking comments... $i/$ticket_count\r"
+        fi
+    done
+    echo -ne "                                      \r"
+
+    if [[ $tickets_with_comments -eq $ticket_count ]]; then
+        zendesk_success "All $ticket_count tickets have comments fetched"
+    else
+        zendesk_warn "$tickets_with_comments of $ticket_count tickets have comments"
+    fi
+
+    local avg_comments
+    if [[ $ticket_count -gt 0 ]]; then
+        avg_comments=$(echo "scale=1; $total_comments / $ticket_count" | bc)
+    else
+        avg_comments="0"
+    fi
+    echo "  Total comments: $total_comments"
+    echo "  Avg per ticket: $avg_comments"
+    echo ""
+
+    # === ATTACHMENTS VALIDATION ===
+    echo "Attachments:"
+    local total_attachments=0
+    local accessible_attachments=0
+    local inaccessible_attachments=0
+
+    # Collect all attachment URLs from ticket descriptions
+    # Note: Full attachment data requires fetching comments
+    i=0
+    while [[ $i -lt $ticket_count ]]; do
+        local ticket_id
+        ticket_id=$(echo "$tickets_json" | jq -r ".[$i].id")
+
+        # Fetch comments to get attachments
+        local comments_response
+        if comments_response=$(zendesk_get "/tickets/${ticket_id}/comments.json" 2>/dev/null); then
+            # Extract attachment URLs from all comments
+            local attachments
+            attachments=$(echo "$comments_response" | jq -r '.comments[].attachments[]? | "\(.id)|\(.file_name)|\(.content_url)"' 2>/dev/null || true)
+
+            while IFS='|' read -r att_id att_name att_url; do
+                if [[ -n "$att_url" ]]; then
+                    ((total_attachments++))
+
+                    # Check if URL is accessible with HEAD request
+                    local http_code
+                    http_code=$(curl -s -o /dev/null -w "%{http_code}" --head --max-time 5 "$att_url" 2>/dev/null || echo "000")
+
+                    if [[ "$http_code" == "200" ]] || [[ "$http_code" == "302" ]]; then
+                        ((accessible_attachments++))
+                    else
+                        ((inaccessible_attachments++))
+                        ((issue_count++))
+                        issues="${issues}  - Ticket #${ticket_id}: Attachment \"${att_name}\" not accessible (${http_code})\n"
+                    fi
+                fi
+            done <<< "$attachments"
+        fi
+
+        ((i++))
+
+        # Progress indicator
+        if [[ $((i % 10)) -eq 0 ]]; then
+            echo -ne "  Checking attachments... $i/$ticket_count\r"
+        fi
+    done
+    echo -ne "                                        \r"
+
+    if [[ $total_attachments -eq 0 ]]; then
+        echo "  No attachments found in sample"
+    else
+        zendesk_success "$total_attachments attachments found"
+        if [[ $inaccessible_attachments -eq 0 ]]; then
+            zendesk_success "All $accessible_attachments URLs verified accessible"
+        else
+            zendesk_success "$accessible_attachments URLs verified accessible"
+            zendesk_warn "$inaccessible_attachments URLs returned errors"
+        fi
+    fi
+    echo ""
+
+    # === CUSTOM FIELDS VALIDATION ===
+    echo "Custom Fields:"
+
+    # Get unique custom field IDs across all tickets
+    local custom_field_ids
+    custom_field_ids=$(echo "$tickets_json" | jq -r '[.[].custom_fields[]? | select(.value != null and .value != "") | .id] | unique | .[]' 2>/dev/null || true)
+
+    local field_count=0
+    local field_list=""
+    while read -r field_id; do
+        if [[ -n "$field_id" ]]; then
+            ((field_count++))
+            field_list="${field_list}${field_id}, "
+        fi
+    done <<< "$custom_field_ids"
+
+    if [[ $field_count -eq 0 ]]; then
+        echo "  No custom fields with values found"
+    else
+        zendesk_success "$field_count custom field IDs found with values"
+        echo "  Field IDs: ${field_list%, }"
+    fi
+
+    # Count tickets with custom field values
+    local tickets_with_custom_fields
+    tickets_with_custom_fields=$(echo "$tickets_json" | jq '[.[] | select(.custom_fields | any(.value != null and .value != ""))] | length')
+    echo "  Tickets with custom field data: $tickets_with_custom_fields of $ticket_count"
+    echo ""
+
+    # === ISSUES SUMMARY ===
+    if [[ $issue_count -gt 0 ]]; then
+        echo "Issues Found ($issue_count):"
+        echo -e "$issues"
+    else
+        zendesk_success "No issues found - data appears complete"
+    fi
+}
+
+# Main function
+main() {
+    # Validate config
+    if ! zendesk_validate_config; then
+        exit 1
+    fi
+
+    # Check jq is available
+    if ! command -v jq &>/dev/null; then
+        zendesk_error "jq is required but not installed"
+        echo "Install with: brew install jq" >&2
+        exit 1
+    fi
+
+    # Calculate start time
+    local start_time
+    if [[ -n "$SINCE_DATE" ]]; then
+        # Convert date to Unix timestamp
+        if [[ "$(uname)" == "Darwin" ]]; then
+            start_time=$(date -j -f "%Y-%m-%d" "$SINCE_DATE" "+%s" 2>/dev/null) || {
+                zendesk_error "Invalid date format: $SINCE_DATE (use YYYY-MM-DD)"
+                exit 1
+            }
+        else
+            start_time=$(date -d "$SINCE_DATE" "+%s" 2>/dev/null) || {
+                zendesk_error "Invalid date format: $SINCE_DATE (use YYYY-MM-DD)"
+                exit 1
+            }
+        fi
+    else
+        # Default to 30 days ago
+        start_time=$(($(date "+%s") - 30 * 24 * 60 * 60))
+    fi
+
+    # Set default output file
+    if [[ -z "$OUTPUT_FILE" ]]; then
+        OUTPUT_FILE="sample-export-$(date +%Y%m%d).json"
+    fi
+
+    # Start date for display
+    local start_date
+    if [[ "$(uname)" == "Darwin" ]]; then
+        start_date=$(date -r "$start_time" "+%Y-%m-%d")
+    else
+        start_date=$(date -d "@$start_time" "+%Y-%m-%d")
+    fi
+
+    # Handle resume mode
+    local resume_cursor=""
+    if [[ "$RESUME" == "true" ]]; then
+        if [[ -n "$RESUME_FROM" ]]; then
+            # Check if it's a file or a cursor string
+            if [[ -f "$RESUME_FROM" ]]; then
+                resume_cursor=$(cat "$RESUME_FROM")
+            else
+                resume_cursor="$RESUME_FROM"
+            fi
+        else
+            # Look for default cursor file
+            local default_cursor_file="${OUTPUT_FILE%.json}.cursor"
+            if [[ -f "$default_cursor_file" ]]; then
+                resume_cursor=$(cat "$default_cursor_file")
+            else
+                zendesk_error "No cursor file found to resume from"
+                echo "Use --resume-from to specify a cursor file or string" >&2
+                exit 1
+            fi
+        fi
+
+        if [[ -z "$resume_cursor" ]]; then
+            zendesk_error "Empty cursor - cannot resume"
+            exit 1
+        fi
+    fi
+
+    echo "Exporting tickets via Incremental API..."
+    if [[ -n "$resume_cursor" ]]; then
+        echo "  Resuming from cursor: ${resume_cursor:0:20}..."
+    else
+        echo "  Start date: $start_date"
+    fi
+    echo "  Limit: $LIMIT tickets"
+    echo ""
+
+    # Collect tickets using cursor pagination
+    local all_tickets="[]"
+    local total_fetched=0
+    local page=1
+    local cursor=""
+    local end_of_stream=false
+    local last_cursor=""
+
+    # Initial request uses start_time or resume cursor
+    local next_url
+    if [[ -n "$resume_cursor" ]]; then
+        next_url="/incremental/tickets/cursor.json?cursor=${resume_cursor}"
+    else
+        next_url="/incremental/tickets/cursor.json?start_time=${start_time}&per_page=100"
+    fi
+
+    while [[ "$end_of_stream" != "true" ]] && [[ $total_fetched -lt $LIMIT ]]; do
+        echo -n "  Fetching page $page... "
+
+        local response
+        if ! response=$(zendesk_get "$next_url"); then
+            echo "failed"
+            exit 1
+        fi
+
+        # Extract tickets from response
+        local page_tickets page_count
+        page_tickets=$(echo "$response" | jq -c '.tickets // []')
+        page_count=$(echo "$page_tickets" | jq 'length')
+
+        echo "$page_count tickets"
+
+        # Calculate how many we can take without exceeding limit
+        local remaining=$((LIMIT - total_fetched))
+        if [[ $page_count -gt $remaining ]]; then
+            page_tickets=$(echo "$page_tickets" | jq ".[:$remaining]")
+            page_count=$remaining
+        fi
+
+        # Append to collection
+        all_tickets=$(echo "$all_tickets $page_tickets" | jq -s 'add')
+        total_fetched=$((total_fetched + page_count))
+
+        # Get cursor and end_of_stream for next iteration
+        cursor=$(echo "$response" | jq -r '.after_cursor // .end_cursor // empty')
+        end_of_stream=$(echo "$response" | jq -r '.end_of_stream // false')
+        last_cursor="$cursor"
+
+        # Build next URL if we need more
+        if [[ "$end_of_stream" != "true" ]] && [[ $total_fetched -lt $LIMIT ]] && [[ -n "$cursor" ]]; then
+            next_url="/incremental/tickets/cursor.json?cursor=${cursor}"
+            ((page++))
+        else
+            break
+        fi
+    done
+
+    echo ""
+
+    # Get date range from tickets
+    local first_date last_date
+    first_date=$(echo "$all_tickets" | jq -r 'if length > 0 then (.[0].updated_at // .[0].created_at) | split("T")[0] else "N/A" end')
+    last_date=$(echo "$all_tickets" | jq -r 'if length > 0 then (.[-1].updated_at // .[-1].created_at) | split("T")[0] else "N/A" end')
+
+    # Build export object with metadata
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local export_json
+    export_json=$(echo "$all_tickets" | jq \
+        --arg ts "$timestamp" \
+        --arg cnt "$total_fetched" \
+        --arg cursor "$last_cursor" \
+        --arg start "$start_date" \
+        --arg eos "$end_of_stream" \
+        '{
+            exported_at: $ts,
+            count: ($cnt | tonumber),
+            start_date: $start,
+            cursor: $cursor,
+            end_of_stream: ($eos == "true"),
+            tickets: .
+        }')
+
+    # Save to file
+    echo "$export_json" | jq '.' > "$OUTPUT_FILE"
+
+    # Also save cursor to separate file for resumability testing
+    local cursor_file="${OUTPUT_FILE%.json}.cursor"
+    echo "$last_cursor" > "$cursor_file"
+
+    zendesk_success "Exported $total_fetched tickets to $OUTPUT_FILE"
+    echo "  Cursor saved to: $cursor_file"
+    echo "  Date range: $first_date to $last_date"
+
+    if [[ "$end_of_stream" == "true" ]]; then
+        echo "  Status: End of stream reached"
+    else
+        echo "  Status: More tickets available (limit reached)"
+    fi
+
+    # Run validation if requested
+    if [[ "$VALIDATE" == "true" ]]; then
+        run_validation "$all_tickets" "$total_fetched"
+    fi
+
+    exit 0
+}
+
+# Run main with all arguments
+main "$@"

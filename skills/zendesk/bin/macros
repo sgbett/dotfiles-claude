@@ -1,0 +1,295 @@
+#!/usr/bin/env bash
+# Zendesk Macro Exporter
+# Fetches and displays all macros with their actions
+#
+# Usage: /zendesk:macros [--active|--inactive] [--json] [--output FILE]
+#
+# Options:
+#   --active       Show only active macros
+#   --inactive     Show only inactive macros
+#   --json         Output raw JSON to stdout
+#   --output FILE  Export to file (supports .json and .yaml/.yml)
+#
+# Exit codes:
+#   0 - Success
+#   1 - Failure (auth error, network error)
+
+set -euo pipefail
+
+# Source the request library (which also sources auth)
+source "${HOME}/.claude/skills/zendesk/lib/request.sh"
+
+# Parse command line options
+FILTER=""
+OUTPUT_JSON=false
+OUTPUT_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --active)
+            FILTER="active"
+            shift
+            ;;
+        --inactive)
+            FILTER="inactive"
+            shift
+            ;;
+        --json)
+            OUTPUT_JSON=true
+            shift
+            ;;
+        --output|-o)
+            if [[ -z "${2:-}" ]]; then
+                zendesk_error "--output requires a filename"
+                exit 1
+            fi
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: /zendesk:macros [--active|--inactive] [--json] [--output FILE]"
+            echo ""
+            echo "Options:"
+            echo "  --active       Show only active macros"
+            echo "  --inactive     Show only inactive macros"
+            echo "  --json         Output raw JSON to stdout"
+            echo "  --output FILE  Export to file (.json or .yaml/.yml)"
+            echo ""
+            echo "Examples:"
+            echo "  /zendesk:macros                     # List all macros"
+            echo "  /zendesk:macros --active            # List active macros only"
+            echo "  /zendesk:macros --output macros.json  # Export to JSON file"
+            echo "  /zendesk:macros --active --output active.yaml  # Export active to YAML"
+            exit 0
+            ;;
+        *)
+            zendesk_error "Unknown option: $1"
+            echo "Use --help for usage information" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Format action for display
+format_action() {
+    local field="$1"
+    local value="$2"
+
+    case "$field" in
+        status)
+            echo "Set status=$value"
+            ;;
+        priority)
+            echo "Set priority=$value"
+            ;;
+        type)
+            echo "Set type=$value"
+            ;;
+        assignee_id)
+            if [[ "$value" == "current_user" ]]; then
+                echo "Assign to current user"
+            else
+                echo "Assign to user #$value"
+            fi
+            ;;
+        group_id)
+            if [[ "$value" == "current_groups" ]]; then
+                echo "Assign to current group"
+            else
+                echo "Assign to group #$value"
+            fi
+            ;;
+        comment_value|comment_value_html)
+            # Truncate long comments
+            local preview
+            preview=$(echo "$value" | head -c 50 | tr '\n' ' ')
+            if [[ ${#value} -gt 50 ]]; then
+                echo "Add comment: \"${preview}...\""
+            else
+                echo "Add comment: \"${preview}\""
+            fi
+            ;;
+        current_tags|set_tags)
+            echo "Set tags: $value"
+            ;;
+        remove_tags)
+            echo "Remove tags: $value"
+            ;;
+        *)
+            echo "$field=$value"
+            ;;
+    esac
+}
+
+# Convert JSON to YAML using jq (basic conversion)
+json_to_yaml() {
+    local json="$1"
+    # Use Ruby for YAML conversion if available, otherwise use a simple jq approach
+    if command -v ruby &>/dev/null; then
+        echo "$json" | ruby -ryaml -rjson -e 'puts YAML.dump(JSON.parse(STDIN.read))'
+    else
+        zendesk_error "Ruby is required for YAML export"
+        echo "Install Ruby or use JSON format instead" >&2
+        exit 1
+    fi
+}
+
+# Main function
+main() {
+    # Validate config
+    if ! zendesk_validate_config; then
+        exit 1
+    fi
+
+    # Check jq is available
+    if ! command -v jq &>/dev/null; then
+        zendesk_error "jq is required but not installed"
+        echo "Install with: brew install jq" >&2
+        exit 1
+    fi
+
+    # Collect all macros (handling pagination)
+    local all_macros="[]"
+    local next_page="/macros.json?per_page=100"
+
+    while [[ -n "$next_page" ]]; do
+        local response
+        if ! response=$(zendesk_get "$next_page"); then
+            exit 1
+        fi
+
+        # Append macros to collection
+        local page_macros
+        page_macros=$(echo "$response" | jq -c '.macros // []')
+        all_macros=$(echo "$all_macros $page_macros" | jq -s 'add')
+
+        # Check for next page
+        next_page=$(echo "$response" | jq -r '.next_page // empty')
+        if [[ -n "$next_page" ]]; then
+            # Extract just the path from full URL
+            next_page=$(echo "$next_page" | sed 's|https://[^/]*/api/v2||')
+        fi
+    done
+
+    # Apply filter if specified
+    case "$FILTER" in
+        active)
+            all_macros=$(echo "$all_macros" | jq '[.[] | select(.active == true)]')
+            ;;
+        inactive)
+            all_macros=$(echo "$all_macros" | jq '[.[] | select(.active == false)]')
+            ;;
+    esac
+
+    local macro_count active_count inactive_count
+    macro_count=$(echo "$all_macros" | jq 'length')
+    active_count=$(echo "$all_macros" | jq '[.[] | select(.active == true)] | length')
+    inactive_count=$(echo "$all_macros" | jq '[.[] | select(.active == false)] | length')
+
+    # File export mode
+    if [[ -n "$OUTPUT_FILE" ]]; then
+        local timestamp
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        # Build export object with metadata
+        local export_json
+        export_json=$(echo "$all_macros" | jq --arg ts "$timestamp" --arg cnt "$macro_count" '{
+            exported_at: $ts,
+            count: ($cnt | tonumber),
+            macros: .
+        }')
+
+        # Determine format from extension
+        case "$OUTPUT_FILE" in
+            *.yaml|*.yml)
+                json_to_yaml "$export_json" > "$OUTPUT_FILE"
+                ;;
+            *.json|*)
+                echo "$export_json" | jq '.' > "$OUTPUT_FILE"
+                ;;
+        esac
+
+        zendesk_success "Exported $macro_count macros to $OUTPUT_FILE"
+        echo "  Active: $active_count | Inactive: $inactive_count"
+        exit 0
+    fi
+
+    # JSON stdout mode
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        echo "$all_macros" | jq '.'
+        exit 0
+    fi
+
+    # Display header
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    local header="Zendesk Macros ($macro_count total"
+    if [[ -z "$FILTER" ]]; then
+        header="$header: $active_count active, $inactive_count inactive)"
+    elif [[ "$FILTER" == "active" ]]; then
+        header="$header active)"
+    else
+        header="$header inactive)"
+    fi
+    echo "$header"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    if [[ "$macro_count" -eq 0 ]]; then
+        echo ""
+        echo "  (No macros found)"
+        exit 0
+    fi
+
+    # Display each macro
+    local i=0
+    while [[ $i -lt $macro_count ]]; do
+        local id title active actions_json action_count
+
+        id=$(echo "$all_macros" | jq -r ".[$i].id")
+        title=$(echo "$all_macros" | jq -r ".[$i].title // \"Untitled\"")
+        active=$(echo "$all_macros" | jq -r ".[$i].active")
+        actions_json=$(echo "$all_macros" | jq -c ".[$i].actions // []")
+        action_count=$(echo "$actions_json" | jq 'length')
+
+        # Status indicator
+        local status_indicator
+        if [[ "$active" == "true" ]]; then
+            status_indicator="[Active]"
+        else
+            status_indicator="[Inactive]"
+        fi
+
+        echo ""
+        echo "$status_indicator #$id - $title"
+
+        # Display actions
+        if [[ "$action_count" -gt 0 ]]; then
+            local actions_summary=""
+            local j=0
+            while [[ $j -lt $action_count ]]; do
+                local field value action_text
+                field=$(echo "$actions_json" | jq -r ".[$j].field // \"unknown\"")
+                value=$(echo "$actions_json" | jq -r ".[$j].value // \"\"")
+
+                action_text=$(format_action "$field" "$value")
+                if [[ -z "$actions_summary" ]]; then
+                    actions_summary="$action_text"
+                else
+                    actions_summary="$actions_summary, $action_text"
+                fi
+
+                ((j++))
+            done
+            echo "  Actions: $actions_summary"
+        else
+            echo "  Actions: (none)"
+        fi
+
+        ((i++))
+    done
+
+    echo ""
+    exit 0
+}
+
+# Run main with all arguments
+main "$@"

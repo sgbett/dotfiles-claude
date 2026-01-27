@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+# Zendesk Ticket Reader
+# Fetches and displays a ticket by ID with full comment thread
+#
+# Usage: /zendesk:read <ticket_id>
+#
+# Exit codes:
+#   0 - Success
+#   1 - Failure (missing ID, not found, auth error)
+
+set -euo pipefail
+
+# Source the request library (which also sources auth)
+source "${HOME}/.claude/skills/zendesk/lib/request.sh"
+
+# Simple user cache using a temp file
+USER_CACHE_FILE=$(mktemp)
+ORG_CACHE_FILE=$(mktemp)
+trap "rm -f $USER_CACHE_FILE $ORG_CACHE_FILE" EXIT
+
+# Format a timestamp for display
+format_timestamp() {
+    local ts="$1"
+    echo "$ts" | sed 's/T/ /;s/:[0-9][0-9]Z$//'
+}
+
+# Fetch user details and cache them
+fetch_user() {
+    local user_id="$1"
+
+    # Check cache first
+    if grep -q "^${user_id}|" "$USER_CACHE_FILE" 2>/dev/null; then
+        return 0
+    fi
+
+    # Fetch from API
+    local response
+    if response=$(zendesk_get "/users/${user_id}.json" 2>/dev/null); then
+        local name email role
+        name=$(echo "$response" | jq -r '.user.name // "Unknown"')
+        email=$(echo "$response" | jq -r '.user.email // ""')
+        role=$(echo "$response" | jq -r '.user.role // "user"')
+        echo "${user_id}|${name}|${email}|${role}" >> "$USER_CACHE_FILE"
+    else
+        echo "${user_id}|Unknown User||user" >> "$USER_CACHE_FILE"
+    fi
+}
+
+# Get user display string from cache
+get_user_display() {
+    local user_id="$1"
+    local show_email="${2:-false}"
+    local cached
+    cached=$(grep "^${user_id}|" "$USER_CACHE_FILE" 2>/dev/null | head -1) || true
+
+    if [[ -z "$cached" ]]; then
+        echo "User #${user_id}"
+        return
+    fi
+
+    local name email role
+    name=$(echo "$cached" | cut -d'|' -f2)
+    email=$(echo "$cached" | cut -d'|' -f3)
+    role=$(echo "$cached" | cut -d'|' -f4)
+
+    if [[ "$show_email" == "true" ]] && [[ -n "$email" ]]; then
+        echo "${name} <${email}>"
+    else
+        echo "${name} (${role})"
+    fi
+}
+
+# Fetch organisation name
+fetch_org_name() {
+    local org_id="$1"
+
+    # Check cache first
+    local cached
+    cached=$(grep "^${org_id}|" "$ORG_CACHE_FILE" 2>/dev/null | head -1) || true
+    if [[ -n "$cached" ]]; then
+        echo "$cached" | cut -d'|' -f2
+        return
+    fi
+
+    # Fetch from API
+    local response
+    if response=$(zendesk_get "/organizations/${org_id}.json" 2>/dev/null); then
+        local name
+        name=$(echo "$response" | jq -r '.organization.name // "Unknown"')
+        echo "${org_id}|${name}" >> "$ORG_CACHE_FILE"
+        echo "$name"
+    else
+        echo "${org_id}|Unknown" >> "$ORG_CACHE_FILE"
+        echo "Unknown"
+    fi
+}
+
+# Fetch and display comments for a ticket
+fetch_comments() {
+    local ticket_id="$1"
+    local next_page="/tickets/${ticket_id}/comments.json"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Comments"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    local response
+    if ! response=$(zendesk_get "$next_page" 2>/dev/null); then
+        zendesk_warn "Could not fetch comments"
+        return
+    fi
+
+    local comment_count
+    comment_count=$(echo "$response" | jq -r '.comments | length')
+
+    if [[ "$comment_count" -eq 0 ]]; then
+        echo ""
+        echo "  (No comments)"
+        return
+    fi
+
+    # Collect unique author IDs and fetch them
+    local author_ids
+    author_ids=$(echo "$response" | jq -r '.comments[].author_id' | sort -u)
+
+    for author_id in $author_ids; do
+        fetch_user "$author_id"
+    done
+
+    # Display each comment
+    local i=0
+    while [[ $i -lt $comment_count ]]; do
+        local author_id created_at body is_public
+
+        author_id=$(echo "$response" | jq -r ".comments[$i].author_id")
+        created_at=$(echo "$response" | jq -r ".comments[$i].created_at")
+        body=$(echo "$response" | jq -r ".comments[$i].body // .comments[$i].plain_body // \"(no content)\"")
+        is_public=$(echo "$response" | jq -r ".comments[$i].public")
+
+        local timestamp author_display public_marker
+        timestamp=$(format_timestamp "$created_at")
+        author_display=$(get_user_display "$author_id")
+
+        if [[ "$is_public" == "false" ]]; then
+            public_marker=" [internal note]"
+        else
+            public_marker=""
+        fi
+
+        echo ""
+        echo "[${timestamp}] ${author_display}${public_marker}"
+        # Indent the body and wrap long lines
+        echo "$body" | fold -s -w 70 | sed 's/^/  /'
+
+        ((i++))
+    done
+}
+
+# Main function
+main() {
+    local ticket_id="${1:-}"
+
+    # Validate ticket ID provided
+    if [[ -z "$ticket_id" ]]; then
+        zendesk_error "Usage: /zendesk:read <ticket_id>"
+        echo "" >&2
+        echo "Example: /zendesk:read 12345" >&2
+        exit 1
+    fi
+
+    # Validate ticket ID is numeric
+    if ! [[ "$ticket_id" =~ ^[0-9]+$ ]]; then
+        zendesk_error "Invalid ticket ID: $ticket_id"
+        echo "Ticket ID must be a number" >&2
+        exit 1
+    fi
+
+    # Validate config
+    if ! zendesk_validate_config; then
+        exit 1
+    fi
+
+    # Check jq is available
+    if ! command -v jq &>/dev/null; then
+        zendesk_error "jq is required but not installed"
+        echo "Install with: brew install jq" >&2
+        exit 1
+    fi
+
+    # Fetch the ticket
+    local response
+    if ! response=$(zendesk_get "/tickets/${ticket_id}.json"); then
+        exit 1
+    fi
+
+    # Parse ticket data
+    local subject status priority ticket_type created_at updated_at
+    local requester_id assignee_id organization_id tags
+
+    subject=$(echo "$response" | jq -r '.ticket.subject // "No subject"')
+    status=$(echo "$response" | jq -r '.ticket.status // "unknown"')
+    priority=$(echo "$response" | jq -r '.ticket.priority // "none"')
+    ticket_type=$(echo "$response" | jq -r '.ticket.type // "ticket"')
+    created_at=$(echo "$response" | jq -r '.ticket.created_at // ""')
+    updated_at=$(echo "$response" | jq -r '.ticket.updated_at // ""')
+    requester_id=$(echo "$response" | jq -r '.ticket.requester_id // "none"')
+    assignee_id=$(echo "$response" | jq -r '.ticket.assignee_id // "unassigned"')
+    organization_id=$(echo "$response" | jq -r '.ticket.organization_id // "none"')
+    tags=$(echo "$response" | jq -r '.ticket.tags // [] | join(", ")')
+
+    # Handle null values
+    [[ "$assignee_id" == "null" ]] && assignee_id="unassigned"
+    [[ "$priority" == "null" ]] && priority="none"
+    [[ "$ticket_type" == "null" ]] && ticket_type="ticket"
+    [[ "$organization_id" == "null" ]] && organization_id="none"
+
+    # Fetch user details for requester and assignee
+    fetch_user "$requester_id"
+    if [[ "$assignee_id" != "unassigned" ]]; then
+        fetch_user "$assignee_id"
+    fi
+
+    # Format timestamps
+    local created_fmt updated_fmt
+    created_fmt=$(format_timestamp "$created_at")
+    updated_fmt=$(format_timestamp "$updated_at")
+
+    # Get user display names (with email for header)
+    local requester_display assignee_display
+    requester_display=$(get_user_display "$requester_id" "true")
+    if [[ "$assignee_id" == "unassigned" ]]; then
+        assignee_display="Unassigned"
+    else
+        assignee_display=$(get_user_display "$assignee_id" "true")
+    fi
+
+    # Get organisation name
+    local org_display=""
+    if [[ "$organization_id" != "none" ]]; then
+        org_display=$(fetch_org_name "$organization_id")
+    fi
+
+    # Display ticket info
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Ticket #${ticket_id}: ${subject}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Status line with type
+    local status_line="Status: ${status}"
+    [[ "$priority" != "none" ]] && status_line="${status_line}     Priority: ${priority}"
+    [[ "$ticket_type" != "ticket" ]] && status_line="${status_line}     Type: ${ticket_type}"
+    echo "$status_line"
+
+    echo "Created: ${created_fmt}    Updated: ${updated_fmt}"
+    echo ""
+    echo "Requester: ${requester_display}"
+    echo "Assignee:  ${assignee_display}"
+
+    # Organisation if present
+    if [[ -n "$org_display" ]]; then
+        echo "Organisation: ${org_display}"
+    fi
+
+    # Tags if present
+    if [[ -n "$tags" ]]; then
+        echo "Tags: ${tags}"
+    fi
+
+    # Custom fields
+    local custom_fields
+    custom_fields=$(echo "$response" | jq -r '.ticket.custom_fields // []')
+    local custom_count
+    custom_count=$(echo "$custom_fields" | jq -r 'length')
+
+    if [[ "$custom_count" -gt 0 ]]; then
+        local has_values=false
+        local custom_output=""
+
+        local j=0
+        while [[ $j -lt $custom_count ]]; do
+            local field_id field_value
+            field_id=$(echo "$custom_fields" | jq -r ".[$j].id")
+            field_value=$(echo "$custom_fields" | jq -r ".[$j].value // empty")
+
+            if [[ -n "$field_value" ]] && [[ "$field_value" != "null" ]]; then
+                has_values=true
+                custom_output="${custom_output}  Field ${field_id}: ${field_value}\n"
+            fi
+            ((j++))
+        done
+
+        if [[ "$has_values" == "true" ]]; then
+            echo ""
+            echo "Custom Fields:"
+            echo -e "$custom_output"
+        fi
+    fi
+
+    # Fetch and display comments
+    fetch_comments "$ticket_id"
+
+    exit 0
+}
+
+# Run main with all arguments
+main "$@"

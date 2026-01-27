@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Zendesk Connection Test
+# Tests API credentials by fetching the authenticated user's profile
+#
+# Usage: /zendesk:test
+#
+# Exit codes:
+#   0 - Success (credentials valid)
+#   1 - Failure (missing config, auth error, or network error)
+
+set -euo pipefail
+
+# Source the request library (which also sources auth)
+source "${HOME}/.claude/skills/zendesk/lib/request.sh"
+
+# Main test function
+main() {
+    echo "Testing Zendesk API connection..."
+    echo ""
+
+    # Validate config first (will show helpful error if missing)
+    if ! zendesk_validate_config; then
+        exit 1
+    fi
+
+    # Try to fetch current user
+    # Don't capture stderr - let error messages flow through
+    local response
+    if ! response=$(zendesk_get "/users/me.json"); then
+        # Error already printed by zendesk_get to stderr
+        exit 1
+    fi
+
+    # Parse the response using basic tools (jq if available, otherwise grep/sed)
+    local name email role subdomain
+
+    if command -v jq &>/dev/null; then
+        name=$(echo "$response" | jq -r '.user.name // "Unknown"')
+        email=$(echo "$response" | jq -r '.user.email // "Unknown"')
+        role=$(echo "$response" | jq -r '.user.role // "Unknown"')
+    else
+        # Fallback parsing without jq
+        name=$(echo "$response" | grep -o '"name":"[^"]*"' | head -1 | sed 's/"name":"//;s/"$//')
+        email=$(echo "$response" | grep -o '"email":"[^"]*"' | head -1 | sed 's/"email":"//;s/"$//')
+        role=$(echo "$response" | grep -o '"role":"[^"]*"' | head -1 | sed 's/"role":"//;s/"$//')
+
+        # Default if not found
+        name="${name:-Unknown}"
+        email="${email:-Unknown}"
+        role="${role:-Unknown}"
+    fi
+
+    subdomain="${ZENDESK_SUBDOMAIN}"
+
+    # Display success
+    zendesk_success "Connected to Zendesk successfully!"
+    echo "  Subdomain: ${subdomain}"
+    echo "  User:      ${name} (${email})"
+    echo "  Role:      ${role}"
+    echo ""
+    echo "Your Zendesk credentials are configured correctly."
+
+    exit 0
+}
+
+# Run main
+main "$@"
