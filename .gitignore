@@ -6,6 +6,8 @@ session-env/
 shell-snapshots/
 telemetry/
 todos/
+tasks/
+paste-cache/
 stats-cache.json
 statsig/
 history.jsonl

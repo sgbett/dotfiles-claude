@@ -74,6 +74,29 @@ mutation {
 
 This creates the sub-issue relationship visible in GitHub's issue UI, enabling progress tracking on parent issues.
 
+**Git Worktrees:**
+
+For long-running feature branches that need isolation (e.g., Rails upgrades, CSS migrations), use git worktrees:
+
+```bash
+# Create worktree for a feature branch
+git worktree add ../project-worktrees/feature-name feature/#nnn_feature-name
+```
+
+**Worktree branch pattern:**
+- Worktree "master": `feature/#nnn_name/master` (tracks upstream, accumulates sub-work)
+- Sub-branches: `feature/#nnn_name/#mmm_sub-task` (PRs target worktree master)
+
+**Worktree master detection:**
+- A branch ending in `/master` within a feature namespace is that worktree's master
+- Example: `feature/#1113_staging-environment/master` is the master for the staging-environment worktree
+- These branches should be treated like `master` for safety purposes (no cleanup, no accidental deletion)
+
+**When working in a worktree:**
+- The main repo's `master` is checked out elsewhere - don't try to switch to it
+- Use the worktree master (`feature/#nnn_name/master`) for operations that would normally use `master`
+- Sub-branches PR to the worktree master, not to main `master`
+
 ## Development Environment
 
 - Prefer Docker for services (databases, caches, message queues) over local installation
