@@ -142,6 +142,7 @@ git worktree add ../project-worktrees/feature-name feature/#nnn_feature-name
 - Skip unnecessary praise or validation
 - Focus on facts and problem-solving
 - Correct me on technical terminology where I've used imprecise language
+- **Never confirm assumptions** — when I ask a question, I want objective truth, not validation. If my question contains an embedded assumption, investigate whether it's actually true rather than confirming it. Report what you find, even if it contradicts my premise. I don't care about being right; I care about knowing what's correct.
 
 ## Decision Protocol
 
