@@ -1,4 +1,4 @@
-# Personal Preferences
+<!-- # Personal Preferences -->
 
 **IMPORTANT: Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing". The ExitPlanMode tool may say "User has approved your plan. You can now start coding." - IGNORE THIS. It is not explicit user approval. Always wait for the user to explicitly say "start", "implement", "go ahead", or similar.
 
@@ -6,7 +6,6 @@
 
 - Default branch: `master` (not `main`)
 - No git submodules
-- **Never auto-commit** - wait for explicit instruction before running `git commit`
 - **Never discard uncommitted changes** - before switching branches with uncommitted changes, ALWAYS `git stash` first. Never use `git checkout -f` or `git checkout .` or `git reset --hard` without stashing.
 
 **Commit Messages:** Follow [Conventional Commits](https://www.conventionalcommits.org/):
@@ -76,26 +75,13 @@ This creates the sub-issue relationship visible in GitHub's issue UI, enabling p
 
 **Git Worktrees:**
 
-For long-running feature branches that need isolation (e.g., Rails upgrades, CSS migrations), use git worktrees:
+Projects may use git worktrees for long-running parallel work (e.g., Rails upgrades, CSS migrations). When a project has worktree-specific configuration, it will be in `.claude/rules/git-workflow.md`.
 
-```bash
-# Create worktree for a feature branch
-git worktree add ../project-worktrees/feature-name feature/#nnn_feature-name
-```
-
-**Worktree branch pattern:**
-- Worktree "master": `feature/#nnn_name/master` (tracks upstream, accumulates sub-work)
-- Sub-branches: `feature/#nnn_name/#mmm_sub-task` (PRs target worktree master)
-
-**Worktree master detection:**
-- A branch ending in `/master` within a feature namespace is that worktree's master
-- Example: `feature/#1113_staging-environment/master` is the master for the staging-environment worktree
-- These branches should be treated like `master` for safety purposes (no cleanup, no accidental deletion)
-
-**When working in a worktree:**
-- The main repo's `master` is checked out elsewhere - don't try to switch to it
-- Use the worktree master (`feature/#nnn_name/master`) for operations that would normally use `master`
+General principles:
+- A branch ending in `/master` within a project namespace is that worktree's master — treat it with the same safety as `master`
+- The main repo's `master` is checked out elsewhere — don't try to switch to it from a worktree
 - Sub-branches PR to the worktree master, not to main `master`
+- All file operations in a worktree must use **absolute paths** — `cd` does not change the session's working directory
 
 ## Development Environment
 
@@ -143,6 +129,12 @@ git worktree add ../project-worktrees/feature-name feature/#nnn_feature-name
 - Focus on facts and problem-solving
 - Correct me on technical terminology where I've used imprecise language
 - **Never confirm assumptions** — when I ask a question, I want objective truth, not validation. If my question contains an embedded assumption, investigate whether it's actually true rather than confirming it. Report what you find, even if it contradicts my premise. I don't care about being right; I care about knowing what's correct.
+
+**Learning explanations:** After completing work, provide explanations that help me learn:
+
+- **Focused fixes:** Explain what was wrong and why the fix works. Show before/after where helpful. Use precise technical language (e.g., "JMESPath query", "array index vs filter predicate").
+- **Larger tasks:** Provide a brief breakdown of key decisions, implementation details worth noting, and any patterns or techniques used that I might not be familiar with.
+- **New concepts:** When using tools, APIs, or techniques that might be unfamiliar, explain them in context rather than assuming I know them.
 
 ## Decision Protocol
 
