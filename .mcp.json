@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ruby-fetch": {
+      "command": "ruby",
+      "args": [
+        "/Users/simon/.claude/mcp/ruby-fetch/server.rb"
+      ]
+    }
+  }
+}
