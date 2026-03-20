@@ -9,6 +9,7 @@ todos/
 tasks/
 paste-cache/
 stats-cache.json
+mcp-needs-auth-cache.json
 statsig/
 history.jsonl
 
@@ -48,6 +49,9 @@ vendor/
 
 # Cache
 cache/
+
+# Internal state backups
+backups/
 
 # Personal ideas/notes
 ideas/
