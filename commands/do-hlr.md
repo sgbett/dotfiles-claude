@@ -1,178 +1,237 @@
 # Execute HLR (High-Level Requirement)
 
-Implement all sub-tasks of a GitHub HLR issue sequentially, committing after each task.
+Orchestrate an agent team to implement all sub-tasks of a GitHub HLR issue.
 
 **HLR Issue:** $ARGUMENTS
 
-## Step 1: Fetch HLR and Sub-Issues
+## Overview
 
-**Fetch the HLR issue details:**
-```bash
-gh issue view $ARGUMENTS
-```
+This command uses three specialist agents in a phased pipeline:
 
-**Fetch all sub-issues linked to this HLR:**
-```bash
-gh api graphql -f query='
-{
-  repository(owner: "OWNER", name: "REPO") {
-    issue(number: $ARGUMENTS) {
-      title
-      state
-      subIssues(first: 50) {
-        nodes {
-          number
-          title
-          state
-        }
-      }
-    }
-  }
-}'
-```
+1. **Pre-flight** — Team lead fetches the HLR, verifies clean state, creates feature branch
+2. **Prep phase** — PM ensures we're ready; Analyst researches and proposes task breakdown
+3. **Plan phase** — PM creates sub-issues from analyst's breakdown
+4. **Build phase** — Developer(s) implement, guided by analyst output
+5. **Wrap phase** — PM verifies, commits, closes issues, creates PR
+6. **Security gate** (optional) — White Hat audits before merge
 
-Note: Replace OWNER and REPO with values from `gh repo view --json owner,name`.
+Idle agents cost zero tokens. All agents stay alive throughout the pipeline.
+The analyst's primary value is front-loaded (prep/plan phases), but observing the
+implementation builds the analyst's memory for future HLRs — the learning flows
+both ways.
 
-## Step 2: Filter and Order Tasks
+---
 
-From the sub-issues list:
-1. Filter to only OPEN issues (skip already closed/completed tasks)
-2. Order by issue number (ascending) to respect creation order
-3. Identify any dependency chains (tasks that block other tasks)
+## Pre-Flight (Team Lead)
 
-Create a work list:
-```
-Task Queue:
-1. #24 - [Task 1] Create markdown generator utility
-2. #25 - [Task 2] Generate person profile markdown files
-3. #26 - [Task 3] Generate relationship profile markdown files
-... etc
-```
+Before spawning any agents, the team lead (you) does lightweight setup:
 
-## Step 3: Pre-Flight Checks
+1. **Fetch the HLR**:
+   ```bash
+   gh issue view $ARGUMENTS
+   ```
 
-Before starting:
-1. Verify working tree is clean (`git status`)
-2. Ensure on correct branch (create feature branch if needed)
-3. Pull latest changes
-4. Confirm no blockers on first task
+2. **Verify working tree is clean** (`git status`). If dirty, stash or abort.
 
-If working tree is dirty:
-- Ask user whether to stash, commit, or abort
+3. **Create/checkout feature branch**: `feature/$ARGUMENTS-<slug>` from `master`.
 
-## Step 4: Execute Task Loop
+4. **Present the HLR to user** with a brief summary and wait for approval
+   to spawn agents.
 
-For each task in the queue:
+---
 
-### 4a. Start Task
-```
-═══════════════════════════════════════════════════════════
-Starting Task #XX: [Task Title]
-═══════════════════════════════════════════════════════════
-```
+## Phase 1: Prep (Parallel)
 
-### 4b. Execute Task
-Invoke the /do:task skill for the current task number.
+Spawn the **project-manager** and **technical-analyst** as teammates.
 
-This will:
-- Fetch task details
-- Perform technical analysis
-- Implement the solution
-- Run tests
-- Update task status
+### Project Manager — Task 1: Verify Readiness
+- Verify feature branch exists and is clean
+- Check for any existing sub-issues on the HLR (may be a re-run)
+- Confirm no blockers (dependency issues, missing prerequisites)
+- Report readiness status
 
-### 4c. Commit Changes
-After task completion, commit all changes:
+### Technical Analyst — Task 2: Analyse & Propose Breakdown
+- Read the HLR description and acceptance criteria
+- Read the existing codebase to understand what's already there
+- Analyse the work required and propose a task breakdown:
+  - Each task should be independently implementable and testable
+  - Identify which tasks can be parallelised vs which must be sequential
+  - For each task, specify:
+    - Clear scope and acceptance criteria
+    - Edge cases the developer must handle
+    - Specific test scenarios (concrete, not vague)
+    - Static test vectors for compatibility where applicable
+  - Flag any discrepancies between the HLR spec and reality
+- Comment the proposed breakdown on the HLR issue for permanent record
 
-```bash
-git add -A
-git commit -m "feat: implement task #XX - [brief description]
+**Gate:** Both tasks must complete before Phase 2 begins.
 
-Implements sub-task #XX of HLR #$ARGUMENTS.
+---
 
-Co-Authored-By: Claude <noreply@anthropic.com>"
-```
+## Phase 2: Plan (PM)
 
-### 4d. Verify and Continue
-1. Confirm commit succeeded
-2. Run any project tests to ensure no regressions
-3. Update progress summary
-4. Move to next task
+### Project Manager — Task 3: Create Sub-Issues
+- Review the analyst's proposed task breakdown
+- Create GitHub sub-issues for each task, linked to the HLR as parent:
+  - Concrete acceptance criteria (from analyst's proposal)
+  - Edge cases and test scenarios (from analyst's research)
+  - Any test vectors or reference notes from the analyst
+- Use the GraphQL API to create parent-child relationships
+- Identify parallelisation opportunities from the analyst's breakdown
+- Report the final task list to team lead:
+  ```
+  HLR #$ARGUMENTS: [Title]
 
-```
-═══════════════════════════════════════════════════════════
-✓ Task #XX Complete - Committed as [commit-hash]
-  Progress: 3/9 tasks complete
-═══════════════════════════════════════════════════════════
-```
+  Sequential tasks:
+  1. #201 - [Foundation task]
+  2. #202 - [Depends on #201]
 
-## Step 5: Handle Failures
+  Parallel tasks (after #202):
+  3a. #203 - [Independent task A]
+  3b. #204 - [Independent task B]
 
-If a task fails:
-1. **Do not proceed** to next task
-2. Report the failure clearly
-3. Preserve any partial work (don't discard)
-4. Ask user how to proceed:
-   - Retry the failed task
-   - Skip and continue (mark task as blocked)
-   - Abort HLR execution
+  Final task:
+  4. #205 - [Integration/cleanup, depends on #203 and #204]
 
-## Step 6: Completion Summary
+  Security gate: [yes/no]
+  ```
 
-After all tasks complete (or execution stops):
+**Gate:** Team lead reviews the task list and approves before Phase 3.
 
-```
-═══════════════════════════════════════════════════════════
-HLR #$ARGUMENTS Execution Summary
-═══════════════════════════════════════════════════════════
+---
 
-HLR: [HLR Title]
+## Phase 3: Build (Developer(s))
 
-Tasks Completed: 7/9
-Tasks Skipped: 1 (already closed)
-Tasks Failed: 1
+Spawn **developer** agent(s) as teammates.
 
-Commits Created:
-- abc1234 feat: implement task #24 - Create markdown generator
-- def5678 feat: implement task #25 - Generate person profiles
-- ghi9012 feat: implement task #26 - Generate relationship profiles
-...
+For sequential tasks, create one task per sub-issue, chained in dependency order.
+For parallelisable tasks, spawn multiple developers working concurrently on
+independent sub-issues.
 
-Failed Tasks:
-- #30 - [Task 7] Generate decision support markdown
-  Error: [error description]
+Each developer receives:
+- The sub-issue description and acceptance criteria
+- The analyst's guidance (via GitHub issue comments)
 
-Remaining Tasks:
-- #31 - [Task 8] Create dashboard (blocked by #30)
-- #32 - [Task 9] Validate wikilinks (blocked by #30)
+### For each sub-issue, the developer:
+1. Reads the issue and analyst's guidance comments
+2. Reads relevant existing code in the project
+3. Implements the solution — clean, tested, idiomatic code
+4. Runs the project's linter on changed files, fixes offences
+5. Runs the project's test suite (targeted or full suite as appropriate)
+6. Marks the task complete
 
-Next Steps:
-1. Review failed task #30 and resolve issues
-2. Re-run /do:hlr $ARGUMENTS to continue from where we left off
-═══════════════════════════════════════════════════════════
-```
+### Developer ground rules:
+- **Ad-hoc scripts** go to `/tmp/` files, not inline one-liners
+- **Discrepancies** between requirements and reality get commented on the
+  relevant GitHub issue — not messaged to teammates
 
-## Step 7: Close HLR (Optional)
+**Important:** Do not manually nudge agents. Let the task dependency system drive
+the flow. When the developer(s) mark their final tasks complete, the PM's wrap-up
+task automatically unblocks.
 
-If all tasks completed successfully:
-1. Ask user if they want to close the HLR
-2. If yes, close with summary comment:
+---
 
-```bash
-gh issue close $ARGUMENTS --comment "All sub-tasks completed.
+## Phase 4: Wrap (PM)
 
-Commits:
-- abc1234 task #24
-- def5678 task #25
-...
+The PM's wrap-up task depends on all developer tasks completing.
 
-Implemented by Claude Code."
-```
+### Project Manager — Final Task: Verify & Ship
+1. **Verify acceptance criteria** — actually check each criterion against the code:
+   - Read the implementation
+   - Confirm tests exist and pass (run the project's test suite)
+   - Confirm linter passes (run the project's linter)
+   - Check that implementation matches specification, not just "something was done"
+2. **Commit** — stage relevant files (not `git add -A`), conventional commit messages.
+   Use judgement on granularity: one commit per HLR for cohesive features, or
+   per-task commits when sub-tasks are independently meaningful. Either way,
+   use conventional commit format and reference relevant issue numbers.
+3. **Close sub-issues** with brief completion comments
+4. **Create PR** against `master` with:
+   ```
+   ## Summary
+   - [bullet points summarising what was implemented]
+
+   ## Test plan
+   - [ ] All tests pass
+   - [ ] Linter clean
+   - [ ] Acceptance criteria verified
+
+   Closes #$ARGUMENTS
+   ```
+5. **Report** final status to team lead
+
+---
+
+## Phase 5: Security Gate (Optional)
+
+If the HLR touches cryptographic code, key handling, signature operations, or
+deserialisation of untrusted data, spawn the **white-hat** agent to audit the
+PR diff before merge.
+
+The white-hat operates globally (`~/.claude/agents/`) with cross-project memory.
+It reviews the committed code adversarially, looking for:
+- Key material leakage
+- Timing side-channels
+- Malformed input handling
+- Signature malleability
+- Any OWASP-relevant concerns
+
+Findings are commented on the PR. Critical/High findings block merge.
+
+---
+
+## Shutdown Sequence
+
+1. Developer(s) shut down first (work is complete, findings are on GitHub issues)
+2. Analyst shuts down second
+3. PM shuts down last (after PR is created)
+4. White-hat (if spawned) shuts down after audit is posted
+
+No agent should need to message a peer during shutdown. All observations are
+captured on GitHub issues or PR comments — durable, visible, order-independent.
+
+---
+
+## Error Handling
+
+If any phase fails:
+1. **Do not proceed** to the next phase
+2. Report the failure clearly with context
+3. Preserve all work (no discarding, no force-resetting)
+4. Ask user how to proceed: retry, skip, or abort
+
+If a developer encounters a blocker mid-implementation:
+- Comment the blocker on the relevant GitHub issue
+- Mark the task as blocked
+- Report to team lead
+- Do not attempt to work around fundamental blockers silently
+
+---
+
+## Design Decisions
+
+These choices are based on observed behaviour across multiple HLR runs:
+
+| Decision | Rationale |
+|----------|-----------|
+| Analyst proposes breakdown | The analyst understands the technical work; the PM understands issue management — each does what they're best at |
+| PM creates sub-issues | Sub-issues are a project management artefact; the PM owns them |
+| Parallel developers | Independent sub-tasks can be implemented concurrently by multiple developers |
+| Analyst always on | Zero token cost when idle; available for developer consultation, and observing implementations builds analyst memory for future HLRs |
+| More agents, not fewer | AI agents don't suffer the same nodes/edges overhead as human teams; the upper bound is likely much higher than intuition suggests |
+| GitHub issue comments over DMs | Durable, visible, survives shutdown, avoids combinatorial shutdown ordering |
+| No manual nudging | Trust task dependencies; bypassing them causes premature task starts |
+| White-hat is global | Security knowledge is cross-cutting; benefits from cross-project memory |
+| Developer writes to /tmp/ | Avoids permission prompts for multi-line scripts with # comments |
+| PM does commits, not developer | Separation of concerns; PM verifies before committing |
+
+---
 
 ## Notes
 
-- **Idempotent**: Safe to re-run - skips closed tasks automatically
-- **Resumable**: If interrupted, re-run to continue from next open task
-- **Commits per task**: Each task gets its own commit for clean history
+- **Idempotent**: Safe to re-run — skips closed sub-issues automatically
+- **Resumable**: If interrupted, re-run to continue from next open sub-issue
 - **No force push**: Never rewrites history or force pushes
-- **Respects dependencies**: If a task has blockedBy issues that are open, skip it
+- **British English**: All commits, comments, and documentation use British spelling
+- **Self-contained**: This command orchestrates the full lifecycle — no external
+  skill dependencies
