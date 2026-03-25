@@ -20,7 +20,7 @@
 set -euo pipefail
 
 # Configuration
-# Note: PortfolioBuilder uses Enterprise plan (700 req/min)
+# Note: Enterprise plan (700 req/min)
 # See: https://developer.zendesk.com/api-reference/introduction/rate-limits/
 ZENDESK_MAX_RETRIES="${ZENDESK_MAX_RETRIES:-5}"
 ZENDESK_TIMEOUT="${ZENDESK_TIMEOUT:-30}"

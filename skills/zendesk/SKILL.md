@@ -25,7 +25,7 @@ Get your API token from: Zendesk Admin > Apps and integrations > APIs > Zendesk 
 
 ## Rate Limits
 
-PortfolioBuilder uses the **Enterprise plan** (700 requests/minute). The skills include automatic retry with exponential backoff for rate limit handling.
+**Enterprise plan** (700 requests/minute). The skills include automatic retry with exponential backoff for rate limit handling.
 
 ## Available Commands
 
