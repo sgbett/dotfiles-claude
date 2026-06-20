@@ -55,3 +55,14 @@ backups/
 
 # Personal ideas/notes
 ideas/
+
+# The Thirty-Five (separate repo)
+thirty-five/
+
+# Local agent/session/usage state
+agent-memory/
+memory/
+sessions/
+teams/
+usage-data/
+.last-cleanup
