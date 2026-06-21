@@ -5,22 +5,13 @@
 ## Git
 
 - Default branch: `master` (not `main`)
-- No git submodules
-- **Never discard uncommitted changes** - before switching branches with uncommitted changes, ALWAYS `git stash` first. Never use `git checkout -f` or `git checkout .` or `git reset --hard` without stashing.
-
-**Commit Messages:** Follow [Conventional Commits](https://www.conventionalcommits.org/):
-- `feat:` - new feature (MINOR version)
-- `fix:` - bug fix (PATCH version)
-- `docs:` - documentation only
-- `style:` - formatting, no code change
-- `refactor:` - code change that neither fixes nor adds
-- `perf:` - performance improvement
-- `test:` - adding/updating tests
-- `build:` - build system or dependencies
-- `ci:` - CI configuration
-- `chore:` - maintenance tasks
-- Breaking changes: append `!` (e.g., `feat!:` or `fix(api)!:`)
-- Scope is optional: `feat(auth): add login`
+- Create a branch from `master` for each task
+- **All changes land via PR — never push directly to `master`** (code, docs, ADRs, plans alike).
+- **Never close a PR without explicit instruction** — if a PR isn't right, fix it, don't close it.
+- **Commit messages:** [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`/`fix:`/`docs:`/`refactor:`/…; `!` for breaking changes; scope optional).
+- **Merge strategy:** merge commits, not squash.
+- **Never use `git revert`** — undo with `git reset` (`--soft` keeps changes staged) instead.
+- No git submodules.
 
 **HLR (High-Level Requirement) Issues:**
 
@@ -44,44 +35,7 @@ After creating:
 - Major work → Create plan, then `/project:generate`
 - Smaller work → `/plan:tasks` directly
 
-**Linking Sub-Issues in GitHub:**
-
-Use the GraphQL API to create parent-child relationships between issues:
-
-```bash
-# Get issue node IDs
-gh api graphql -f query='
-{
-  repository(owner: "OWNER", name: "REPO") {
-    parent: issue(number: PARENT_NUM) { id }
-    child: issue(number: CHILD_NUM) { id }
-  }
-}'
-
-# Link child to parent
-gh api graphql -f query='
-mutation {
-  addSubIssue(input: {
-    issueId: "PARENT_NODE_ID",
-    subIssueId: "CHILD_NODE_ID"
-  }) {
-    issue { title }
-    subIssue { title }
-  }
-}'
-```
-
-This creates the sub-issue relationship visible in GitHub's issue UI, enabling progress tracking on parent issues.
-
-**Git Worktrees:**
-
-Projects may use git worktrees for long-running parallel work (e.g., Rails upgrades, CSS migrations). When a project has worktree-specific configuration, it will be in `.claude/rules/git-workflow.md`.
-
-General principles:
-- A branch ending in `/master` within a project namespace is that worktree's master — treat it with the same safety as `master`
-- The main repo's `master` is checked out elsewhere — don't try to switch to it from a worktree
-- Sub-branches PR to the worktree master, not to main `master`
-- All file operations in a worktree must use **absolute paths** — `cd` does not change the session's working directory
+Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL `addSubIssue` link doesn't propagate).
 
 ## Development Environment
 
@@ -107,6 +61,9 @@ General principles:
 
 - Prefer simplicity over cleverness
 - Avoid over-engineering - solve the problem at hand, not hypothetical future problems
+- **Simplicity is not the same as cutting structural corners.** KISS targets *speculative complexity* (don't add abstraction for futures that may never arrive). It does **not** license collapsing distinct responsibilities into one class to "keep it simple". When brevity and correctness/maintainability conflict, correctness wins.
+- **Apply SOLID from the outset, especially Single Responsibility.** A class/module should have one reason to change. Separate concerns that are *already* distinct in the present problem — that is solving the problem at hand, not speculation. The aim is to avoid god classes that later force costly refactors (cf. the bsv-wallet god-class refactor).
+- **Reach for established patterns (e.g. Gang of Four) when they fit a real, present need** — not pre-emptively. A named pattern that maps cleanly onto the actual problem is clarity; the same pattern applied to a hypothetical need is over-engineering.
 - **British English:** Use British spelling in all generated text (documentation, comments, commit messages)
   - Examples: behaviour, colour, organisation, optimise, summarise, favour, centre
 
@@ -128,7 +85,7 @@ General principles:
 - Skip unnecessary praise or validation
 - Focus on facts and problem-solving
 - Correct me on technical terminology where I've used imprecise language
-- **Never confirm assumptions** — when I ask a question, I want objective truth, not validation. If my question contains an embedded assumption, investigate whether it's actually true rather than confirming it. Report what you find, even if it contradicts my premise. I don't care about being right; I care about knowing what's correct.
+- **Verify my assumptions, don't affirm them** — when I ask a question, I want objective truth, not validation. If my question contains an embedded assumption, investigate whether it's actually true rather than affirming it. Report what you find, even if it contradicts my premise. I don't care about being right; I care about knowing what's correct.
 
 **Learning explanations:** After completing work, provide explanations that help me learn:
 
@@ -136,18 +93,28 @@ General principles:
 - **Larger tasks:** Provide a brief breakdown of key decisions, implementation details worth noting, and any patterns or techniques used that I might not be familiar with.
 - **New concepts:** When using tools, APIs, or techniques that might be unfamiliar, explain them in context rather than assuming I know them.
 
+## External Communication (Issues, PRs, Discussions)
+
+When raising issues or PRs in **external repositories** (i.e. not our own), write in a collaborative and respectful tone:
+
+- Frame as polite requests for consideration, not demands — "we noticed", "would it make sense to", "wondering if"
+- Don't be obsequious — just normal, human, professional
+- Even when the other side is clearly wrong, stay gracious. Especially then. Everyone's code has problems and everyone knows it — nobody likes a smart-arse
+- Provide context and evidence helpfully, not as a gotcha
+- Assume good faith — they probably had reasons for what they did
+- **Voice:** Should sound like Simon wrote it, not like auto-generated AI. Reference Simon's email communication style (available via MCP in `/opt/claude/rcpsych_intel`) for calibration
+
 ## Decision Protocol
 
-When I phrase a request as a question (interrogative mood), treat this as a request for **analysis and recommendation**, not execution. Specifically:
+Default to discussion. A question — or anything that isn't an unambiguous, explicit instruction to act — is a request for analysis and a recommendation, not a cue to execute.
 
-1. Analyse the relevant context (files, state, implications)
-2. Present findings and options
-3. Only recommend a specific action if confidence is ≥80%
-4. **Do not execute** until I give explicit approval
+- **Investigate freely to answer** — read, grep, fetch, inspect state. Grounding the answer is expected (cf. "never confirm assumptions").
+- **Make no changes until I explicitly say go** — no editing/writing files, commits, pushes, PRs/issues, messages, or other side-effecting actions. Present findings + options + (if ≥80% confident) a recommendation, then stop and wait.
+- **A question that embeds an action is still a question** — "can you just X?", "should we Y?", "what about Z?" want the answer, not the doing. An idea being actionable is not approval.
+- **Don't roll from a recommendation into execution in the same turn.**
+- **When ambiguous, ask** — default to discussion, never to action.
 
-When I use imperative mood ("do X", "create Y"), proceed with execution directly.
-
-If uncertain whether I'm asking or instructing, ask for clarification rather than assuming execution.
+Only an explicit imperative ("do X", "go ahead", "implement it", "yes") authorises execution.
 
 ## Brainstorming
 
