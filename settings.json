@@ -37,7 +37,6 @@
       "Bash(gh status *)",
       "Bash(gh label *)",
       "Bash(gh api *)",
-      "Bash(gh api *)",
       "Bash(gh issue close *)",
       "Bash(gh issue comment *)",
       "Bash(gh issue create *)",
