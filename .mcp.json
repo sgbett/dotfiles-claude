@@ -1,10 +1,8 @@
 {
   "mcpServers": {
-    "ruby-fetch": {
-      "command": "ruby",
-      "args": [
-        "/Users/simon/.claude/mcp/ruby-fetch/server.rb"
-      ]
+    "the-35": {
+      "type": "http",
+      "url": "https://api.the-35.com/mcp"
     }
   }
 }

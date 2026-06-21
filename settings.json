@@ -2,33 +2,25 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
-  "promptSuggestionEnabled": false,
-  "spinnerTipsEnabled": false,
   "permissions": {
     "allow": [
-
       "Read",
       "Glob",
       "Grep",
       "WebFetch",
-
       "Bash(sed -f /tmp/*)",
       "Edit(/**)",
       "Write(/**)",
-
       "Skill",
       "ToolSearch",
       "EnterWorktree",
-
       "TaskCreate",
       "TaskGet",
       "TaskUpdate",
       "TaskList",
-
       "TeamCreate",
       "TeamDelete",
       "SendMessage",
-
       "Bash(awk *)",
       "Bash(curl *)",
       "Bash(find *)",
@@ -37,27 +29,21 @@
       "Bash(tail *)",
       "Bash(ls *)",
       "Bash(wc *)",
-
       "Bash(rubocop *)",
-
-      "Bash(git diff *)",
-      "Bash(git show *)",
-
+      "Bash(git *)",
       "Bash(gh help *)",
       "Bash(gh org *)",
       "Bash(gh search *)",
       "Bash(gh status *)",
-
       "Bash(gh label *)",
-      "Bash(gh api graphql *)",
-
+      "Bash(gh api *)",
+      "Bash(gh api *)",
       "Bash(gh issue close *)",
       "Bash(gh issue comment *)",
       "Bash(gh issue create *)",
       "Bash(gh issue list *)",
       "Bash(gh issue status *)",
       "Bash(gh issue view *)",
-
       "Bash(gh pr checks *)",
       "Bash(gh pr close *)",
       "Bash(gh pr comment *)",
@@ -65,36 +51,46 @@
       "Bash(gh pr list *)",
       "Bash(gh pr merge *)",
       "Bash(gh pr view *)",
-
       "Bash(gh project edit *)",
       "Bash(gh project field-*)",
       "Bash(gh project item-*)",
       "Bash(gh project list)",
       "Bash(gh project view *)",
-
       "Bash(gh repo view *)",
-
       "Bash(gh run list *)",
       "Bash(gh run view *)",
       "Bash(gh run watch *)",
-
       "mcp__ruby-fetch__fetch_url",
       "mcp__bsv-protocol-docs__searchDocumentation"
     ],
-
-    "ask": [
-      "Bash(gh issue delete *)",
-      "Bash(gh project item-delete *)",
-      "Bash(gh run cancel *)",
-      "Bash(gh run rerun *)"
-    ],
-
     "deny": [
+      "Bash(git revert *)",
       "Bash(gh pr revert *)",
       "Bash(gh project delete *)",
       "Bash(gh repo delete *)",
       "Bash(gh run delete *)"
+    ],
+    "ask": [
+      "Bash(git checkout -f)",
+      "Bash(git checkout .)",
+      "Bash(git push origin master*)",
+      "Bash(git reset --hard)",
+      "Bash(gh issue delete *)",
+      "Bash(gh project item-delete *)",
+      "Bash(gh run cancel *)",
+      "Bash(gh run rerun *)"
     ]
-
-  }
+  },
+  "enabledPlugins": {
+    "ruby-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true
+  },
+  "spinnerTipsEnabled": false,
+  "effortLevel": "xhigh",
+  "promptSuggestionEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark-ansi",
+  "remoteControlAtStartup": false,
+  "agentPushNotifEnabled": true
 }
