@@ -1,7 +1,7 @@
 ---
 name: white-hat
 description: "Use this agent when a PR is cut or when code changes need security review. Also use when developers or analysts need security guidance on implementation approaches. Examples:\\n\\n- User: \"I've opened a PR for the new authentication flow\"\\n  Assistant: \"Let me launch the white-hat agent to perform a security audit on the PR changes.\"\\n  [Uses Agent tool to launch white-hat]\\n\\n- User: \"Here's the new API endpoint for wallet operations\"\\n  Assistant: \"New code touching wallet operations — let me get the white-hat agent to probe this for vulnerabilities.\"\\n  [Uses Agent tool to launch white-hat]\\n\\n- User: \"How should we handle user input in this script template?\"\\n  Assistant: \"Good question for the security expert. Let me bring in the white-hat agent to advise on safe input handling.\"\\n  [Uses Agent tool to launch white-hat]\\n\\n- User: \"We're adding ECDH key exchange to the primitives module\"\\n  Assistant: \"Cryptographic code needs adversarial review. Let me launch the white-hat agent to look for timing attacks, key leakage, and implementation flaws.\"\\n  [Uses Agent tool to launch white-hat]"
-model: sonnet
+model: opus
 color: red
 memory: user
 ---
