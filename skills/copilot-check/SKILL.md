@@ -1,8 +1,6 @@
 ---
 name: copilot-check
-description: Check Copilot Review Comments. Fetches, adversarially verifies, and resolves Copilot code-review comments on the current PR, then drives an automated re-review loop (re-request → watch → verify → fix → converge). Use when the user asks to "check copilot comments", "what did copilot say", "copilot review", or "/copilot-check".
-allowed-tools: Bash, Read, Glob, Grep, Edit, Write, Task, Skill
----
+description: Check Copilot Review Comments. Fetches, adversarially verifies, and resolves Copilot code-review comments on the current PR, then drives an automated re-review loop (re-request → watch → verify → fix → converge). Use when the user asks to "check copilot comments", "what did copilot say", "copilot review", or "/copilot-check".---
 
 # Check Copilot Review Comments
 
@@ -165,7 +163,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 4 — Act
 
-1. **Fixes** — batched by class, conforming to `copilot-instructions.md`. Apply the semantic-ripple
+1. **Fixes** — batched by class, conforming to `.github/copilot-instructions.md`. Apply the semantic-ripple
    grep again for any string/identifier the fixes themselves touch. Commit with a Conventional
    Commit referencing the PR.
 2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big);
