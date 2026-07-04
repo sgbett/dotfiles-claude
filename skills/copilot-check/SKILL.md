@@ -59,10 +59,13 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
    (a Copilot finding that contradicts it is almost certainly nonsense → refute); (b) its flag-lists
    are the **pattern checklist** for the sibling scan; (c) fixes must **conform** to it so we don't
    trip the reviewer on our own new code.
-4. **Record the high-water mark** — the latest Copilot review id + `submitted_at`, and the head SHA:
+4. **Record the high-water mark** — the latest Copilot review's `submitted_at`; the watcher fires on
+   any review newer than this. **Default to the epoch when there is no prior review** (e.g. a
+   bootstrap request), so the string comparison still holds — a `null` mark would make every real
+   ISO timestamp compare *older* (digits sort before letters) and the watcher would never fire:
    ```bash
    gh api repos/{owner}/{repo}/pulls/{pr}/reviews \
-     --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]")] | last | {id, submitted_at}'
+     --jq '([.[] | select(.user.login=="copilot-pull-request-reviewer[bot]")] | last | .submitted_at) // "1970-01-01T00:00:00Z"'
    ```
 
 ### Copilot has three identities — handle all of them
@@ -186,17 +189,22 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    ```bash
    gh api graphql -f query='
    { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
-       reviewThreads(first:50){ nodes{ id isResolved comments(first:1){ nodes{ author{login} } } } } } } }' \
+       reviewThreads(first:50){ nodes{ id isResolved
+         first:comments(first:1){ nodes{ author{login} } }
+         last:comments(last:1){ nodes{ author{login} } } } } } } }' \
      --jq '.data.repository.pullRequest.reviewThreads.nodes[]
            | select(.isResolved==false)
-           | select(.comments.nodes[0].author.login|test("copilot";"i")) | .id'
+           | select(.first.nodes[0].author.login|test("copilot";"i"))        # Copilot-initiated
+           | select((.last.nodes[0].author.login|test("copilot";"i"))|not)   # last comment is OUR reply
+           | .id'
    ```
    ```bash
    for t in {thread_ids}; do
      gh api graphql -f query="mutation { resolveReviewThread(input:{threadId:\"$t\"}){ thread{ isResolved } } }"
    done
    ```
-   Only resolve threads that were actually replied to.
+   The `last`-comment filter enforces this: a thread is resolved only when its most recent comment
+   is **our** reply — never one left un-addressed by a pause.
 
 ---
 
@@ -210,7 +218,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    ```bash
    # PR node id + Copilot bot node id
    gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}"){ pullRequest(number:{pr}){
-     id reviews(last:10){ nodes{ author{ __typename login ... on Bot{ id } } } } } } }'
+     id reviews(last:100){ nodes{ author{ __typename login ... on Bot{ id } } } } } } }'
    #   → pr_id "PR_…";  bot id "BOT_…"  (globally stable fallback: BOT_kgDOCnlnWA)
 
    gh api graphql -f query='mutation { requestReviews(input:{
