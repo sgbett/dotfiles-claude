@@ -1,6 +1,7 @@
 ---
 name: copilot-check
-description: Check Copilot Review Comments. Fetches, adversarially verifies, and resolves Copilot code-review comments on the current PR, then drives an automated re-review loop (re-request → watch → verify → fix → converge). Use when the user asks to "check copilot comments", "what did copilot say", "copilot review", or "/copilot-check".---
+description: Check Copilot Review Comments. Fetches, adversarially verifies, and resolves Copilot code-review comments on the current PR, then drives an automated re-review loop (re-request → watch → verify → fix → converge). Use when the user asks to "check copilot comments", "what did copilot say", "copilot review", or "/copilot-check".
+---
 
 # Check Copilot Review Comments
 
