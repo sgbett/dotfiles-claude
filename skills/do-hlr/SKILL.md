@@ -25,13 +25,18 @@ Take a GitHub HLR issue from issue to a merge-ready PR, orchestrated by **you (t
 2. Resolve the base branch (PR target): if the HLR body has `Parent: #NNN` and a `feat/NNN-*` branch exists, base on it (sub-HLR work accumulates on the parent); otherwise base on `master`.
 3. Verify the working tree is clean (`git status`); if dirty, stop and report.
 4. Create/checkout the feature branch `feat/$ARGUMENTS-<slug>` from the resolved base.
-5. Give a one-line summary of the HLR + resolved base, then continue — no approval gate; the user approved by running the command.
+5. **Plan-first commit.** If a plan file exists at `.claude/plans/YYYYMMDD-$ARGUMENTS-<slug>.md` (or any plan matching this HLR number), commit it as the first commit on the feature branch, together with any foundational docs the HLR establishes (ADRs, reference docs). Title: `docs(plans): #$ARGUMENTS — <HLR title>`. This anchors everything that follows; the plan is the durable input to step 1, and the PR's history shows the intent before any code. If no plan file exists, that's fine — the breakdown is born in step 1 as an HLR comment instead.
+6. Give a one-line summary of the HLR + resolved base, then continue — no approval gate; the user approved by running the command.
 
 ### 1. First cut (lead)
 
-Produce an ad-hoc breakdown of the HLR into candidate sub-tasks — independently implementable units, each with scope and acceptance criteria — drawing on the HLR body and any prior planning. **Post it as a comment on the HLR** as the durable record.
+Produce an ad-hoc breakdown of the HLR into candidate sub-tasks — independently implementable units, each with scope and acceptance criteria — drawing on the HLR body and the plan file (if one was committed in step 0) as primary input. **Post it as a comment on the HLR** as the durable record.
 
-**Lean off-ramp — your call.** If the first cut shows the work is small and self-contained (a handful of tasks, no cross-cutting concerns, low risk), take the lean path: skip the specialist fan-out and sub-issue ceremony, implement directly (yourself or a single developer), run tests/lint, do a light QA pass, and open the PR. **State which path you're taking and why.** Use the full path below when the HLR is substantial or you're in any doubt.
+**Path selection.** The full pipeline is the default. The lean off-ramp — skipping specialist co-production and sub-issuing, doing QA inline — fits HLRs the first-cut analysis scopes as genuinely small: bounded change, no architectural choices, no security surface, one or two tasks at most. Examples: a typo, a single-file rename, a contained bug fix in well-understood code, a small additive change with obvious acceptance.
+
+Use judgement. Clearly trivial → off-ramp; note what you skipped and why, then proceed. Clearly substantial → full path; don't ask. In between → analyse it (read the HLR, scan the touched code, weigh blast radius and security surface) and make the call. If anything makes you reach — cross-module impact, ambiguous acceptance, anything security-adjacent — default to the full path. Only stop to ask when the call isn't clear-cut after analysing — roughly, when you wouldn't bet 4:1 on it.
+
+"Lean off-ramp" means *take* the off-ramp when an HLR is lean; it does not mean lean toward off-ramping by default.
 
 ### 2. Specialist co-production (full path)
 
