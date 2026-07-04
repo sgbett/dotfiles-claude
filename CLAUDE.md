@@ -50,6 +50,7 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 ## Plans
 
 - Project-specific plans: `<project>/.claude/plans/yyyymmdd-name.md`
+- **Exception — this dotfiles repo (`~/.claude`, `sgbett/dotfiles-claude`):** `plans/` is gitignored (scratch). Persisted plans that need tracking go in `docs/` (kebab name, no `plans/` subdir — that's ignored too).
 - See `~/.claude/playbooks/workflow-guide.md` for full lifecycle
 
 ## Reviews
