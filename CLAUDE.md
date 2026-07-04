@@ -76,6 +76,7 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
     - Good: `return unless sequence.present?`
     - Bad: `return false unless sequence.present?`
   - **Rails:** Follow `~/.claude/NEW-PROJECT-RAILS.md` when creating new Rails projects
+  - **Documentation:** Follow `~/.claude/docs/documentation-strategy.md` for layout (`docs/` vs `docs/reference/` vs `docs/reference/api/`) and placement rules
 
 ## Communication
 
