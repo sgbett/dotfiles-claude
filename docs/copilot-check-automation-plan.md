@@ -263,9 +263,10 @@ hit `## Do not flag` are auto-refuted without spending a full agent.
 
 ## 7. Skill structural changes
 
-- **`allowed-tools`** widen from `Bash,Read,Glob,Grep` to
-  `Bash, Read, Glob, Grep, Edit, Write, Task` (sub-agents + actually editing files + background
-  bash). *Note: the current skill lists no `Edit`/`Write` yet step 6 "fixes" files — latent gap.*
+- **`allowed-tools`** — the skill needs bash, file edits, agent spawning, and skill invocation
+  (`/code-review` for Phase B). Rather than an explicit list (the `Skill`/`Task` token names aren't
+  reliably supported in `allowed-tools`), **omit the key entirely** and run unrestricted — matching
+  `do-hlr`, the sibling skill that also invokes `Skill()`/agents. (Resolved via Copilot review on #3.)
 - Skill stays a **markdown skill executed turn-by-turn** (not a `Workflow`). Rationale: the
   human-pause model fits the turn loop; Workflow runs detached and can't cleanly pause for input.
   The Phase-2 fan-out uses the `Task`/Agent tool. (A `Workflow` could later accelerate the
