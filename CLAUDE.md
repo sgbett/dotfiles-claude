@@ -67,6 +67,7 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 - **Reach for established patterns (e.g. Gang of Four) when they fit a real, present need** — not pre-emptively. A named pattern that maps cleanly onto the actual problem is clarity; the same pattern applied to a hypothetical need is over-engineering.
 - **British English:** Use British spelling in all generated text (documentation, comments, commit messages)
   - Examples: behaviour, colour, organisation, optimise, summarise, favour, centre
+- **Markdown line breaks:** One line per paragraph — never hard-wrap prose at a fixed column. (Lists, tables, code blocks and front matter keep their own line breaks.)
 
 ## Languages
 
