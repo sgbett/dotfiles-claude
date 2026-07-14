@@ -69,6 +69,24 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
   - Examples: behaviour, colour, organisation, optimise, summarise, favour, centre
 - **Markdown line breaks:** One line per paragraph — never hard-wrap prose at a fixed column. (Lists, tables, code blocks and front matter keep their own line breaks.)
 
+## Comments
+
+- **Code is the single source of truth for *what*.** A comment restating the code is a second, unverifiable copy that silently rots. Write only what the code cannot express.
+- **First, make the code not need the comment:**
+  - **Name it** — intention-revealing names (verbs for methods, `?` predicates, words spelled out) put the explanation in the code itself.
+  - **Extract it** — a header comment over a block (`# validate email format`) is a missing method; extract and name it (`validate_email_format`) so the name replaces the comment.
+  - **Constant-ify it** — replace magic values with named constants; the name carries the meaning the comment would have.
+- **Only these earn a comment — every one explains *why*, never *what*:**
+  - **Why** — rationale you can't infer from the code (business rule, spec/RFC clause, issue reference).
+  - **Why-not** — a rejected alternative and the reason (e.g. linear not binary search: the list is always <10).
+  - **Workaround** — an external constraint (browser bug, upstream quirk), with a link.
+  - **Warning** — a footgun that would otherwise catch the next reader.
+  - **Attribution** — a link to the source of a borrowed algorithm or technique.
+- **Never emit:** parrot comments (`i += 1 # increment i`), commented-out code (git has the history), journal comments (use `git blame`), closing-brace comments, boilerplate docstrings that restate the signature, or TODO graveyards.
+- **Docstrings/API docs describe contract and non-obvious behaviour** (parameter meaning, return semantics, what it raises) — not the signature. Document at the highest level that fits: README > API doc > docstring > inline.
+- **When you change code, update or delete its comment in the same edit** — never let the two disagree.
+- See `~/.claude/docs/code-comments.md` for worked examples and the full anti-pattern catalogue.
+
 ## Languages
 
 - Ruby: primary language
