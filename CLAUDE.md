@@ -40,11 +40,11 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 ## Development Environment
 
 - Prefer Docker for services (databases, caches, message queues) over local installation
-- Use rvm for Ruby version management (not Docker)
+- Use mise for Ruby version management (not Docker); it reads the Gemfile `ruby` directive / `.ruby-version`, so no separate pin file is needed
 - **Package managers:** Minimal use—prefer Docker for services. Use Homebrew on macOS, apt on Linux.
 - **Operating systems:** macOS (primary), Linux/WSL (secondary). Adapt recommendations to the current platform (provided in environment context).
 - **Project structure:** `/opt/<language>/<project_name>` (e.g., `/opt/ruby/fitness`)
-- **Ruby version manager:** rvm
+- **Ruby version manager:** mise (migrated from rvm — see portfoliobuilder ADR-003)
 - **Database:** PostgreSQL (not SQLite)
 
 ## Plans
