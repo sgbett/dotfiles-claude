@@ -123,7 +123,7 @@ When raising issues or PRs in **external repositories** (i.e. not our own), writ
 - Even when the other side is clearly wrong, stay gracious. Especially then. Everyone's code has problems and everyone knows it — nobody likes a smart-arse
 - Provide context and evidence helpfully, not as a gotcha
 - Assume good faith — they probably had reasons for what they did
-- **Voice:** Should sound like Simon wrote it, not like auto-generated AI. Reference Simon's email communication style (available via MCP in `/opt/claude/rcpsych_intel`) for calibration
+- **Voice:** Should sound like Simon wrote it, not like auto-generated AI. Reference Simon's email communication style (available via MCP in `/opt/claude/rcpsych-intel`) for calibration
 
 ## Decision Protocol
 
