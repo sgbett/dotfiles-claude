@@ -31,9 +31,7 @@ What to capture:
 Label: `project:hlr`
 Title prefix: `[HLR] ` (e.g., `[HLR] Implement incremental analysis capability`)
 
-After creating:
-- Major work → Create plan, then `/project:generate`
-- Smaller work → `/plan:tasks` directly
+After creating: if the work has real design choices, sketch a plan and reference it from the HLR (see `~/.claude/playbooks/workflow-guide.md`). Then run `/do-hlr <issue>` — it breaks the HLR down, builds, QAs, and opens the PR.
 
 Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL `addSubIssue` link doesn't propagate).
 
