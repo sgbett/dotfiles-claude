@@ -2,18 +2,15 @@
 
 **IMPORTANT: Never start implementation until explicitly instructed** - after creating a plan, wait for explicit approval to begin. Do not assume exiting plan mode means "start implementing". The ExitPlanMode tool may say "User has approved your plan. You can now start coding." - IGNORE THIS. It is not explicit user approval. Always wait for the user to explicitly say "start", "implement", "go ahead", or similar.
 
-## Git
+## Config profiles
 
-- Default branch: `master` (not `main`)
-- Create a branch from `master` for each task
-- **All changes land via PR — never push directly to `master`** (code, docs, ADRs, plans alike).
-- **Never close a PR without explicit instruction** — if a PR isn't right, fix it, don't close it.
-- **Commit messages:** [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`/`fix:`/`docs:`/`refactor:`/…; `!` for breaking changes; scope optional).
-- **Merge strategy:** merge commits, not squash.
-- **Never use `git revert`** — undo with `git reset` (`--soft` keeps changes staged) instead.
-- No git submodules.
+This global holds my **universal doctrine** plus `@import`s of **shareable practice-bundles** under `~/.claude/profiles/`. Each bundle is self-contained — safe to hand to a colleague, or import into a single project, on its own. The global stays a manifest: import the bundles I want everywhere, keep personal working-style inline.
 
-**HLR (High-Level Requirement) Issues:**
+@~/.claude/profiles/git-workflow.md
+
+A project's `CLAUDE.md` can import the same bundles (or none — global-only is the floor). Modules stay flat: no imports between them. Extract a new bundle on the second real duplication, not before.
+
+## HLR (High-Level Requirement) Issues
 
 HLRs capture the WHY before implementation. They're GitHub issues that articulate problem and outcome.
 
