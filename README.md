@@ -10,7 +10,7 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 - `commands/` - Custom slash commands (symlinked from `vendor/` where noted)
   - `do/` → claude-workflow (`/do:task`, `/do:commit`, `/do:changelog`, `/do:create-worktrees`)
   - `plan/` → claude-workflow (`/plan:tasks`, `/plan:feature`, `/plan:prd`, `/plan:brainstorm`)
-  - `project/` - Custom commands (`/project:generate`, `/project:worktree`) + `current.md` → claude-workflow
+  - `project/` - Custom commands (`/project:generate`) + `current.md` → claude-workflow
   - `speckit/` → spec-kit (`/speckit:specify`, `/speckit:plan`, `/speckit:tasks`, `/speckit:implement`, etc.)
   - Standalone: `/transcript`, `/dotfiles-setup`, `/merge-cleanup`
 - `vendor/` - Upstream repos (gitignored)
@@ -19,7 +19,7 @@ Personal configuration for [Claude Code](https://claude.ai/code).
   - `spec-kit/` - [github/spec-kit](https://github.com/github/spec-kit)
 - `skills/` - User-level skills (symlinked from `vendor/` where noted)
   - Architecture skills → ai-software-architect (`/setup-architect`, `/architecture-review`, `/specialist-review`, etc.)
-  - Custom skills: `/new-project-rails`, `/repo-security-*`, `/worktree`, etc.
+  - Custom skills: `/new-project-rails`, `/repo-security-*`, etc.
 - `playbooks/` - Formalised procedures
 
 ## What Claude Code Auto-Loads
@@ -71,7 +71,6 @@ This project incorporates work from:
 
 The `docs/` folder contains reference guides:
 
-- `worktree-setup.md` - Git worktrees for parallel Claude sessions
 - `spotlight.md` - macOS Spotlight re-indexing commands
 - `terminal-basics.md` - Terminal fundamentals
 - `wsl-git.md` - Git configuration for WSL

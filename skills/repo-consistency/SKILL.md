@@ -57,7 +57,7 @@ grep -rE "/[a-z-]+" *.md docs/*.md playbooks/*.md | grep -v "http"
 ```
 
 **Check:**
-- File paths exist (e.g., `~/.claude/docs/worktree-setup.md`)
+- File paths exist (e.g., `~/.claude/docs/spotlight.md`)
 - Skill names exist (e.g., `/repo-security-scan`)
 - Command names exist (e.g., `/dotfiles-setup`)
 
@@ -89,7 +89,7 @@ ls -d skills/*/SKILL.md | xargs -I{} dirname {} | xargs -n1 basename
 ```
 [MISSING] Skill /repo-consistency exists but not documented in SKILLS.md
 [STALE] Skill /old-skill documented in SKILLS.md but directory not found
-[MISMATCH] /worktree description differs between SKILLS.md and SKILL.md
+[MISMATCH] /new-project-rails description differs between SKILLS.md and SKILL.md
 ```
 
 ### 3. Commands Documentation Sync
@@ -175,7 +175,7 @@ find . -name "*.md" -type f | grep -v node_modules | grep -v .git
 
 # Build inventory
 - Root: CLAUDE.md, README.md, SETUP.md, SKILLS.md, CONTRIBUTING.md, etc.
-- docs/: spotlight.md, worktree-setup.md, etc.
+- docs/: spotlight.md, terminal-basics.md, etc.
 - playbooks/: workflow-guide.md, etc.
 - skills/: SKILL.md files
 - commands/: command definitions
@@ -228,10 +228,10 @@ Write findings to console (and optionally `consistency-report.md`):
 ### Warnings
 
 #### [W1] Description mismatch
-- **Files:** SKILLS.md:15, skills/worktree/SKILL.md:3
+- **Files:** SKILLS.md, skills/new-project-rails/SKILL.md
 - **Issue:** Skill descriptions don't match
-- **SKILLS.md says:** "Creates git worktrees for parallel development"
-- **SKILL.md says:** "Creates a git worktree for parallel development"
+- **SKILLS.md says:** "Creates a new Rails project with personal preferences"
+- **SKILL.md says:** "Creates a new Rails project (RSpec, PostgreSQL, Docker, master branch)"
 - **Fix:** Align descriptions (update SKILLS.md to match SKILL.md)
 
 ### Info
