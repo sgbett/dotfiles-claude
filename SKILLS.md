@@ -4,27 +4,6 @@ User-level skills available across all projects. Invoke with `/skill-name` or na
 
 ## Development Workflow
 
-### `/worktree`
-
-Creates git worktrees for parallel development—useful for running multiple Claude Code sessions on the same project without branch conflicts.
-
-**Usage:**
-```
-/worktree                           # Detect context and suggest
-/worktree <branch>                  # Worktree for specified branch
-/worktree <branch> <path>           # Explicit branch and path
-```
-
-**Features:**
-- Detects current branch and project path
-- Generates semantic slugs from branch names (e.g., `feature/#1252_bootstrap-helper` → `-bootstrap`)
-- Uses 80/20 confidence rule: ≥80% assume, 20-80% confirm, <20% prompt
-- Runs dependency installation post-setup
-
-**Allowed tools:** Bash, Read, AskUserQuestion
-
----
-
 ### `/read-email`
 
 Fetches and displays emails from Gmail using OAuth credentials.
@@ -331,6 +310,5 @@ Enables Pragmatic Guard Mode (YAGNI enforcement) to prevent over-engineering.
 
 ## Related Documentation
 
-- Git worktree guide: `~/.claude/docs/worktree-setup.md`
 - Architecture framework: `~/.claude/skills/ARCHITECTURE.md`
 - Skill patterns: `~/.claude/skills/_patterns.md`

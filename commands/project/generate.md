@@ -483,7 +483,7 @@ Plan file updated: {plan_file_path}
 
 Next Steps:
   1. Review the GitHub Project: {project_url}
-  2. Create a worktree for this project: /project:worktree #{hlr_number}
+  2. Create a git worktree for this project if you want an isolated checkout
   3. Start working on Phase 0 tasks
 ```
 

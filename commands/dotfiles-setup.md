@@ -43,7 +43,7 @@ Present a checkbox selection for which components to install. Use AskUserQuestio
 | Component | Path | Description |
 |-----------|------|-------------|
 | Core config | `CLAUDE.md`, `settings.json`, `.gitignore`, `.rvmrc` | Essential configuration |
-| Skills | `skills/` | User-level skills (/worktree, /new-project-rails, etc.) |
+| Skills | `skills/` | User-level skills (/new-project-rails, etc.) |
 | Commands | `commands/` | Custom slash commands |
 | MCP servers | `mcp/` | Custom MCP servers (ruby-fetch) |
 | Playbooks | `playbooks/` | Formalised procedures |
