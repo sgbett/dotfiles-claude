@@ -41,6 +41,7 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 - **Project structure:** `/opt/<language>/<project_name>` (e.g., `/opt/ruby/fitness`)
 - **Ruby version manager:** mise (migrated from rvm — see portfoliobuilder ADR-003)
 - **Database:** PostgreSQL (not SQLite)
+- **"Mystery" env vars:** a variable in the environment but named in no shell rc/dotfile may be sourced by `.zprofile`, which dynamically exports dev-env files via `export $(grep "^[^#;]" <file> | xargs)` — check that entry for the file(s) it loads.
 
 ## Plans
 
