@@ -185,7 +185,7 @@ zendesk_request() {
                 ;;
             401)
                 zendesk_error "Authentication failed (401 Unauthorized)"
-                zendesk_error "Check your ZENDESK_EMAIL and ZENDESK_API_TOKEN"
+                zendesk_error "Check your ZENDESK_CLIENT_ID and ZENDESK_CLIENT_SECRET"
                 return 1
                 ;;
             403)

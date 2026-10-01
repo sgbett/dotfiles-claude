@@ -13,15 +13,16 @@ Tools for interacting with the Zendesk API.
 
 ## Prerequisites
 
-Set your Zendesk credentials as environment variables:
+Set your Zendesk OAuth credentials as environment variables:
 
 ```bash
-export ZENDESK_SUBDOMAIN=yourcompany    # Your Zendesk subdomain
-export ZENDESK_EMAIL=you@example.com    # Your Zendesk email
-export ZENDESK_API_TOKEN=your_token     # API token from Zendesk Admin
+export ZENDESK_SUBDOMAIN=yourcompany        # Your Zendesk subdomain
+export ZENDESK_CLIENT_ID=your_client_id     # OAuth client identifier
+export ZENDESK_CLIENT_SECRET=your_secret    # OAuth client secret
 ```
 
-Get your API token from: Zendesk Admin > Apps and integrations > APIs > Zendesk API
+Create a confidential OAuth client at: Zendesk Admin > Apps and integrations > APIs > OAuth clients
+(API tokens are being removed by Zendesk; the skill uses the OAuth client_credentials grant.)
 
 ## Rate Limits
 
