@@ -65,4 +65,6 @@ memory/
 sessions/
 teams/
 usage-data/
+skills/synced/
+state/
 .last-cleanup
