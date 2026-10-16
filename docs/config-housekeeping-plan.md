@@ -1,7 +1,7 @@
 # Plan: Config housekeeping
 
 **Date:** 2026-10-14
-**Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. Prerequisite (step 0) done; next is building `/do` (step 1).
+**Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. First cut and specialist panel folded in (§7, D9–D11). Prerequisite (step 0) done; W0 (building `/do`) under way.
 **Tracking:** [sgbett/dotfiles-claude#9](https://github.com/sgbett/dotfiles-claude/issues/9)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` `@import` mechanism and the first bundle (`git-workflow.md`), then closed. The shareable work-organisation bundle itself is created here (Step 7) on that mechanism.
 
@@ -74,13 +74,16 @@ Usage is counted from `history.jsonl` on 14 Oct 2026. For comparison, `/do-hlr` 
 | D3 | Drop spec-kit. | Agreed |
 | D4 | GitHub sub-issues are the only hierarchy mechanism. | Agreed with the plan |
 | D5 | Split material by audience. Team practice goes in a shareable work-organisation bundle under `profiles/` (created here, Step 7, on #7's mechanism). Personal style and private wiring stay inline in the global. | Agreed |
-| D6 | Whether the HLR conventions (`[HLR]` prefix, `project:hlr` label) move into the work-organisation bundle. | Open; settle when the bundle is written (Step 7) |
+| D6 | The HLR conventions' portable part (what an HLR is, when to create one, the capture template, `project:hlr`, `[HLR]`, the sub-issue closure gotcha) moves into the work-organisation bundle; the `/do <issue>` invocation and the `workflow-guide.md` pointer stay inline as private wiring. | Settled 16 Oct |
 | D7 | Replace `/do-hlr` with `/do` by **parallel-change**, not in-place rename: build `/do` as a new skill (Step 1), validate it while `/do-hlr` stays untouched as the fallback, then retire `/do-hlr` and sweep references at cutover (Step 8). "HLR" is a misnomer once it's the general approach. | Agreed 16 Oct |
 | D8 | While #9 is underway, pause all other work — one focused effort. `/do-hlr` stays available only as the migration's rollback until cutover. | Agreed 16 Oct |
+| D9 | Content leaving this repo lands first, by a small PR in its own repo (BSV security focus → bsv-ruby-sdk, bsv-wallet; `/do-hlr` references → portfoliobuilder, bsv-ruby-sdk). #9 merges only after those PRs. Retiring all `do:` commands, `/setup`, `/project:current` and `/plan:feature|prd|brainstorm` is confirmed. | Agreed 16 Oct |
+| D10 | Machine-local edits (auto-memory, `agent-memory/`, `vendor/`) happen after #9 merges, because `git checkout master` can't roll them back. Deletions of untracked files go to `.trash/`, not `rm`. | Lead, 16 Oct (panel) |
+| D11 | Steps 2–8 run in a fresh session as `/do 9`, resuming from the record — this proves the record is sufficient, and agent definitions and `CLAUDE.md` only load at session start. | Lead, 16 Oct (panel) |
 
 ## 4. Changes
 
-**Execution.** #9 runs as one focused effort with all other work paused (D8), which keeps the parallel window clean and the cutover unambiguous. The step order is the execution order: do step 0, build and validate `/do` (step 1), carry out steps 2–7 using `/do`, then cut over and retire `/do-hlr` (step 8). `/do-hlr` stays available as the rollback until cutover.
+**Execution.** #9 runs as one focused effort with all other work paused (D8), which keeps the parallel window clean and the cutover unambiguous. The step order is the execution order: do step 0, build and validate `/do` (step 1), carry out steps 2–7 using `/do`, then cut over and retire `/do-hlr` (step 8). `/do-hlr` stays available as the rollback until cutover. The waves, and what the specialist panel added to each step, are in §7.
 
 ### Step 0: prerequisite, a clean working tree
 
@@ -168,7 +171,63 @@ Build `/do` **first**, as a new skill (start from a copy of `/do-hlr`), leaving 
 ## 6. Verification
 
 - `git status` is clean before the step 1 build begins.
-- `grep -rn -E "project-manager|speckit|merge-cleanup|BEEF" CLAUDE.md README.md agents skills commands playbooks profiles` finds nothing outside this plan.
-- `/context` in a fresh session shows the global and its bundles loading.
-- Read `/do` against a portfoliobuilder issue. It should propose a `fix/#NNNN_slug` branch and pick up the plan the issue links to.
-- `grep -rn "do-hlr" CLAUDE.md README.md skills agents playbooks profiles` finds nothing (the rename left no stray references in live config; this plan's audit keeps the historical name).
+- `git grep -n -E "project-manager|speckit|merge-cleanup|BEEF" -- . ':!docs/*-plan.md'` finds nothing. (`git grep`, not `grep -rn`: the latter searches the untracked `skills/synced/` and skips symlinked skill folders.)
+- `git ls-files -s | awk '$1==120000{print $4}' | while read l; do [ -e "$l" ] || echo "BROKEN $l"; done` prints nothing (today it prints `commands/project/current.md`).
+- `grep -h '^name:' skills/*/SKILL.md | sort | uniq -d` prints nothing (no two skills share a name).
+- `/context` in a fresh session shows the global and its bundles loading; the skill list shows `do`, and `plan:tasks` as the only `plan:` command, with no `speckit:*` or `do:*`.
+- Read `/do` against portfoliobuilder issues without checking anything out: #2076 → `fix/#2076_…`, PR to upstream; #1174 → base `project/#11_rails-upgrade/master`; #1742 → no plan of its own, two context plans.
+- After step 8: `git grep -n "do-hlr" -- . ':!docs/*-plan.md'` finds nothing (this plan's audit keeps the historical name).
+
+## 7. Execution detail (first cut and specialist panel, 16 Oct)
+
+The first cut and the panel's augmentations are on #9. The `<!-- do:breakdown -->` comment is the work ledger; the issue's criteria are the outcomes.
+
+**Waves.** W0 (this session, under `/do-hlr`): snapshot untracked state to `backups/pre-9/`, build `/do`, QA it. Then a fresh session runs `/do 9` and resumes from the record (D11). W1 runs in parallel (steps 2, 3, 4, 6 — no shared files; cross-repo PRs opened). W2 runs serially (steps 5, 7 and step 8's tracked part, which all touch `CLAUDE.md`). W3 is the security gate and the PR. W4 comes after merge (machine-local, D10).
+
+**No sub-issues.** Every item is a line item. As vendored, `/plan:tasks` rewrites the parent's body, writes `Parent Issue:` text and creates labels, so `/do` overrides those whenever it does create one.
+
+- **Step 1 (`/do`).** Two definitions, each stated once:
+  - *Conventions:* repository rules beat defaults. This covers branch format, the base (including a GitHub Project's master), the push remote and PR target, worktrees, and plan location. Take naming patterns only, never commands lifted from docs.
+  - *Ledger:* criteria are outcomes; the work is a checklist in the breakdown comment; hierarchy comes only from GitHub's links.
+
+  The rest of the skill:
+  - It resumes from the record.
+  - Slugs are safe: `[a-z0-9-]`, `git check-ref-format`, quoted refs. Text from non-collaborators is treated as data, because the repositories are public.
+  - The plan is the linked file, confirmed by its back-link to the issue; never `git add -f`.
+  - The gate runs on the union of the project's focus and the defaults (agent config included), judged on the diff's content. The PR body records the gate decision.
+  - It carries step 5's generic review line, and keeps `name: do`.
+  - The verbatim copy is committed first, and the skill stays near `/do-hlr`'s size.
+- **Step 2.** Harvest `agent-memory/project-manager/feedback_issue_lifecycle.md` (edit issues in place; never close and recreate one that's in flight) into the bundle at step 7. The memory directory moves to `.trash/` in W4.
+- **Step 3.** First land a `## Security focus` section (white-hat.md:47–58 verbatim, plus the gate's BEEF/merkle/interpreter/`operations/` patterns) in the bsv-ruby-sdk and bsv-wallet `CLAUDE.md`. Only then strip white-hat. Work in those repos via `git worktree add` off their default branch, since both are on paused feature branches. Also:
+  - generalise white-hat lines 9 and 44 and its description's wallet/ECDH examples;
+  - add one line naming where the focus comes from (the same section `/do` passes in);
+  - its memory rule follows step 4;
+  - migrate none of its audit memory anywhere.
+- **Step 4.** Also drop the description's "proactively use on every new issue/HLR" trigger, which competes with `/do`, and its BSV examples. The 32 legacy `hlrNNN_*` analysis files stay where they are (out of scope).
+- **Step 5.** Nothing to move: portfoliobuilder already holds the lessons. Delete the playbook and drop the `CLAUDE.md` "Reviews" pointer. The generic line lives in `/do`'s specialist step.
+- **Step 6.** Also:
+  - remove `contexts` (a claude-workflow link used only by `/do:task`) and the already-broken `commands/project/current.md`;
+  - update `scripts/vendor-setup.sh:26–34`, `SETUP.md:59–68`, `SKILLS.md:136`, `commands/dotfiles-setup.md:51,124` and `skills/repo-consistency/SKILL.md:34,41,43,274`;
+  - track `commands/plan/tasks.md` as a copy (with attribution) rather than a link, because the vendored file carries an uncommitted local patch (saved in `backups/pre-9/`);
+  - use `git rm commands/plan`, never `rm -rf commands/plan/`, which follows the link into `vendor/`.
+- **Step 7.** The bundle also takes D6's portable HLR conventions and the edit-in-place rule, and must mention neither `/do` nor `~/.claude`. In the global:
+  - "Report distinct problems plainly" goes into Communication as one generalised bullet, with no incident detail, since the repository is public.
+  - "TBC means ask" moves there too, from technical-analyst's memory.
+  - "Don't modify files outside the objective" is reconciled with "fix inline": an opportunistic fix becomes a recorded line item.
+
+  portfoliobuilder's `MEMORY.md` edits wait for W4.
+- **Step 8.** Reword, don't just rename:
+  - the `CLAUDE.md` HLR section, since `/do` isn't only for HLRs;
+  - `workflow-guide.md:9`: line items, not sub-issues;
+  - the guide's "small changes skip all of this" and "delete or archive the original".
+
+  The `/do-hlr` references in other repos (portfoliobuilder `CLAUDE.md`, bsv-ruby-sdk `.claude/commands/codebase-audit.md`) go in the D9 PRs. The machine-local memory sweep happens in W4: read each file rather than search-and-replace, and leave history alone.
+
+**Also out of scope:**
+- bsv-ruby-sdk's own project-level `project-manager.md` and `technical-analyst.md`;
+- the `portfoliobuilder-staging` clone;
+- historical memories. For example, cabinet's `do-hlr-missing-piece.md` stays as it is: `/do` is a conventions successor, not Cabinet's M6 revision.
+
+**Open questions for the user:**
+- Should the other BSV-adjacent repos (runar, x402-rack, x100-rack, secp256k1-native, the x420 suite) get the security focus too?
+- Should claude-workflow be dropped entirely? That's a follow-up after #9.
