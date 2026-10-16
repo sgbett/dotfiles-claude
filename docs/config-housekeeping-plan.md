@@ -228,6 +228,6 @@ The first cut and the panel's augmentations are on #9. The `<!-- do:breakdown --
 - the `portfoliobuilder-staging` clone;
 - historical memories. For example, cabinet's `do-hlr-missing-piece.md` stays as it is: `/do` is a conventions successor, not Cabinet's M6 revision.
 
-**Open questions for the user:**
-- Should the other BSV-adjacent repos (runar, x402-rack, x100-rack, secp256k1-native, the x420 suite) get the security focus too?
-- Should claude-workflow be dropped entirely? That's a follow-up after #9.
+**Settled at the W0 handoff (16 Oct):** only bsv-ruby-sdk and bsv-wallet get a `## Security focus` section in #9. The other BSV-adjacent repos (runar, x402-rack, x100-rack, secp256k1-native, the x420 suite) are an accepted gap: `/do`'s default gate still triggers there on crypto, keys and signatures, and each repo gets its own section when it's next worked on.
+
+**Follow-up after #9:** drop claude-workflow entirely by having `/do` create sub-issues itself.
