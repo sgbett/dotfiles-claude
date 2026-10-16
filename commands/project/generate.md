@@ -253,10 +253,6 @@ for phase in "${PHASES[@]}"; do
 
     # Create phase issue body
     PHASE_BODY=$(cat <<EOF
-## Parent Issue
-
-Part of #$HLR_NUMBER
-
 ## Goal
 
 $PHASE_GOAL
@@ -334,7 +330,6 @@ for task in "${TASKS[@]}"; do
     TASK_BODY=$(cat <<EOF
 # Task $PHASE_NUM.$TASK_NUM: $TASK_TITLE
 
-**Parent Issue:** #$PARENT_PHASE_ISSUE (Part of Phase $PHASE_NUM)
 **Task Number:** $PHASE_NUM.$TASK_NUM
 **Area:** $AREA
 
