@@ -1,7 +1,7 @@
 # Plan: Config housekeeping
 
 **Date:** 2026-10-14
-**Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. First cut and specialist panel folded in (§7, D9–D11). Prerequisite (step 0) done; W0 (building `/do`) under way.
+**Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. First cut and specialist panel folded in (§7, D9–D11). Prerequisite (step 0) and W0 (building `/do`) done; W1–W2 delivered by `/do 9` on 16 Oct (§8). W4 waits for merge.
 **Tracking:** [sgbett/dotfiles-claude#9](https://github.com/sgbett/dotfiles-claude/issues/9)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` `@import` mechanism and the first bundle (`git-workflow.md`), then closed. The shareable work-organisation bundle itself is created here (Step 7) on that mechanism.
 
@@ -231,3 +231,23 @@ The first cut and the panel's augmentations are on #9. The `<!-- do:breakdown --
 **Settled at the W0 handoff (16 Oct):** only bsv-ruby-sdk and bsv-wallet get a `## Security focus` section in #9. The other BSV-adjacent repos (runar, x402-rack, x100-rack, secp256k1-native, the x420 suite) are an accepted gap: `/do`'s default gate still triggers there on crypto, keys and signatures, and each repo gets its own section when it's next worked on.
 
 **Follow-up after #9:** drop claude-workflow entirely by having `/do` create sub-issues itself.
+
+## 8. Delivery notes (`/do 9`, 16 Oct)
+
+Where delivery went beyond or corrected §7:
+
+- **Cross-repo PRs (D9), open and not yet merged.** #9 merges after them:
+  - [sgbett/bsv-ruby-sdk#924](https://github.com/sgbett/bsv-ruby-sdk/pull/924): `## Security focus`, plus `codebase-audit.md` pointing at `/do`;
+  - [sgbett/bsv-wallet#543](https://github.com/sgbett/bsv-wallet/pull/543): `## Security focus`, with the wallet's own trigger paths (it has no interpreter);
+  - [bettison-org/portfoliobuilder#2080](https://github.com/bettison-org/portfoliobuilder/pull/2080): `CLAUDE.md` points at `/do`.
+- **Step 6: the claude-workflow clone is no longer set up.**
+  - With `/plan:tasks` tracked as a copy, nothing tracked resolves into `vendor/claude-workflow`, so `scripts/vendor-setup.sh` and `SETUP.md` no longer clone it.
+  - The copy carries the MIT notice. Upstream declares MIT only in its README, so the copyright line is reconstructed from the upstream author and year.
+  - W4 also moves the now-unused `vendor/claude-workflow` to `.trash/`.
+- **Step 6: correction.** `commands/project/current.md` was broken because its relative link was one level short, not because the upstream file was missing.
+- **Step 8: `workflow-guide.md` goes further than §7 listed.**
+  - Step 2 now says a plan's header names its issue (e.g. `Tracking: #N`), which `/do` needs in order to treat the plan as the issue's own.
+  - "You stay in the loop at each gate" is replaced by `/do`'s actual behaviour: running it is the approval.
+- **Step 3: white-hat's static memory block was reconciled with the memory rule, not deleted.**
+  - The block (`# Persistent Agent Memory` to the end of the file) is a stale copy of what Claude Code injects for `memory: user`, so white-hat receives the instructions twice.
+  - Deleting it, as technical-analyst already has no such block, is left to Simon.
