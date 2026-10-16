@@ -89,6 +89,7 @@
   "effortLevel": "xhigh",
   "promptSuggestionEnabled": false,
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "theme": "dark-ansi",
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true
