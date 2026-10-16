@@ -48,7 +48,6 @@ Present a checkbox selection for which components to install. Use AskUserQuestio
 | MCP servers | `mcp/` | Custom MCP servers (ruby-fetch) |
 | Playbooks | `playbooks/` | Formalised procedures |
 | Documentation | `docs/`, `SKILLS.md`, `NEW-PROJECT-RAILS.md` | Reference docs |
-| Speckit | `speckit/` | Spec-kit templates |
 
 All components should be checked by default.
 
@@ -121,7 +120,6 @@ Installed components:
   ✓ MCP servers (ruby-fetch)
   ✓ Playbooks (3 playbooks)
   ✓ Documentation (4 docs)
-  ✗ Speckit (skipped)
 
 Git tracking: Enabled
 

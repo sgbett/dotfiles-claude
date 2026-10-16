@@ -31,16 +31,15 @@ Scans documentation files across the repository to ensure they are internally co
 | `SKILLS.md` | Skills reference | Primary (can edit) |
 | `skills/*/SKILL.md` | Skill definitions | Secondary (source of truth for skills) |
 | `commands/*.md` | Command definitions | Secondary (source of truth for commands) |
-| `speckit/**/*.md` | Spec-kit templates | Contributed (prefer not to edit) |
+| `commands/plan/tasks.md` | Command copied from claude-workflow | Contributed (prefer not to edit) |
 | `mcp/**/*.md` | MCP server docs | Secondary |
 
 ### Third-Party / Contributed Content
 
 These directories may contain content from external repositories. When conflicts arise, **prefer fixing local documentation** rather than modifying contributed files:
 
-- `speckit/` — from spec-kit
 - `skills/architecture-*`, `skills/specialist-*`, `skills/create-adr`, `skills/list-members`, `skills/pragmatic-guard`, `skills/setup-architect` — from ai-software-architect
-- `commands/project/` — from claude-workflow
+- `commands/plan/tasks.md` — a tracked copy adapted from claude-workflow
 
 ## Consistency Checks
 
@@ -271,7 +270,7 @@ Would you like me to fix these automatically?
 When fixing, follow the priority:
 
 1. **Update local docs** (README.md, SKILLS.md, SETUP.md, docs/*.md)
-2. **Leave contributed files unchanged** (speckit/, ai-software-architect skills)
+2. **Leave contributed files unchanged** (ai-software-architect skills, `commands/plan/tasks.md`)
 3. **Update skill/command source only if it's clearly wrong**
 
 ## Examples
