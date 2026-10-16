@@ -52,7 +52,6 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 ## Reviews
 
 - Use `specialist-review` for focused domain reviews, `architecture-review` for multi-perspective analysis
-- See `~/.claude/playbooks/specialist-review-timing.md` for when to review plans vs PRs
 
 ## Code Style
 
