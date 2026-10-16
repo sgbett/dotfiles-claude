@@ -24,7 +24,7 @@ Take a GitHub issue to a merge-ready PR, orchestrated by **you (the lead)** with
 
 1. Parse `$ARGUMENTS` into owner/repo and number (strip `#`; a bare number means the current repository); stop if it isn't an issue reference. Fetch the issue and its comments, and via GraphQL its `parent`, `subIssues` and `projectItems` (GitHub Project membership).
 2. Resolve the conventions and the plan. If a branch for this issue already exists, resume on it.
-3. Make the slug from the issue title: lower-case, each run of characters outside `[a-z0-9]` becomes one `-`, trimmed, at most six words; validate the branch with `git check-ref-format --branch`. Always quote refs in shell — `#` starts a comment. Issue text never goes on a shell command line, even double-quoted: pass it by file or a quoted heredoc (`git commit -F`, `--body-file`).
+3. Make the slug from the issue title: lower-case, each run of characters outside `[a-z0-9]` becomes one `-`, trimmed, at most six words; validate the branch with `git check-ref-format --branch`. Always quote refs in shell — `#` starts a comment. Issue text never goes on a shell command line, even double-quoted: pass it in a file written with the Write tool (`git commit -F`, `--body-file`).
 4. Check the working tree: stop on changes you didn't expect, except the plan file itself (or what the repository's rules explicitly allow). Never `git add -f`.
 5. Create or check out the branch from the resolved base, in a worktree if the conventions say so. If a base the conventions call for doesn't exist, stop and ask — never create or push a base branch.
 6. **Plan-first commit** if the plan is untracked or modified: `docs(plans): #<N> — <issue title>`.
