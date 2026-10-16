@@ -151,7 +151,7 @@ Build `/do` **first**, as a new skill (start from a copy of `/do-hlr`), leaving 
 - portfoliobuilder `MEMORY.md`:
   - drop "Learned (2026-02-05)", which is covered by the global;
   - reduce the authorisation memory to a pointer to #1234;
-  - check the nonce-bug section for staleness.
+  - check its remaining sections for staleness.
 - Auto-memory is machine-local and in no repo, so these edits need no PR.
 
 ### Step 8: cut over to `/do`, retire `/do-hlr` (agreed 16 Oct; after step 6, once `/do` is validated)
@@ -251,3 +251,19 @@ Where delivery went beyond or corrected §7:
 - **Step 3: white-hat's static memory block was reconciled with the memory rule, not deleted.**
   - The block (`# Persistent Agent Memory` to the end of the file) is a stale copy of what Claude Code injects for `memory: user`, so white-hat receives the instructions twice.
   - Deleting it, as technical-analyst already has no such block, is left to Simon.
+- **Security gate (W3).**
+  - The first run failed on H1. `/do`'s resume trusted any `<!-- do:breakdown -->` comment and any in-flight PR, so on a public repository anyone could forge a ledger or get a fork's branch built locally.
+  - Fixed, with the cheaper Medium and Low hardenings: trust by `authorAssociation`, a safe channel for titles, the rules carried into sub-agent briefs, and a blocking gate verdict.
+  - Two re-checks found that a local branch from `gh pr checkout` could still be resumed: one with fork tracking, and one fast-forwarded with origin tracking kept.
+  - Resume now accepts a local branch only if it tracks the push remote and isn't ahead of it; otherwise it asks, showing the commits the remote lacks.
+  - Third re-check: `GATE: PASS`.
+  - Still open: the skill and the bundle define "trusted" differently (Low).
+- **QA defects fixed inline:**
+  - `/project:generate` no longer writes parent text into bodies;
+  - `/dotfiles-setup` installs `profiles/` and `agents/`.
+  The "TBC means ask" memory was copied, not moved, and becomes a pointer in W4.
+- **Follow-ups, not filed** (from the gate's notes, outside #9's diff):
+  - review the `settings.json` allowlist (`git *`, `gh api *`, `gh pr merge *`, `curl *`) together with `/copilot-check`'s login-substring bot filter;
+  - pin `vendor/ai-software-architect` to a reviewed commit;
+  - give secp256k1-native and runar a `## Security focus` next;
+  - the tracked `/plan:tasks` copy still writes parent text when run on its own (`/do` overrides it), which goes away when claude-workflow is dropped.
