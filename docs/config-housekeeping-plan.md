@@ -248,9 +248,9 @@ Where delivery went beyond or corrected §7:
 - **Step 8: `workflow-guide.md` goes further than §7 listed.**
   - Step 2 now says a plan's header names its issue (e.g. `Tracking: #N`), which `/do` needs in order to treat the plan as the issue's own.
   - "You stay in the loop at each gate" is replaced by `/do`'s actual behaviour: running it is the approval.
-- **Step 3: white-hat's static memory block was reconciled with the memory rule, not deleted.**
-  - The block (`# Persistent Agent Memory` to the end of the file) is a stale copy of what Claude Code injects for `memory: user`, so white-hat receives the instructions twice.
-  - Deleting it, as technical-analyst already has no such block, is left to Simon.
+- **Step 3: white-hat's static memory block is deleted (Simon, 17 Oct).**
+  - The block (`# Persistent Agent Memory` to the end of the file) was a stale copy of what Claude Code injects for `memory: user`, so white-hat received the instructions twice.
+  - The one-paragraph memory rule stays, matching technical-analyst.
 - **Security gate (W3).**
   - The first run failed on H1. `/do`'s resume trusted any `<!-- do:breakdown -->` comment and any in-flight PR, so on a public repository anyone could forge a ledger or get a fork's branch built locally.
   - Fixed, with the cheaper Medium and Low hardenings: trust by `authorAssociation`, a safe channel for titles, the rules carried into sub-agent briefs, and a blocking gate verdict.
