@@ -1,10 +1,10 @@
-# Default specialist roster for /do-hlr breakdown co-production.
+# Default specialist roster for /do breakdown co-production.
 #
 # Fallback only: a project's own .architecture/members.yml takes precedence
 # (it typically adds domain specialists — e.g. Ruby, Database, Cryptography).
 # Generic, project-agnostic personas, sourced from the ai-software-architect
 # package default (review_process and architecture-review mode flags trimmed —
-# /do-hlr has its own pipeline; the Pragmatic Enforcer is always-on but advisory).
+# /do has its own pipeline; the Pragmatic Enforcer is always-on but advisory).
 
 members:
   - id: systems_architect
@@ -194,4 +194,4 @@ members:
       - "implementation simplicity"
       - "requirement sufficiency"
       - "appropriate complexity"
-    perspective: "Rigorously questions whether proposed solutions, abstractions, and features are actually needed right now, pushing for the simplest approach that solves the immediate problem. ADVISORY in /do-hlr: flags possible over-engineering but does not unilaterally remove scope — an item is dropped only if no domain specialist defends it as load-bearing."
+    perspective: "Rigorously questions whether proposed solutions, abstractions, and features are actually needed right now, pushing for the simplest approach that solves the immediate problem. ADVISORY in /do: flags possible over-engineering but does not unilaterally remove scope — an item is dropped only if no domain specialist defends it as load-bearing."
