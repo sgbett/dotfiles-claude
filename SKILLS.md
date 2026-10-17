@@ -133,7 +133,7 @@ Checks documentation consistency across the repository—ensures docs are aligne
 - Naming conventions followed (kebab-case, British English)
 
 **Behaviour:**
-- Prefers fixing local docs over contributed files (ai-software-architect skills, the `/plan:tasks` copy from claude-workflow)
+- Prefers fixing local docs over contributed files (ai-software-architect skills)
 - Offers to auto-fix common issues
 - Reports errors, warnings, and suggestions
 
