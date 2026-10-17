@@ -236,7 +236,7 @@ The first cut and the panel's augmentations are on #9. The `<!-- do:breakdown --
 
 Where delivery went beyond or corrected §7:
 
-- **Cross-repo PRs (D9), open and not yet merged.** #9 merges after them:
+- **Cross-repo PRs (D9), merged 17 Oct before #9:**
   - [sgbett/bsv-ruby-sdk#924](https://github.com/sgbett/bsv-ruby-sdk/pull/924): `## Security focus`, plus `codebase-audit.md` pointing at `/do`;
   - [sgbett/bsv-wallet#543](https://github.com/sgbett/bsv-wallet/pull/543): `## Security focus`, with the wallet's own trigger paths (it has no interpreter);
   - [bettison-org/portfoliobuilder#2080](https://github.com/bettison-org/portfoliobuilder/pull/2080): `CLAUDE.md` points at `/do`.
