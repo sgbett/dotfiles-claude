@@ -1,7 +1,7 @@
 # Plan: Config housekeeping
 
 **Date:** 2026-10-14
-**Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. First cut and specialist panel folded in (§7, D9–D11). Prerequisite (step 0) and W0 (building `/do`) done; W1–W2 delivered by `/do 9` on 16 Oct (§8). W4 waits for merge.
+**Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. First cut and specialist panel folded in (§7, D9–D11). Prerequisite (step 0) and W0 (building `/do`) done; W1–W2 delivered by `/do 9` on 16 Oct (§8). Merged as #10 and W4 done, 17 Oct.
 **Tracking:** [sgbett/dotfiles-claude#9](https://github.com/sgbett/dotfiles-claude/issues/9)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` `@import` mechanism and the first bundle (`git-workflow.md`), then closed. The shareable work-organisation bundle itself is created here (Step 7) on that mechanism.
 
@@ -267,3 +267,13 @@ Where delivery went beyond or corrected §7:
   - pin `vendor/ai-software-architect` to a reviewed commit;
   - give secp256k1-native and runar a `## Security focus` next;
   - the tracked `/plan:tasks` copy still writes parent text when run on its own (`/do` overrides it), which goes away when claude-workflow is dropped.
+- **W4 (17 Oct, after #10 merged).** Everything moved is in `.trash/pre-9-w4/`:
+  - `agent-memory/project-manager/`, `vendor/claude-workflow`, and `vendor/spec-kit` too (a clean clone, so trashed rather than deleted, per D10);
+  - portfoliobuilder `MEMORY.md` (83 → 56 lines; the original is in the trash):
+    - "Learned (2026-02-05)" is dropped;
+    - the authorisation memory is a pointer to the decision comment on #1234;
+    - the three preference memories now in the global or the bundle (inline fixes, distinct problems, one ticket per area) are retired, along with the two links to them;
+    - the nonce-bug section is a pointer, since #1845 closed on 19 Mar and its record is tracked in the repo;
+    - the two "Working preferences" sections are merged;
+  - technical-analyst's "TBC means ask" memory is a pointer to the global;
+  - the `/do-hlr` sweep updated four live memories (bsv-ruby-sdk commit-per-task, bsv-wallet plan-first, portfoliobuilder-support plans-set-direction, bsv-zig-sdk HLR scope) and two index lines. History stays: cabinet's design memories, portfoliobuilder-support's finished July run, and the zig memory's incident.
