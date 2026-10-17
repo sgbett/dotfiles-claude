@@ -262,11 +262,10 @@ Where delivery went beyond or corrected §7:
   - `/project:generate` no longer writes parent text into bodies;
   - `/dotfiles-setup` installs `profiles/` and `agents/`.
   The "TBC means ask" memory was copied, not moved, and becomes a pointer in W4.
-- **Follow-ups, not filed** (from the gate's notes, outside #9's diff):
-  - review the `settings.json` allowlist (`git *`, `gh api *`, `gh pr merge *`, `curl *`) together with `/copilot-check`'s login-substring bot filter;
-  - pin `vendor/ai-software-architect` to a reviewed commit;
-  - give secp256k1-native and runar a `## Security focus` next;
-  - the tracked `/plan:tasks` copy still writes parent text when run on its own (`/do` overrides it), which goes away when claude-workflow is dropped.
+- **Follow-ups** (from the gate's notes, outside #9's diff), filed 17 Oct:
+  - #11: `/do` creates sub-issues itself and `/plan:tasks` is retired (so its parent text goes too), and "trusted" is aligned between the skill and the bundle (the open Low);
+  - #12: the `settings.json` allowlist (`git *`, `gh api *`, `gh pr merge *`, `curl *`), `/copilot-check`'s login-substring bot filter, and pinning `vendor/ai-software-architect`;
+  - not filed: a `## Security focus` for secp256k1-native and runar, each added when that repo is next worked on (§7).
 - **W4 (17 Oct, after #10 merged).** Everything moved is in `.trash/pre-9-w4/`:
   - `agent-memory/project-manager/`, `vendor/claude-workflow`, and `vendor/spec-kit` too (a clean clone, so trashed rather than deleted, per D10);
   - portfoliobuilder `MEMORY.md` (83 → 56 lines; the original is in the trash):
