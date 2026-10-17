@@ -8,29 +8,15 @@ This global holds my **universal doctrine** plus `@import`s of **shareable pract
 
 @~/.claude/profiles/git-workflow.md
 
+@~/.claude/profiles/work-organisation.md
+
 A project's `CLAUDE.md` can import the same bundles (or none — global-only is the floor). Modules stay flat: no imports between them. Extract a new bundle on the second real duplication, not before.
 
 ## HLR (High-Level Requirement) Issues
 
-HLRs capture the WHY before implementation. They're GitHub issues that articulate problem and outcome.
+What an HLR is and how to write one: `~/.claude/profiles/work-organisation.md` (imported above).
 
-When to create:
-- Work needing explicit acceptance criteria
-- Features requiring problem/solution articulation
-- Work likely to spawn multiple tasks
-
-What to capture:
-- **Problem**: What's wrong, missing, or needed
-- **Approach**: High-level direction (not implementation detail)
-- **Acceptance criteria**: How we know it's done (if inferrable)
-- **Context**: Related issues, discussions, background
-
-Label: `project:hlr`
-Title prefix: `[HLR] ` (e.g., `[HLR] Implement incremental analysis capability`)
-
-After creating: if the work has real design choices, sketch a plan and reference it from the HLR (see `~/.claude/playbooks/workflow-guide.md`). Then run `/do-hlr <issue>` — it breaks the HLR down, builds, QAs, and opens the PR.
-
-Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL `addSubIssue` link doesn't propagate).
+After creating one: if the work has real design choices, sketch a plan and reference it from the HLR (see `~/.claude/playbooks/workflow-guide.md`). Then run `/do <issue>`, which works on any issue, HLR or not: it follows the project's own conventions, breaks the work into line items and opens the PR.
 
 ## Development Environment
 
@@ -52,7 +38,6 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 ## Reviews
 
 - Use `specialist-review` for focused domain reviews, `architecture-review` for multi-perspective analysis
-- See `~/.claude/playbooks/specialist-review-timing.md` for when to review plans vs PRs
 
 ## Code Style
 
@@ -103,6 +88,8 @@ Sub-issues don't inherit closure — give each its own `Closes #N` (the GraphQL 
 - Focus on facts and problem-solving
 - Correct me on technical terminology where I've used imprecise language
 - **Verify my assumptions, don't affirm them** — when I ask a question, I want objective truth, not validation. If my question contains an embedded assumption, investigate whether it's actually true rather than affirming it. Report what you find, even if it contradicts my premise. I don't care about being right; I care about knowing what's correct.
+- **Report distinct problems plainly** — when there are several findings, open with a short numbered list of the distinct problems and say whether they're one problem or separate ones, then the fixes. Keep asides out, and use precise nouns ("two failed imports", not "some imports").
+- **TBC means ask** — when a brief marks something TBC, list each TBC and ask, bundled into one question, before going past it; don't fill in a default.
 
 **Learning explanations:** After completing work, provide explanations that help me learn:
 

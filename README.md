@@ -5,18 +5,16 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 ## Contents
 
 - `settings.json` - MCP server configuration
+- `profiles/` - Shareable practice bundles imported by `CLAUDE.md` (`git-workflow.md`, `work-organisation.md`)
+- `agents/` - Sub-agent definitions (`white-hat`, `technical-analyst`)
 - `mcp/` - Custom MCP servers
   - `ruby-fetch/` - Ruby-based web fetch server
-- `commands/` - Custom slash commands (symlinked from `vendor/` where noted)
-  - `do/` → claude-workflow (`/do:task`, `/do:commit`, `/do:changelog`, `/do:create-worktrees`)
-  - `plan/` → claude-workflow (`/plan:tasks`, `/plan:feature`, `/plan:prd`, `/plan:brainstorm`)
-  - `project/` - Custom commands (`/project:generate`) + `current.md` → claude-workflow
-  - `speckit/` → spec-kit (`/speckit:specify`, `/speckit:plan`, `/speckit:tasks`, `/speckit:implement`, etc.)
-  - Standalone: `/transcript`, `/dotfiles-setup`, `/merge-cleanup`
+- `commands/` - Custom slash commands
+  - `plan/tasks.md` - `/plan:tasks`, a tracked copy adapted from [claude-workflow](https://github.com/sbusso/claude-workflow) (attribution and licence in the file)
+  - `project/` - `/project:generate`
+  - Standalone: `/transcript`, `/dotfiles-setup`, `/deslop`, `/config-cleaner`
 - `vendor/` - Upstream repos (gitignored)
-  - `claude-workflow/` - [sbusso/claude-workflow](https://github.com/sbusso/claude-workflow)
   - `ai-software-architect/` - [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect)
-  - `spec-kit/` - [github/spec-kit](https://github.com/github/spec-kit)
 - `skills/` - User-level skills (symlinked from `vendor/` where noted)
   - Architecture skills → ai-software-architect (`/setup-architect`, `/architecture-review`, `/specialist-review`, etc.)
   - Custom skills: `/new-project-rails`, `/repo-security-*`, etc.
@@ -64,8 +62,7 @@ See `.gitignore` for full list. Key exclusions:
 This project incorporates work from:
 
 - **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** — Architecture review skills, ADR creation, specialist reviews
-- **[claude-workflow](https://github.com/sbusso/claude-workflow)** — Task breakdown, planning, and execution commands (`/plan:*`, `/do:*`)
-- **[spec-kit](https://github.com/github/spec-kit)** — Specification-driven development commands (`/speckit:*`)
+- **[claude-workflow](https://github.com/sbusso/claude-workflow)** — Task breakdown command (`/plan:tasks`), tracked as a copy with one local change (MIT; notice in `commands/plan/tasks.md`)
 
 ## Reference Documentation
 
