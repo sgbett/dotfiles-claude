@@ -42,7 +42,7 @@ Present a checkbox selection for which components to install. Use AskUserQuestio
 **Components:**
 | Component | Path | Description |
 |-----------|------|-------------|
-| Core config | `CLAUDE.md`, `settings.json`, `.gitignore`, `.rvmrc` | Essential configuration |
+| Core config | `CLAUDE.md`, `settings.json`, `.gitignore` | Essential configuration |
 | Profiles | `profiles/` | Practice bundles that `CLAUDE.md` imports — install with Core config, or its `@import`s dangle |
 | Agents | `agents/` | Sub-agent definitions (white-hat, technical-analyst) |
 | Skills | `skills/` | User-level skills (/new-project-rails, etc.) |
@@ -116,14 +116,14 @@ git branch --set-upstream-to=origin/master master
 ✓ Dotfiles setup complete
 
 Installed components:
-  ✓ Core config (CLAUDE.md, settings.json, .gitignore, .rvmrc)
-  ✓ Profiles (2 bundles)
-  ✓ Agents (2 agents)
-  ✓ Skills (10 skills)
-  ✓ Commands (6 commands)
+  ✓ Core config (CLAUDE.md, settings.json, .gitignore)
+  ✓ Profiles
+  ✓ Agents
+  ✓ Skills
+  ✓ Commands
   ✓ MCP servers (ruby-fetch)
-  ✓ Playbooks (1 playbook)
-  ✓ Documentation (4 docs)
+  ✓ Playbooks
+  ✓ Documentation
 
 Git tracking: Enabled
 

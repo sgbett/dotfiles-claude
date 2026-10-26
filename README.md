@@ -10,7 +10,6 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 - `mcp/` - Custom MCP servers
   - `ruby-fetch/` - Ruby-based web fetch server
 - `commands/` - Custom slash commands
-  - `plan/tasks.md` - `/plan:tasks`, a tracked copy adapted from [claude-workflow](https://github.com/sbusso/claude-workflow) (attribution and licence in the file)
   - `project/` - `/project:generate`
   - Standalone: `/transcript`, `/dotfiles-setup`, `/deslop`, `/config-cleaner`
 - `vendor/` - Upstream repos (gitignored)
@@ -62,7 +61,6 @@ See `.gitignore` for full list. Key exclusions:
 This project incorporates work from:
 
 - **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** — Architecture review skills, ADR creation, specialist reviews
-- **[claude-workflow](https://github.com/sbusso/claude-workflow)** — Task breakdown command (`/plan:tasks`), tracked as a copy with one local change (MIT; notice in `commands/plan/tasks.md`)
 
 ## Reference Documentation
 
