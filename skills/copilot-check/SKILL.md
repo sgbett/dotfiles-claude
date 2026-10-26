@@ -50,16 +50,20 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
    ```bash
    gh pr view {pr} --json number,baseRefName,isCrossRepository
    ```
-   **If `isCrossRepository` is true, stop and ask the user before continuing** — a fork's author controls the diff and its `.github/copilot-instructions.md`, whose `## Do not flag` could refute real findings.
+   **If `isCrossRepository` is true, stop and ask the user before continuing** — a fork's author isn't trusted, yet controls the code the verifiers read and the fixes would build on.
 2. **Repo owner/name:**
    ```bash
    gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'
    ```
-3. **Load the rubric** from the base branch (`{base}` = `baseRefName`), never the working tree; a 404 means there is none:
+3. **Load the rubric** from the base branch, never the working tree, into `{scratch}/rubric.md`. The branch name stays in a variable and goes by `-f`, which URL-encodes it; written into the path, a `+` or `#` in it would mangle the query. Only a 404 `Not Found` means there is none (an empty file); any other failure stops the run, since carrying on would silently drop the `## Do not flag` filter:
    ```bash
-   gh api -H 'Accept: application/vnd.github.raw+json' 'repos/{owner}/{repo}/contents/.github/copilot-instructions.md?ref={base}'
+   base=$(gh pr view {pr} --json baseRefName --jq .baseRefName)
+   gh api -X GET -H 'Accept: application/vnd.github.raw+json' \
+     'repos/{owner}/{repo}/contents/.github/copilot-instructions.md' -f ref="$base" > {scratch}/rubric.md \
+     || { jq -e '.message == "Not Found"' {scratch}/rubric.md >/dev/null && : > {scratch}/rubric.md; } \
+     || { echo 'STOP: could not load the rubric' >&2; exit 1; }
    ```
-   It is the reviewer's own rubric — use it three ways: (a) its `## Do not flag` section is a **false-positive filter** (a Copilot finding that contradicts it is almost certainly nonsense → refute); (b) its flag-lists are the **pattern checklist** for the sibling scan; (c) fixes must **conform** to it so we don't trip the reviewer on our own new code.
+   It is the reviewer's own rubric — use it three ways: (a) its `## Do not flag` section is a **false-positive filter** (a Copilot finding that contradicts it is almost certainly nonsense → refute); (b) its flag-lists are the **pattern checklist** for the sibling scan; (c) fixes must **conform** to it so we don't trip the reviewer on our own new code. Every use reads `{scratch}/rubric.md`, never the checkout's `.github/copilot-instructions.md`, which the PR itself can change.
 4. **Record the high-water mark** — the latest Copilot review's `submittedAt`; the watcher fires on any review newer than this. **Default to the epoch when there is no prior review** (e.g. a bootstrap request), so the string comparison still holds — a `null` mark would make every real ISO timestamp compare *older* (digits sort before letters) and the watcher would never fire. The query sees the latest review however many there are (every `in_reply_to` reply adds a review, so a REST list's first page goes stale); `author:` only narrows by login and the jq id check is the match. A review under that login with any other id means Copilot's id has changed: the query errors (`error: STOP: …`) and the run stops, never falling back to the epoch:
    ```bash
    gh api graphql -f query='
@@ -118,8 +122,8 @@ One GraphQL query returns every review thread with what the round needs. Save it
 ```bash
 gh api graphql -f query='
 { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
-    reviewThreads(first:100) { pageInfo { hasNextPage } nodes { id isResolved
-      first: comments(first:1) { nodes { databaseId path line body
+    reviewThreads(first:100) { pageInfo { hasNextPage } nodes { id isResolved isOutdated
+      first: comments(first:1) { nodes { databaseId path line originalLine originalCommit { oid } body
         author { __typename login ... on Bot { id } } } }
       last: comments(last:1) { nodes { viewerDidAuthor } } } } } } }' > {scratch}/threads.json
 jq -e '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage == false' {scratch}/threads.json >/dev/null \
@@ -133,10 +137,12 @@ jq '.data.repository.pullRequest.reviewThreads.nodes[]
     | select(.isResolved == false)
     | select(.first.nodes[0].author.id == "BOT_kgDOCnlnWA")   # Copilot started it
     | select(.last.nodes[0].viewerDidAuthor == false)          # last comment is not ours
-    | {thread_id: .id} + (.first.nodes[0] | {comment_id: .databaseId, path, line, body})' {scratch}/threads.json
+    | {thread_id: .id, outdated: .isOutdated}
+      + (.first.nodes[0] | {comment_id: .databaseId, path, line, original_line: .originalLine,
+                            original_commit: .originalCommit.oid, body})' {scratch}/threads.json
 ```
 
-`comment_id` (the first comment's `databaseId`) is the REST comment id that Phase 4's `in_reply_to` takes.
+`comment_id` (the first comment's `databaseId`) is the REST comment id that Phase 4's `in_reply_to` takes. An outdated thread's `line` is null once later commits move its code, so its location is `original_line` in `original_commit` (`git show {original_commit}:{path}`), from which the verifier finds that code in the head.
 
 **Guard:** if the latest Copilot review (re-run the Phase 0 query) has `comments` above 0 but no thread in `{scratch}/threads.json` was started by Copilot, resolved or not (`jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.first.nodes[0].author.id == "BOT_kgDOCnlnWA")] | length'`), the filters no longer recognise Copilot: stop and flag it — never treat that as convergence. An empty to-do list with Copilot's threads all answered is convergence.
 
@@ -144,7 +150,7 @@ Cluster the to-do threads into **classes** (e.g. "stale reference after widening
 
 ### 2b. One combined verify+scan agent per class (parallel)
 
-Spawn one `Task` agent per class, passing it each finding's `comment_id`, `path`, `line` and `body` from 2a; verifiers never fetch PR comments or threads themselves. Each does **both** jobs — they read the same code:
+Spawn one `Task` agent per class, passing it each finding's fields from 2a and the text of `{scratch}/rubric.md` (or that there is none); verifiers never fetch PR comments or threads themselves, nor read the rubric from the checkout. Each does **both** jobs — they read the same code:
 
 > **(a) Refute.** Given the real types / control-flow / call-sites and the rubric's `## Do not
 > flag` list, does the concern actually hold? **Default to "refuted" when uncertain.**
@@ -196,7 +202,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 4 — Act
 
-1. **Fixes** — batched by class, conforming to `.github/copilot-instructions.md`. Apply the semantic-ripple
+1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple
    grep again for any string/identifier the fixes themselves touch. Commit with a Conventional
    Commit referencing the PR.
 2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big); reference it in both the PR and the Copilot reply. Write the title and body to files in `{scratch}` first and pass them as below, never inline, since they quote Copilot's text:
@@ -246,7 +252,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    ```
    `union:true` keeps existing reviewers. If this errors because a review is **already running**,
    assume one is underway and carry on to the watcher — don't treat it as a failure.
-3. **Watch** for the new review (background bash; the harness re-invokes on exit). Copilot turnaround is ~3 min; watch the latest Copilot **review** (it lands atomically with its comments) with the Phase 0 query, not comments:
+3. **Watch** for the new review (background bash; the harness re-invokes on exit). Copilot turnaround is ~3 min; watch the latest Copilot **review** (it lands atomically with its comments) with the Phase 0 query, not comments. Here its id check prints `ID_CHANGED` instead of raising an `error`, which `|| new=""` would take for a failed poll and retry until the timeout:
    ```bash
    hwm="{high_water_submitted_at}"
    deadline=$(( $(date +%s) + 15*60 ))
