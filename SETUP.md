@@ -67,16 +67,18 @@ The fork is never pulled. Its skills run with this config's permissions, and the
    ```bash
    cd vendor/ai-software-architect
    PIN=$(git rev-parse HEAD)
+   MAIN=refs/remotes/origin/main
    git fetch origin
    ```
-2. Review everything between the pin and the fork's `main` that becomes a skill or is installed into projects by `/setup-architect`:
+   `MAIN` is the full ref name because a tag called `origin/main` would take precedence over the short form.
+2. Review everything between the pin and the fork's `main`:
    ```bash
-   git log --oneline "$PIN"..origin/main
-   git diff --stat --summary "$PIN"..origin/main -- .claude/skills .architecture .install-manifest
-   git diff "$PIN"..origin/main -- .claude/skills .architecture .install-manifest
+   git log --oneline "$PIN".."$MAIN"
+   git diff --stat --summary "$PIN" "$MAIN"
+   git diff --text "$PIN" "$MAIN" -- .claude/skills .architecture .install-manifest
    ```
-   Read every changed file under `.claude/skills/`, its scripts included. `--summary` lists added, removed and renamed files, and mode and symlink changes (`mode 120000` is a symlink). If a skill is added or removed, the same PR updates the tracked `skills/` symlinks, the contributed-content list in `skills/repo-consistency/SKILL.md` and `README.md`.
-3. Bump `PIN` in `scripts/vendor-setup.sh` to the reviewed commit (`git rev-parse origin/main`) in a PR. Only a commit on the fork's `main` is accepted.
+   The `--stat --summary` has no pathspec, so a change anywhere shows up, `.gitattributes` included. `--summary` lists added, removed and renamed files, and mode and symlink changes (`mode 120000` is a symlink). The full diff covers what becomes a skill or is installed into projects by `/setup-architect`; `--text` stops a `-diff` attribute hiding a change as "Binary files differ". Read every changed file under `.claude/skills/`, its scripts included. If a skill is added or removed, the same PR updates the tracked `skills/` symlinks, the contributed-content list in `skills/repo-consistency/SKILL.md` and `README.md`.
+3. Bump `PIN` in `scripts/vendor-setup.sh` to the reviewed commit (`git rev-parse "$MAIN"`) in a PR. Only a commit on the fork's `main` is accepted.
 4. After the PR merges, from the repo root, move the clone, re-run the script and check every `skills/` link resolves (the `find` prints nothing):
    ```bash
    git -C vendor/ai-software-architect switch --detach <new PIN>

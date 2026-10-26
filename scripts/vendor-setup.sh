@@ -7,6 +7,10 @@
 
 set -euo pipefail
 
+# As git-sh-setup's clear_local_git_env: an inherited GIT_DIR, GIT_INDEX_FILE
+# etc. (from a hook, say) would point the git commands below at another repo.
+unset $(git rev-parse --local-env-vars)
+
 REPO_URL="https://github.com/bettison-org/ai-software-architect.git"
 PIN="bf56a76760a6f1ea1fec0fbe0c116cdca8ac034a"
 
@@ -37,6 +41,9 @@ clone_at_pin() {
   [ "$(git -C "$tmp_dir" rev-parse HEAD)" = "$PIN" ] \
     || fail "HEAD after checkout is not PIN $PIN"
 
+  # mv into an existing directory would nest the clone inside it.
+  [ ! -e "$CLONE_DIR" ] && [ ! -L "$CLONE_DIR" ] \
+    || fail "$CLONE_DIR appeared during the clone; re-run to check it"
   mv "$tmp_dir" "$CLONE_DIR" || fail "could not move the clone to $CLONE_DIR"
   trap - EXIT
   echo "vendor-setup: cloned ai-software-architect at $PIN"
