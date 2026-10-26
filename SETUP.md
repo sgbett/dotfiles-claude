@@ -50,16 +50,40 @@ The command will:
 
 ## Vendor dependencies
 
-The architecture review skills are symlinked from [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect), cloned into `vendor/` (gitignored). After cloning, run:
+The architecture skills (`skills/architecture-review`, `skills/specialist-review` and the other symlinks into `vendor/`) come from [bettison-org/ai-software-architect](https://github.com/bettison-org/ai-software-architect), a fork of [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect), at the commit pinned as `PIN` in `scripts/vendor-setup.sh`. The clone lives in `vendor/` (gitignored). After cloning, run:
 
 ```bash
 ./scripts/vendor-setup.sh
 ```
 
-To update it:
-```bash
-git -C vendor/ai-software-architect pull
-```
+With no `vendor/ai-software-architect`, it clones the fork at `PIN`, and leaves no clone if `PIN` isn't a commit on the fork's `main`. With an existing clone, it only checks it: `origin` is the fork, `HEAD` is `PIN` and the tree is clean. Each failed check is printed with the commands to fix it, the script exits 1, and the clone is left unchanged.
+
+### Reviewing and bumping the pin
+
+The fork is never pulled. Its skills run with this config's permissions, and their scripts run as bash under a broad allowlist, so every change is reviewed before `PIN` moves.
+
+1. Check the clone is at the current pin (`./scripts/vendor-setup.sh` prints OK), then fetch:
+   ```bash
+   cd vendor/ai-software-architect
+   PIN=$(git rev-parse HEAD)
+   git fetch origin
+   ```
+2. Review everything between the pin and the fork's `main` that becomes a skill or is installed into projects by `/setup-architect`:
+   ```bash
+   git log --oneline "$PIN"..origin/main
+   git diff --stat --summary "$PIN"..origin/main -- .claude/skills .architecture .install-manifest
+   git diff "$PIN"..origin/main -- .claude/skills .architecture .install-manifest
+   ```
+   Read every changed file under `.claude/skills/`, its scripts included. `--summary` lists added, removed and renamed files, and mode and symlink changes (`mode 120000` is a symlink). If a skill is added or removed, the same PR updates the tracked `skills/` symlinks, the contributed-content list in `skills/repo-consistency/SKILL.md` and `README.md`.
+3. Bump `PIN` in `scripts/vendor-setup.sh` to the reviewed commit (`git rev-parse origin/main`) in a PR. Only a commit on the fork's `main` is accepted.
+4. After the PR merges, from the repo root, move the clone, re-run the script and check every `skills/` link resolves (the `find` prints nothing):
+   ```bash
+   git -C vendor/ai-software-architect switch --detach <new PIN>
+   ./scripts/vendor-setup.sh
+   find skills -maxdepth 1 -type l ! -exec test -e {} \; -print
+   ```
+
+On other machines, once they pull the bump, the script reports the clone as off the pin and prints the commands to move it.
 
 ---
 

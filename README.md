@@ -12,8 +12,8 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 - `commands/` - Custom slash commands
   - `project/` - `/project:generate`
   - Standalone: `/transcript`, `/dotfiles-setup`, `/deslop`, `/config-cleaner`
-- `vendor/` - Upstream repos (gitignored)
-  - `ai-software-architect/` - [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect)
+- `vendor/` - Vendored repos (gitignored)
+  - `ai-software-architect/` - [bettison-org/ai-software-architect](https://github.com/bettison-org/ai-software-architect), a fork of [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect), pinned by `scripts/vendor-setup.sh` (to review and bump the pin, see [SETUP.md](SETUP.md#reviewing-and-bumping-the-pin))
 - `skills/` - User-level skills (symlinked from `vendor/` where noted)
   - Architecture skills → ai-software-architect (`/setup-architect`, `/architecture-review`, `/specialist-review`, etc.)
   - Custom skills: `/new-project-rails`, `/repo-security-*`, etc.
@@ -60,7 +60,7 @@ See `.gitignore` for full list. Key exclusions:
 
 This project incorporates work from:
 
-- **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** — Architecture review skills, ADR creation, specialist reviews
+- **[ai-software-architect](https://github.com/codenamev/ai-software-architect)** by codenamev, the original work (vendored here from the fork [bettison-org/ai-software-architect](https://github.com/bettison-org/ai-software-architect)) — Architecture review skills, ADR creation, specialist reviews
 
 ## Reference Documentation
 
