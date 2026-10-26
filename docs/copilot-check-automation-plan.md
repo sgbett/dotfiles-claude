@@ -52,6 +52,8 @@ Read-only probe across `sgbett/bsv-ruby-sdk` (#912), `sgbett/secp256k1-native` (
 The current skill filters comments with a case-insensitive `test("copilot";"i")` which *does*
 catch `Copilot` — but the exact strings above should be used explicitly for robustness.
 
+*Superseded by #12: logins aren't identity (the bare `copilot-pull-request-reviewer` login is also an unrelated Organization), so the skill now matches Copilot by exact account id — REST `175728472`, GraphQL `BOT_kgDOCnlnWA`.*
+
 ### 3.2 Copilot does NOT reliably auto-review on push — premise confirmed
 
 On secp256k1 #55, **every** Copilot review lands **2.5–3.5 min after an explicit

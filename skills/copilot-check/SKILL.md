@@ -46,35 +46,44 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
 
 ## Phase 0 — Setup (once per PR)
 
-1. **Determine the PR.** If `$ARGUMENTS` is a PR number, use it; else detect from the branch:
+1. **Determine the PR**, its base branch and whether it comes from a fork. If `$ARGUMENTS` is a PR number, pass it as `{pr}`; else omit it to detect from the branch. From here on `{pr}` is the returned `number`:
    ```bash
-   gh pr view --json number --jq '.number'
+   gh pr view {pr} --json number,baseRefName,isCrossRepository
    ```
+   **If `isCrossRepository` is true, stop and ask the user before continuing** — a fork's author controls the diff and its `.github/copilot-instructions.md`, whose `## Do not flag` could refute real findings.
 2. **Repo owner/name:**
    ```bash
    gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'
    ```
-3. **Load the rubric.** If `.github/copilot-instructions.md` exists, read it. It is the reviewer's
-   own rubric — use it three ways: (a) its `## Do not flag` section is a **false-positive filter**
-   (a Copilot finding that contradicts it is almost certainly nonsense → refute); (b) its flag-lists
-   are the **pattern checklist** for the sibling scan; (c) fixes must **conform** to it so we don't
-   trip the reviewer on our own new code.
-4. **Record the high-water mark** — the latest Copilot review's `submitted_at`; the watcher fires on
-   any review newer than this. **Default to the epoch when there is no prior review** (e.g. a
-   bootstrap request), so the string comparison still holds — a `null` mark would make every real
-   ISO timestamp compare *older* (digits sort before letters) and the watcher would never fire:
+3. **Load the rubric** from the base branch (`{base}` = `baseRefName`), never the working tree; a 404 means there is none:
    ```bash
-   gh api repos/{owner}/{repo}/pulls/{pr}/reviews \
-     --jq '([.[] | select(.user.login=="copilot-pull-request-reviewer[bot]")] | last | .submitted_at) // "1970-01-01T00:00:00Z"'
+   gh api -H 'Accept: application/vnd.github.raw+json' 'repos/{owner}/{repo}/contents/.github/copilot-instructions.md?ref={base}'
    ```
+   It is the reviewer's own rubric — use it three ways: (a) its `## Do not flag` section is a **false-positive filter** (a Copilot finding that contradicts it is almost certainly nonsense → refute); (b) its flag-lists are the **pattern checklist** for the sibling scan; (c) fixes must **conform** to it so we don't trip the reviewer on our own new code.
+4. **Record the high-water mark** — the latest Copilot review's `submittedAt`; the watcher fires on any review newer than this. **Default to the epoch when there is no prior review** (e.g. a bootstrap request), so the string comparison still holds — a `null` mark would make every real ISO timestamp compare *older* (digits sort before letters) and the watcher would never fire. The query sees the latest review however many there are (every `in_reply_to` reply adds a review, so a REST list's first page goes stale); `author:` only narrows by login, the jq id check is the match:
+   ```bash
+   gh api graphql -f query='
+   { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
+       reviews(last:1, author:"copilot-pull-request-reviewer[bot]") { nodes {
+         submittedAt author { ... on Bot { id } } comments { totalCount } } } } } }' \
+     --jq '(.data.repository.pullRequest.reviews.nodes[0] | select(.author.id == "BOT_kgDOCnlnWA")
+            | {submittedAt, comments: .comments.totalCount})
+           // {submittedAt: "1970-01-01T00:00:00Z", comments: 0}'
+   ```
+   `submittedAt` is the mark; `comments` (the review's inline-comment count) feeds the 2a guard.
 
-### Copilot has three identities — handle all of them
+### Copilot's identity — match the account id, never the login
 
-| Surface | API | `login` |
-|---|---|---|
-| Review object | `pulls/{pr}/reviews` | `copilot-pull-request-reviewer[bot]` |
-| Inline comment | `pulls/{pr}/comments` | `Copilot` |
-| Requested reviewer | timeline `review_requested` | `Copilot` |
+| Surface | API | Login | Type | Id |
+|---|---|---|---|---|
+| Review object | REST `pulls/{pr}/reviews` | `copilot-pull-request-reviewer[bot]` | `Bot` | `175728472` |
+| Inline comment | REST `pulls/{pr}/comments` | `Copilot` | `Bot` | `175728472` |
+| Requested reviewer | REST timeline `review_requested` | `Copilot` | `Bot` | `175728472` |
+| Review / comment author | GraphQL `author` | `copilot-pull-request-reviewer` | `Bot` | `BOT_kgDOCnlnWA` |
+
+One account, whose login differs by surface and is not its identity: the bare GraphQL login `copilot-pull-request-reviewer` is also held by an unrelated Organization (id 213165537). Every filter matches the id — REST `.user.id == 175728472` (`.requested_reviewer.id` on the timeline), GraphQL `author { ... on Bot { id } }` equal to `"BOT_kgDOCnlnWA"` — never a substring, regex or `contains`. An improvised query copies a row from this table.
+
+**Us** is the viewer: GraphQL `viewerDidAuthor`; in REST, the login from `gh api user --jq .login`.
 
 ---
 
@@ -101,21 +110,40 @@ Before touching Copilot's comments, pre-empt the next round. Two cheap passes on
 
 ## Phase 2 — Fetch, cluster, verify + scan
 
-### 2a. Fetch unresolved Copilot comments
+### 2a. Fetch the to-do Copilot threads
+
+One GraphQL query returns every review thread with what the round needs. Save it to your scratchpad directory (`{scratch}`) so Copilot's text never reaches a command line, and stop if there are more than 100 threads:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/{pr}/comments --paginate \
-  --jq '.[] | select((.user.login|test("copilot";"i")) and (.in_reply_to_id|not))
-             | {id, path, line, body, created_at}'
+gh api graphql -f query='
+{ repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
+    reviewThreads(first:100) { pageInfo { hasNextPage } nodes { id isResolved
+      first: comments(first:1) { nodes { databaseId path line body
+        author { __typename login ... on Bot { id } } } }
+      last: comments(last:1) { nodes { viewerDidAuthor } } } } } } }' > {scratch}/threads.json
+jq -e '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage == false' {scratch}/threads.json >/dev/null \
+  || { echo 'STOP: more than 100 review threads, or the query failed' >&2; exit 1; }
 ```
 
-Drop threads already addressed — a Copilot thread with a non-bot reply, or resolved in GitHub's UI
-(check via the GraphQL `reviewThreads` query in Phase 4). Cluster the rest into **classes** (e.g.
-"stale reference after widening", "unrescued external call", "docstring ≠ behaviour").
+A thread is **to do** when it is unresolved, Copilot started it, and its last comment isn't ours — so a thread we've answered or someone resolved in GitHub's UI drops out, while a stranger's reply never counts as an answer:
+
+```bash
+jq '.data.repository.pullRequest.reviewThreads.nodes[]
+    | select(.isResolved == false)
+    | select(.first.nodes[0].author.id == "BOT_kgDOCnlnWA")   # Copilot started it
+    | select(.last.nodes[0].viewerDidAuthor == false)          # last comment is not ours
+    | {thread_id: .id} + (.first.nodes[0] | {comment_id: .databaseId, path, line, body})' {scratch}/threads.json
+```
+
+`comment_id` (the first comment's `databaseId`) is the REST comment id that Phase 4's `in_reply_to` takes.
+
+**Guard:** if the latest Copilot review (re-run the Phase 0 query) has `comments` above 0 but this selects no thread, stop and flag it — never treat an empty selection as convergence.
+
+Cluster the to-do threads into **classes** (e.g. "stale reference after widening", "unrescued external call", "docstring ≠ behaviour").
 
 ### 2b. One combined verify+scan agent per class (parallel)
 
-Spawn one `Task` agent per class. Each does **both** jobs — they read the same code:
+Spawn one `Task` agent per class, passing it each finding's `comment_id`, `path`, `line` and `body` from 2a; verifiers never fetch PR comments or threads themselves. Each does **both** jobs — they read the same code:
 
 > **(a) Refute.** Given the real types / control-flow / call-sites and the rubric's `## Do not
 > flag` list, does the concern actually hold? **Default to "refuted" when uncertain.**
@@ -172,10 +200,9 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    Commit referencing the PR.
 2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big);
    reference it in both the PR and the Copilot reply.
-3. **Reply to every thread.** These are **pull-request review comments**, not issue comments — reply
-   with `in_reply_to`:
+3. **Reply to every thread.** These are **pull-request review comments**, not issue comments — reply with `in_reply_to` set to 2a's `comment_id`. Write each body to a file in `{scratch}` first and post it with `-F body=@…`, since Copilot's text quoted back can contain quotes:
    ```bash
-   gh api repos/{owner}/{repo}/pulls/{pr}/comments -f body='…' -F in_reply_to={comment_id}
+   gh api repos/{owner}/{repo}/pulls/{pr}/comments -F body=@{scratch}/reply.md -F in_reply_to={comment_id}
    ```
    - Do **not** use `pulls/comments/{id}/replies` (doesn't exist) or `issues/{pr}/comments` (wrong
      thread type).
@@ -183,66 +210,57 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
      `Valid — tracked in #{n}.` · `Duplicate — see {other thread}.`
    - **Batch duplicates:** reply substantively once; on the rest, `See reply on {other}.`
      ```bash
-     for id in {id1} {id2}; do gh api repos/{owner}/{repo}/pulls/{pr}/comments -f body='…' -F in_reply_to=$id; done
+     for id in {id1} {id2}; do gh api repos/{owner}/{repo}/pulls/{pr}/comments -F body=@{scratch}/see-other.md -F in_reply_to=$id; done
      ```
-4. **Resolve replied threads.** Fetch unresolved Copilot thread ids, then resolve each:
+4. **Resolve replied threads.** Re-run the 2a thread query and its `hasNextPage` check, then select the unresolved, Copilot-started threads whose last comment is ours, and resolve each:
    ```bash
-   gh api graphql -f query='
-   { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
-       reviewThreads(first:50){ nodes{ id isResolved
-         first:comments(first:1){ nodes{ author{login} } }
-         last:comments(last:1){ nodes{ author{login} } } } } } } }' \
-     --jq '.data.repository.pullRequest.reviewThreads.nodes[]
-           | select(.isResolved==false)
-           | select(.first.nodes[0].author.login|test("copilot";"i"))        # Copilot-initiated
-           | select((.last.nodes[0].author.login|test("copilot";"i"))|not)   # last comment is OUR reply
-           | .id'
+   jq -r '.data.repository.pullRequest.reviewThreads.nodes[]
+          | select(.isResolved == false)
+          | select(.first.nodes[0].author.id == "BOT_kgDOCnlnWA")   # Copilot started it
+          | select(.last.nodes[0].viewerDidAuthor == true)           # last comment is ours
+          | .id' {scratch}/threads.json
    ```
    ```bash
    for t in {thread_ids}; do
      gh api graphql -f query="mutation { resolveReviewThread(input:{threadId:\"$t\"}){ thread{ isResolved } } }"
    done
    ```
-   The `last`-comment filter enforces this: a thread is resolved only when its most recent comment
-   is **our** reply — never one left un-addressed by a pause.
+   The `last`-comment filter enforces this: a thread is resolved only when its most recent comment is **ours** — never one left un-addressed by a pause, nor one a stranger has replied to since.
 
 ---
 
 ## Phase 5 — Push, re-request, watch, loop
 
 1. **Push** the branch.
-2. **Re-request Copilot review — GraphQL, not REST.** REST `requested_reviewers` with `"Copilot"`
-   silently no-ops (collaborator-only rule). Use `requestReviews` with the Copilot **bot node id**,
-   which is derivable from the prior review author (always present here — we're responding to a
-   Copilot review):
+2. **Re-request Copilot review — GraphQL, not REST.** REST `requested_reviewers` with `"Copilot"` silently no-ops (collaborator-only rule). Use `requestReviews` with Copilot's **bot node id**, the constant `BOT_kgDOCnlnWA` (the identity table's GraphQL row):
    ```bash
-   # PR node id + Copilot bot node id
-   gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}"){ pullRequest(number:{pr}){
-     id reviews(last:100){ nodes{ author{ __typename login ... on Bot{ id } } } } } } }'
-   #   → pr_id "PR_…";  bot id "BOT_…"  (globally stable fallback: BOT_kgDOCnlnWA)
+   gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}"){ pullRequest(number:{pr}){ id } } }' \
+     --jq '.data.repository.pullRequest.id'
+   #   → pr_id "PR_…"
 
    gh api graphql -f query='mutation { requestReviews(input:{
-     pullRequestId:"PR_…", botIds:["BOT_…"], union:true }){ pullRequest{ id } } }'
+     pullRequestId:"PR_…", botIds:["BOT_kgDOCnlnWA"], union:true }){ pullRequest{ id } } }'
    ```
    `union:true` keeps existing reviewers. If this errors because a review is **already running**,
    assume one is underway and carry on to the watcher — don't treat it as a failure.
-3. **Watch** for the new review (background bash; the harness re-invokes on exit). Copilot turnaround
-   is ~3 min; watch the atomic **reviews** endpoint, not comments:
+3. **Watch** for the new review (background bash; the harness re-invokes on exit). Copilot turnaround is ~3 min; watch the latest Copilot **review** (it lands atomically with its comments) with the Phase 0 query, not comments:
    ```bash
-   repo={owner}/{repo}; pr={pr}; hwm="{high_water_submitted_at}"
+   hwm="{high_water_submitted_at}"
    deadline=$(( $(date +%s) + 15*60 ))
    until [ "$(date +%s)" -ge "$deadline" ]; do
-     n=$(gh api repos/$repo/pulls/$pr/reviews \
-       --jq "[.[] | select(.user.login==\"copilot-pull-request-reviewer[bot]\")
-                   | select(.submitted_at > \"$hwm\")] | length")
-     [ "$n" -gt 0 ] 2>/dev/null && { echo REVIEW_READY; exit 0; }
+     new=$(gh api graphql -f query='
+       { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
+           reviews(last:1, author:"copilot-pull-request-reviewer[bot]") { nodes {
+             submittedAt author { ... on Bot { id } } } } } } }' \
+       --jq ".data.repository.pullRequest.reviews.nodes[0]
+             | select(.author.id == \"BOT_kgDOCnlnWA\" and .submittedAt > \"$hwm\") | .submittedAt")
+     [ -n "$new" ] && { echo "REVIEW_READY $new"; exit 0; }
      sleep 40
    done
    echo TIMEOUT; exit 1
    ```
    Run with `run_in_background: true`.
-   - `REVIEW_READY` → update the high-water mark and **loop back to Phase 2** (no front-load — that's
-     first-round only).
+   - `REVIEW_READY` → set the high-water mark to the printed `submittedAt` and **loop back to Phase 2** (no front-load — that's first-round only).
    - `TIMEOUT` → report "no re-review within 15 min" and stop. (The merge-gate ruleset means the
      human will notice a missing required review; Copilot occasionally no-ops.)
 4. **Convergence / halt:** if a review round returns zero confirmed-actionable findings → **done**.
