@@ -68,3 +68,8 @@ usage-data/
 skills/synced/
 state/
 .last-cleanup
+# Background daemon and jobs (daemon/control.key is a secret)
+/daemon/
+/daemon.*
+/daemon-auth-*
+/jobs/
