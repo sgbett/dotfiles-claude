@@ -25,17 +25,19 @@ clone_at_pin() {
   trap 'rm -rf "$tmp_dir"' EXIT
   trap 'exit 1' INT TERM HUP
 
-  git clone --quiet --no-checkout -- "$REPO_URL" "$tmp_dir"
+  git clone --quiet --no-checkout -- "$REPO_URL" "$tmp_dir" \
+    || fail "could not clone $REPO_URL"
   git -C "$tmp_dir" cat-file -e "$PIN^{commit}" 2>/dev/null \
     || fail "PIN $PIN is not a commit in $REPO_URL"
   # The full ref name: a tag called origin/main would otherwise take precedence.
   git -C "$tmp_dir" merge-base --is-ancestor "$PIN" refs/remotes/origin/main \
     || fail "PIN $PIN is not on main in $REPO_URL"
-  git -C "$tmp_dir" checkout --quiet --detach "$PIN"
+  git -C "$tmp_dir" checkout --quiet --detach "$PIN" \
+    || fail "could not check out PIN $PIN"
   [ "$(git -C "$tmp_dir" rev-parse HEAD)" = "$PIN" ] \
     || fail "HEAD after checkout is not PIN $PIN"
 
-  mv "$tmp_dir" "$CLONE_DIR"
+  mv "$tmp_dir" "$CLONE_DIR" || fail "could not move the clone to $CLONE_DIR"
   trap - EXIT
   echo "vendor-setup: cloned ai-software-architect at $PIN"
 }
