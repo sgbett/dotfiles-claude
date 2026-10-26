@@ -137,7 +137,7 @@ jq '.data.repository.pullRequest.reviewThreads.nodes[]
 
 `comment_id` (the first comment's `databaseId`) is the REST comment id that Phase 4's `in_reply_to` takes.
 
-**Guard:** if the latest Copilot review (re-run the Phase 0 query) has `comments` above 0 but this selects no thread, stop and flag it — never treat an empty selection as convergence.
+**Guard:** if the latest Copilot review (re-run the Phase 0 query) has `comments` above 0 but no thread in `{scratch}/threads.json` was started by Copilot, resolved or not (`jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.first.nodes[0].author.id == "BOT_kgDOCnlnWA")] | length'`), the filters no longer recognise Copilot: stop and flag it — never treat that as convergence. An empty to-do list with Copilot's threads all answered is convergence.
 
 Cluster the to-do threads into **classes** (e.g. "stale reference after widening", "unrescued external call", "docstring ≠ behaviour").
 
