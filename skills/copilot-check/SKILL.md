@@ -46,7 +46,7 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
 
 ## Phase 0 — Setup (once per PR)
 
-1. **Determine the PR**, its base branch and whether it comes from a fork. If `$ARGUMENTS` is a PR number, pass it as `{pr}`; else omit it to detect from the branch. From here on `{pr}` is the returned `number`:
+1. **Determine the PR**, its base branch and whether it comes from a fork. If `$ARGUMENTS` is a bare number (`^[0-9]+$`), pass it as `{pr}`; if it is empty, omit it to detect from the branch; anything else (a PR URL included) → stop and ask, since owner/repo come from this checkout (step 2) and every later call must target the same repository. From here on `{pr}` is the returned `number`:
    ```bash
    gh pr view {pr} --json number,baseRefName,isCrossRepository
    ```
@@ -60,15 +60,16 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
    gh api -H 'Accept: application/vnd.github.raw+json' 'repos/{owner}/{repo}/contents/.github/copilot-instructions.md?ref={base}'
    ```
    It is the reviewer's own rubric — use it three ways: (a) its `## Do not flag` section is a **false-positive filter** (a Copilot finding that contradicts it is almost certainly nonsense → refute); (b) its flag-lists are the **pattern checklist** for the sibling scan; (c) fixes must **conform** to it so we don't trip the reviewer on our own new code.
-4. **Record the high-water mark** — the latest Copilot review's `submittedAt`; the watcher fires on any review newer than this. **Default to the epoch when there is no prior review** (e.g. a bootstrap request), so the string comparison still holds — a `null` mark would make every real ISO timestamp compare *older* (digits sort before letters) and the watcher would never fire. The query sees the latest review however many there are (every `in_reply_to` reply adds a review, so a REST list's first page goes stale); `author:` only narrows by login, the jq id check is the match:
+4. **Record the high-water mark** — the latest Copilot review's `submittedAt`; the watcher fires on any review newer than this. **Default to the epoch when there is no prior review** (e.g. a bootstrap request), so the string comparison still holds — a `null` mark would make every real ISO timestamp compare *older* (digits sort before letters) and the watcher would never fire. The query sees the latest review however many there are (every `in_reply_to` reply adds a review, so a REST list's first page goes stale); `author:` only narrows by login and the jq id check is the match. A review under that login with any other id means Copilot's id has changed: the query errors (`error: STOP: …`) and the run stops, never falling back to the epoch:
    ```bash
    gh api graphql -f query='
    { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
        reviews(last:1, author:"copilot-pull-request-reviewer[bot]") { nodes {
          submittedAt author { ... on Bot { id } } comments { totalCount } } } } } }' \
-     --jq '(.data.repository.pullRequest.reviews.nodes[0] | select(.author.id == "BOT_kgDOCnlnWA")
-            | {submittedAt, comments: .comments.totalCount})
-           // {submittedAt: "1970-01-01T00:00:00Z", comments: 0}'
+     --jq '.data.repository.pullRequest.reviews.nodes[0] as $r
+           | if $r == null then {submittedAt: "1970-01-01T00:00:00Z", comments: 0}
+             elif $r.author.id == "BOT_kgDOCnlnWA" then {submittedAt: $r.submittedAt, comments: $r.comments.totalCount}
+             else error("STOP: Copilot account id has changed — update the identity table") end'
    ```
    `submittedAt` is the mark; `comments` (the review's inline-comment count) feeds the 2a guard.
 
@@ -198,8 +199,10 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 1. **Fixes** — batched by class, conforming to `.github/copilot-instructions.md`. Apply the semantic-ripple
    grep again for any string/identifier the fixes themselves touch. Commit with a Conventional
    Commit referencing the PR.
-2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big);
-   reference it in both the PR and the Copilot reply.
+2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big); reference it in both the PR and the Copilot reply. Write the title and body to files in `{scratch}` first and pass them as below, never inline, since they quote Copilot's text:
+   ```bash
+   gh issue create --title "$(cat {scratch}/issue-title.txt)" --body-file {scratch}/issue-body.md   # HLR: add --label project:hlr
+   ```
 3. **Reply to every thread.** These are **pull-request review comments**, not issue comments — reply with `in_reply_to` set to 2a's `comment_id`. Write each body to a file in `{scratch}` first and post it with `-F body=@…`, since Copilot's text quoted back can contain quotes:
    ```bash
    gh api repos/{owner}/{repo}/pulls/{pr}/comments -F body=@{scratch}/reply.md -F in_reply_to={comment_id}
@@ -252,8 +255,10 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
        { repository(owner:"{owner}", name:"{repo}") { pullRequest(number:{pr}) {
            reviews(last:1, author:"copilot-pull-request-reviewer[bot]") { nodes {
              submittedAt author { ... on Bot { id } } } } } } }' \
-       --jq ".data.repository.pullRequest.reviews.nodes[0]
-             | select(.author.id == \"BOT_kgDOCnlnWA\" and .submittedAt > \"$hwm\") | .submittedAt")
+       --jq ".data.repository.pullRequest.reviews.nodes[0] // empty
+             | if .author.id == \"BOT_kgDOCnlnWA\" then select(.submittedAt > \"$hwm\") | .submittedAt
+               else \"ID_CHANGED\" end")
+     [ "$new" = ID_CHANGED ] && { echo "STOP: Copilot account id has changed — update the identity table"; exit 2; }
      [ -n "$new" ] && { echo "REVIEW_READY $new"; exit 0; }
      sleep 40
    done
@@ -261,6 +266,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    ```
    Run with `run_in_background: true`.
    - `REVIEW_READY` → set the high-water mark to the printed `submittedAt` and **loop back to Phase 2** (no front-load — that's first-round only).
+   - `STOP: …` → a review under Copilot's login carries another id; stop and report it — don't converge or keep watching.
    - `TIMEOUT` → report "no re-review within 15 min" and stop. (The merge-gate ruleset means the
      human will notice a missing required review; Copilot occasionally no-ops.)
 4. **Convergence / halt:** if a review round returns zero confirmed-actionable findings → **done**.
