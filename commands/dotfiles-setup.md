@@ -45,7 +45,7 @@ Present a checkbox selection for which components to install. Use AskUserQuestio
 | Core config | `CLAUDE.md`, `settings.json`, `.gitignore` | Essential configuration |
 | Profiles | `profiles/` | Practice bundles that `CLAUDE.md` imports — install with Core config, or its `@import`s dangle |
 | Agents | `agents/` | Sub-agent definitions (white-hat, technical-analyst) |
-| Skills | `skills/` | User-level skills (/new-project-rails, etc.) |
+| Skills | `skills/`, `scripts/vendor-setup.sh` | User-level skills (/new-project-rails, etc.) and the script that clones the vendored architecture skills |
 | Commands | `commands/` | Custom slash commands |
 | MCP servers | `mcp/` | Custom MCP servers (ruby-fetch) |
 | Playbooks | `playbooks/` | Formalised procedures |
@@ -90,7 +90,21 @@ cp -rn <source>/<component>/* ~/.claude/<component>/
 - If exists and same: skip silently
 - If doesn't exist: copy
 
-### Step 6: Set Up Git Tracking (Optional)
+`scripts/vendor-setup.sh` (part of Skills) is handled the same way, into `~/.claude/scripts/` (`mkdir -p` it first).
+
+### Step 6: Set Up Vendored Skills
+
+If Skills was installed (Replace or Merge), the architecture skills in `~/.claude/skills/` (`architecture-review`, `specialist-review` and the rest) are symlinks into `~/.claude/vendor/ai-software-architect`, which doesn't exist yet on a fresh machine. Run the script in the target so they resolve:
+
+```bash
+~/.claude/scripts/vendor-setup.sh
+```
+
+- **Exit 0:** it cloned the pinned fork, or the existing clone is already at the pin.
+- **Exit 1, existing clone:** `~/.claude/vendor/ai-software-architect` is off the pin (another `origin`, another commit, or uncommitted changes). Show the user the script's output, which names each failed check and the commands to fix it. Don't run those commands or change the clone — that's the user's call.
+- **Exit 1, no clone:** the clone failed (network, or the pin isn't on the fork's `main`) and the script left nothing behind. Show the user its output; the architecture skills won't resolve until it succeeds.
+
+### Step 7: Set Up Git Tracking (Optional)
 
 Ask if they want to track their ~/.claude with git:
 
@@ -110,7 +124,7 @@ git branch -m master
 git branch --set-upstream-to=origin/master master
 ```
 
-### Step 7: Report Results
+### Step 8: Report Results
 
 ```
 ✓ Dotfiles setup complete
@@ -125,6 +139,7 @@ Installed components:
   ✓ Playbooks
   ✓ Documentation
 
+Vendored skills: ai-software-architect at its pin
 Git tracking: Enabled
 
 Next steps:
@@ -141,6 +156,7 @@ Next steps:
 | Source missing expected files | Warn, confirm it's the right repo |
 | Permission denied | Suggest checking permissions |
 | Git init fails | Continue without git tracking, warn user |
+| `vendor-setup.sh` exits 1 | Show its output; never change the vendor clone (Step 6) |
 
 ## Notes
 

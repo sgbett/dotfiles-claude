@@ -41,7 +41,8 @@ The command will:
 1. Ask for your clone location
 2. Let you select which components to install (checkboxes)
 3. Handle collisions (replace/merge/skip)
-4. Optionally set up git tracking
+4. Clone the vendored architecture skills at their pin, when you install Skills (see [Vendor dependencies](#vendor-dependencies))
+5. Optionally set up git tracking
 
 **Pros:** Selective installation, handles existing files gracefully, preserves runtime data
 **Cons:** Requires Claude Code to be running
@@ -96,6 +97,7 @@ On other machines, once they pull the bump, the script reports the clone as off 
 | `NEW-PROJECT-RAILS.md` | Rails project setup guide |
 | `settings.json` | MCP server configuration |
 | `skills/` | User-level skills (invoke with `/skill-name`) |
+| `scripts/vendor-setup.sh` | Clones the vendored architecture skills at their pin (installed and run with `skills/`) |
 | `commands/` | Custom slash commands |
 | `mcp/` | Custom MCP servers |
 | `playbooks/` | Formalised procedures |
