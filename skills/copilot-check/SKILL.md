@@ -257,9 +257,11 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
              submittedAt author { ... on Bot { id } } } } } } }' \
        --jq ".data.repository.pullRequest.reviews.nodes[0] // empty
              | if .author.id == \"BOT_kgDOCnlnWA\" then select(.submittedAt > \"$hwm\") | .submittedAt
-               else \"ID_CHANGED\" end")
-     [ "$new" = ID_CHANGED ] && { echo "STOP: Copilot account id has changed — update the identity table"; exit 2; }
-     [ -n "$new" ] && { echo "REVIEW_READY $new"; exit 0; }
+               else \"ID_CHANGED\" end") || new=""   # a failed poll is retried, never read as a review
+     case "$new" in
+       ID_CHANGED) echo "STOP: Copilot account id has changed — update the identity table"; exit 2 ;;
+       [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*) echo "REVIEW_READY $new"; exit 0 ;;
+     esac
      sleep 40
    done
    echo TIMEOUT; exit 1

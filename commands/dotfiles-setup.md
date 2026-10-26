@@ -85,7 +85,7 @@ cp -RPn <source>/<component>/* ~/.claude/<component>/
 # Skip - do nothing
 ```
 
-Use `-RP`, never `-r`: `-P` copies symlinks as symlinks, whereas macOS `cp -r` follows them. That would turn the vendored skill links in `skills/` into copies of whatever the source clone's `vendor/` holds (or drop them when it has none), outside the pin.
+Use `-RP`, never `-r`: `-P` copies symlinks as symlinks, whereas macOS `cp -r` follows them. That would turn the vendored skill links in `skills/` into copies of whatever the source clone's `vendor/` holds (or drop them when it has none), outside the pin. On macOS a Merge's `cp -RPn` exits 1 whenever it skips an existing entry; that's the point of a Merge, not a failure.
 
 **Core config files** (CLAUDE.md, settings.json, etc.) are handled individually:
 - If exists and different: show diff, ask Replace/Skip
@@ -119,6 +119,7 @@ bash ~/.claude/scripts/vendor-setup.sh
 **3. Every vendored skill is the source's symlink and resolves.** A Merge keeps whatever was already in `~/.claude/skills/`, such as a real directory from an earlier `cp -r`, which the pin doesn't govern:
 
 ```bash
+[ -L ~/.claude/skills ] && echo "not installed: ~/.claude/skills is itself a symlink"
 for src in <source>/skills/*; do
   [ -L "$src" ] || continue
   dst=~/.claude/skills/$(basename "$src")
