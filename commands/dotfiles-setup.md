@@ -77,13 +77,15 @@ Copy selected components based on collision resolution:
 ```bash
 # Replace - remove existing first
 rm -rf ~/.claude/<component>
-cp -r <source>/<component> ~/.claude/
+cp -RP <source>/<component> ~/.claude/
 
 # Merge - copy without overwriting
-cp -rn <source>/<component>/* ~/.claude/<component>/
+cp -RPn <source>/<component>/* ~/.claude/<component>/
 
 # Skip - do nothing
 ```
+
+Use `-RP`, never `-r`: `-P` copies symlinks as symlinks, whereas macOS `cp -r` follows them. That would turn the vendored skill links in `skills/` into copies of whatever the source clone's `vendor/` holds (or drop them when it has none), outside the pin.
 
 **Core config files** (CLAUDE.md, settings.json, etc.) are handled individually:
 - If exists and different: show diff, ask Replace/Skip
@@ -94,15 +96,38 @@ cp -rn <source>/<component>/* ~/.claude/<component>/
 
 ### Step 6: Set Up Vendored Skills
 
-If Skills was installed (Replace or Merge), the architecture skills in `~/.claude/skills/` (`architecture-review`, `specialist-review` and the rest) are symlinks into `~/.claude/vendor/ai-software-architect`, which doesn't exist yet on a fresh machine. Run the script in the target so they resolve:
+If Skills was installed (Replace or Merge), the architecture skills in `~/.claude/skills/` (`architecture-review`, `specialist-review` and the rest) are symlinks into `~/.claude/vendor/ai-software-architect`, which doesn't exist yet on a fresh machine. Set it up in three checks: if check 1 fails, skip check 2; run check 3 either way.
+
+**1. The installed script is the repository's.** If the user kept their own `~/.claude/scripts/vendor-setup.sh` in Step 5, its pin isn't the repository's:
 
 ```bash
-~/.claude/scripts/vendor-setup.sh
+cmp -s <source>/scripts/vendor-setup.sh ~/.claude/scripts/vendor-setup.sh
+```
+
+If this fails, don't run the script. Warn the user that the installed `vendor-setup.sh` isn't the pinned one, and report the vendored skills as not set up.
+
+**2. Run it in the target:**
+
+```bash
+bash ~/.claude/scripts/vendor-setup.sh
 ```
 
 - **Exit 0:** it cloned the pinned fork, or the existing clone is already at the pin.
 - **Exit 1, existing clone:** `~/.claude/vendor/ai-software-architect` is off the pin (another `origin`, another commit, or uncommitted changes). Show the user the script's output, which names each failed check and the commands to fix it. Don't run those commands or change the clone — that's the user's call.
 - **Exit 1, no clone:** the clone failed (network, or the pin isn't on the fork's `main`) and the script left nothing behind. Show the user its output; the architecture skills won't resolve until it succeeds.
+
+**3. Every vendored skill is the source's symlink and resolves.** A Merge keeps whatever was already in `~/.claude/skills/`, such as a real directory from an earlier `cp -r`, which the pin doesn't govern:
+
+```bash
+for src in <source>/skills/*; do
+  [ -L "$src" ] || continue
+  dst=~/.claude/skills/$(basename "$src")
+  [ -L "$dst" ] && [ "$(readlink "$dst")" = "$(readlink "$src")" ] && [ -e "$dst" ] \
+    || echo "not linked to the pinned clone: $dst"
+done
+```
+
+It prints nothing when every link is right. Otherwise list what it printed for the user and don't report the pin; a wrong entry is fixed by removing it and copying the source's link (`cp -RP <source>/skills/<name> ~/.claude/skills/`), which is the user's call.
 
 ### Step 7: Set Up Git Tracking (Optional)
 
@@ -148,6 +173,8 @@ Next steps:
   - Run /help to see available commands
 ```
 
+Report "at its pin" only when all three Step 6 checks passed. Otherwise the line says which failed: the installed script isn't the repository's (not run), the clone is off the pin or failed (with the script's output), or the skills listed by check 3 aren't linked to the pinned clone.
+
 ## Error Handling
 
 | Error | Resolution |
@@ -156,7 +183,9 @@ Next steps:
 | Source missing expected files | Warn, confirm it's the right repo |
 | Permission denied | Suggest checking permissions |
 | Git init fails | Continue without git tracking, warn user |
+| Installed `vendor-setup.sh` differs from the source's | Don't run it; warn that it isn't the pinned script (Step 6) |
 | `vendor-setup.sh` exits 1 | Show its output; never change the vendor clone (Step 6) |
+| A vendored skill isn't the source's symlink | List it; don't report the pin (Step 6) |
 
 ## Notes
 
