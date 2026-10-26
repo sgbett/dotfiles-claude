@@ -50,12 +50,14 @@ clone_at_pin() {
 }
 
 check_clone() {
-  local ok=1 origin remote_cmd changes head
+  local ok=1 origin remote_cmd changes ignored head
 
   [ -e "$CLONE_DIR/.git" ] \
     || fail "$CLONE_DIR exists but is not a git clone; move it aside and re-run"
 
-  origin="$(git -C "$CLONE_DIR" remote get-url origin 2>/dev/null || true)"
+  # The configured URL, not remote get-url, which applies url.<base>.insteadOf:
+  # with an https-to-ssh rewrite this script's own clone would fail every run.
+  origin="$(git -C "$CLONE_DIR" config --get remote.origin.url 2>/dev/null || true)"
   if [ "$origin" != "$REPO_URL" ] && [ "$origin" != "${REPO_URL%.git}" ]; then
     ok=0
     remote_cmd="set-url"
@@ -64,12 +66,21 @@ check_clone() {
     echo "  git -C \"$CLONE_DIR\" remote $remote_cmd origin $REPO_URL" >&2
   fi
 
-  # --no-optional-locks stops status refreshing (writing) the clone's index.
-  if ! changes="$(git --no-optional-locks -C "$CLONE_DIR" status --porcelain)" || [ -n "$changes" ]; then
+  # --no-optional-locks stops status refreshing (writing) the clone's index, and
+  # --untracked-files=all overrides a status.showUntrackedFiles=no that hides them.
+  # Ignored files count only where the skills and /setup-architect's installer
+  # read; elsewhere (.DS_Store, a session's settings.local.json) they're noise.
+  if ! changes="$(git --no-optional-locks -C "$CLONE_DIR" status --porcelain --untracked-files=all)" \
+    || ! ignored="$(git -C "$CLONE_DIR" ls-files --others --ignored --exclude-standard --directory -- .claude/skills .architecture)" \
+    || [ -n "$changes$ignored" ]; then
     ok=0
-    echo "vendor-setup: the working tree has uncommitted changes. Review them, then stash them:" >&2
-    echo "  git -C \"$CLONE_DIR\" status" >&2
+    echo "vendor-setup: the working tree has uncommitted changes or extra files. Review them, then stash them:" >&2
+    echo "  git -C \"$CLONE_DIR\" status --untracked-files=all" >&2
     echo "  git -C \"$CLONE_DIR\" stash push --include-untracked" >&2
+    if [ -n "$ignored" ]; then
+      echo "vendor-setup: and remove these ignored files, which the skills or the installer would read:" >&2
+      echo "$ignored" | sed 's/^/  /' >&2
+    fi
   fi
 
   head="$(git -C "$CLONE_DIR" rev-parse --verify --quiet HEAD || true)"
