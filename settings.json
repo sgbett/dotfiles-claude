@@ -103,5 +103,6 @@
   "skipWorkflowUsageWarning": true,
   "theme": "dark-ansi",
   "remoteControlAtStartup": false,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "switchModelsOnFlag": true
 }
