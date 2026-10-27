@@ -45,6 +45,12 @@ clone_at_pin() {
   [ ! -e "$CLONE_DIR" ] && [ ! -L "$CLONE_DIR" ] \
     || fail "$CLONE_DIR appeared during the clone; re-run to check it"
   mv "$tmp_dir" "$CLONE_DIR" || fail "could not move the clone to $CLONE_DIR"
+  # A concurrent run can publish between that check and the mv, which then
+  # nests this clone inside its one; point the EXIT trap at ours to remove it.
+  if [ -e "$CLONE_DIR/${tmp_dir##*/}" ]; then
+    tmp_dir="$CLONE_DIR/${tmp_dir##*/}"
+    fail "$CLONE_DIR appeared during the clone; re-run to check it"
+  fi
   trap - EXIT
   echo "vendor-setup: cloned ai-software-architect at $PIN"
 }
