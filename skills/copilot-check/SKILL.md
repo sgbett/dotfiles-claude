@@ -117,7 +117,7 @@ Before touching Copilot's comments, pre-empt the next round. Two cheap passes on
 
 ### 2a. Fetch the to-do Copilot threads
 
-One GraphQL query returns every review thread with what the round needs. Save it to your scratchpad directory (`{scratch}`) so Copilot's text never reaches a command line, and stop if there are more than 100 threads:
+One GraphQL query returns every review thread with what the round needs. Save it to your scratchpad directory (`{scratch}`) so Copilot's text never reaches a command line. Stop if `gh` fails, even when it wrote `data` (a GraphQL error can come with partial data that would drop threads silently), or if there are more than 100 threads:
 
 ```bash
 gh api graphql -f query='
@@ -125,8 +125,8 @@ gh api graphql -f query='
     reviewThreads(first:100) { pageInfo { hasNextPage } nodes { id isResolved isOutdated
       first: comments(first:1) { nodes { databaseId path line originalLine originalCommit { oid } body
         author { __typename login ... on Bot { id } } } }
-      last: comments(last:1) { nodes { viewerDidAuthor } } } } } } }' > {scratch}/threads.json
-jq -e '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage == false' {scratch}/threads.json >/dev/null \
+      last: comments(last:1) { nodes { viewerDidAuthor } } } } } } }' > {scratch}/threads.json \
+  && jq -e '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage == false' {scratch}/threads.json >/dev/null \
   || { echo 'STOP: more than 100 review threads, or the query failed' >&2; exit 1; }
 ```
 
@@ -221,7 +221,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
      ```bash
      for id in {id1} {id2}; do gh api repos/{owner}/{repo}/pulls/{pr}/comments -F body=@{scratch}/see-other.md -F in_reply_to=$id; done
      ```
-4. **Resolve replied threads.** Re-run the 2a thread query and its `hasNextPage` check, then select the unresolved, Copilot-started threads whose last comment is ours, and resolve each:
+4. **Resolve replied threads.** Re-run the 2a fetch, its stop included, then select the unresolved, Copilot-started threads whose last comment is ours, and resolve each:
    ```bash
    jq -r '.data.repository.pullRequest.reviewThreads.nodes[]
           | select(.isResolved == false)
