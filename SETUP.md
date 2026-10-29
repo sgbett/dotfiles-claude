@@ -41,7 +41,8 @@ The command will:
 1. Ask for your clone location
 2. Let you select which components to install (checkboxes)
 3. Handle collisions (replace/merge/skip)
-4. Optionally set up git tracking
+4. Clone the vendored architecture skills at their pin, when you install Skills (see [Vendor dependencies](#vendor-dependencies))
+5. Optionally set up git tracking
 
 **Pros:** Selective installation, handles existing files gracefully, preserves runtime data
 **Cons:** Requires Claude Code to be running
@@ -50,16 +51,42 @@ The command will:
 
 ## Vendor dependencies
 
-The architecture review skills are symlinked from [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect), cloned into `vendor/` (gitignored). After cloning, run:
+The architecture skills (`skills/architecture-review`, `skills/specialist-review` and the other symlinks into `vendor/`) come from [bettison-org/ai-software-architect](https://github.com/bettison-org/ai-software-architect), a fork of [codenamev/ai-software-architect](https://github.com/codenamev/ai-software-architect), at the commit pinned as `PIN` in `scripts/vendor-setup.sh`. The clone lives in `vendor/` (gitignored). After cloning, run:
 
 ```bash
 ./scripts/vendor-setup.sh
 ```
 
-To update it:
-```bash
-git -C vendor/ai-software-architect pull
-```
+With no `vendor/ai-software-architect`, it clones the fork at `PIN`, and leaves no clone if `PIN` isn't a commit on the fork's `main`. With an existing clone, it only checks it: `origin` is the fork, `HEAD` is `PIN` and the tree is clean. Each failed check is printed with the commands to fix it, the script exits 1, and the clone is left unchanged.
+
+### Reviewing and bumping the pin
+
+The fork is never pulled. Its skills run with this config's permissions, and their scripts run as bash under a broad allowlist, so every change is reviewed before `PIN` moves.
+
+1. Check the clone is at the current pin (`./scripts/vendor-setup.sh` prints OK), then fetch:
+   ```bash
+   cd vendor/ai-software-architect
+   PIN=$(git rev-parse HEAD)
+   MAIN=refs/remotes/origin/main
+   git fetch origin
+   ```
+   `MAIN` is the full ref name because a tag called `origin/main` would take precedence over the short form.
+2. Review everything between the pin and the fork's `main`:
+   ```bash
+   git log --oneline "$PIN".."$MAIN"
+   git diff --stat --summary "$PIN" "$MAIN"
+   git diff --text "$PIN" "$MAIN" -- .claude/skills .architecture .install-manifest
+   ```
+   The `--stat --summary` has no pathspec, so a change anywhere shows up, `.gitattributes` included. `--summary` lists added, removed and renamed files, and mode and symlink changes (`mode 120000` is a symlink). The full diff covers what becomes a skill or is installed into projects by `/setup-architect`; `--text` stops a `-diff` attribute hiding a change as "Binary files differ". Read every changed file under `.claude/skills/`, its scripts included. If a skill is added or removed, the same PR updates the tracked `skills/` symlinks, the contributed-content list in `skills/repo-consistency/SKILL.md` and `README.md`.
+3. Bump `PIN` in `scripts/vendor-setup.sh` to the reviewed commit (`git rev-parse "$MAIN"`) in a PR. Only a commit on the fork's `main` is accepted.
+4. After the PR merges, from the repo root, move the clone, re-run the script and check every `skills/` link resolves (the `find` prints nothing):
+   ```bash
+   git -C vendor/ai-software-architect switch --detach <new PIN>
+   ./scripts/vendor-setup.sh
+   find skills -maxdepth 1 -type l ! -exec test -e {} \; -print
+   ```
+
+On other machines, once they pull the bump, the script reports the clone as off the pin and prints the commands to move it.
 
 ---
 
@@ -72,6 +99,7 @@ git -C vendor/ai-software-architect pull
 | `NEW-PROJECT-RAILS.md` | Rails project setup guide |
 | `settings.json` | MCP server configuration |
 | `skills/` | User-level skills (invoke with `/skill-name`) |
+| `scripts/vendor-setup.sh` | Clones the vendored architecture skills at their pin (installed and run with `skills/`) |
 | `commands/` | Custom slash commands |
 | `mcp/` | Custom MCP servers |
 | `playbooks/` | Formalised procedures |
