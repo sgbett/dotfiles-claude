@@ -1,0 +1,8 @@
+# The live settings.json carries machine-local autoMode config, which Claude Code
+# reads only from user settings and /auto-mode-setup writes there; this public
+# repo must never receive it, so staging strips it.
+# Warning: the filter lives in .git/config, which a fresh clone lacks:
+#   git config filter.strip-automode.clean "jq 'del(.autoMode)'"
+#   git config filter.strip-automode.smudge cat
+#   git config filter.strip-automode.required true
+/settings.json filter=strip-automode
