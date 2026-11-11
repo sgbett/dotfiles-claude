@@ -5,4 +5,7 @@
 #   git config filter.strip-automode.clean "jq 'del(.autoMode)'"
 #   git config filter.strip-automode.smudge cat
 #   git config filter.strip-automode.required true
+# Warning: after an autoMode edit, git status shows settings.json modified with
+# an empty diff (git trusts the changed file size); git add settings.json clears
+# it and stages nothing.
 /settings.json filter=strip-automode
