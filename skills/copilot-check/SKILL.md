@@ -222,9 +222,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 4 — Act
 
-1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple
-   grep again for any string/identifier the fixes themselves touch. Commit with a Conventional
-   Commit referencing the PR.
+1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple grep again for any string/identifier the fixes themselves touch. Then run the specs the fixes touch and the project's linter on the changed files, and commit (a Conventional Commit referencing the PR) only when both pass. Test before posting anything, so that no reply, answered marker or resolved thread claims a fix that hasn't passed: a fix that won't pass goes to the human, as in Phase 3, not into a `Fixed` reply. On a draft this is the only test run before the PR is ready, because a draft's CI may skip the suite.
 2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big); reference it in both the PR and the Copilot reply. Write the title and body to files in `{scratch}` first and pass them as below, never inline, since they quote Copilot's text:
    ```bash
    gh issue create --title "$(cat {scratch}/issue-title.txt)" --body-file {scratch}/issue-body.md   # HLR: add --label project:hlr
@@ -264,7 +262,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 5 — Push, re-request, watch, loop
 
-1. **Test, then push** the branch. First run the specs the fixes touch and the project's linter on the changed files, and push only when both pass. On a draft this is the only test run before the PR is ready, because a draft's CI may skip the suite.
+1. **Push** the branch. If the push fails, stop and report it, because Phase 4's replies already say the fixes are in.
 2. **Re-request Copilot review — GraphQL, not REST.** REST `requested_reviewers` with `"Copilot"` silently no-ops (collaborator-only rule). Use `requestReviews` with Copilot's **bot node id**, the constant `BOT_kgDOCnlnWA` (the identity table's GraphQL row):
    ```bash
    gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}"){ pullRequest(number:{pr}){ id } } }' \
