@@ -46,9 +46,9 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
 
 ## Phase 0 — Setup (once per PR)
 
-1. **Determine the PR**, its base branch and whether it comes from a fork. If `$ARGUMENTS` is a bare number (`^[0-9]+$`), pass it as `{pr}`; if it is empty, omit it to detect from the branch; anything else (a PR URL included) → stop and ask, since owner/repo come from this checkout (step 2) and every later call must target the same repository. From here on `{pr}` is the returned `number`:
+1. **Determine the PR**, its base branch, whether it comes from a fork and whether it is a draft. If `$ARGUMENTS` is a bare number (`^[0-9]+$`), pass it as `{pr}`; if it is empty, omit it to detect from the branch; anything else (a PR URL included) → stop and ask, since owner/repo come from this checkout (step 2) and every later call must target the same repository. From here on `{pr}` is the returned `number`:
    ```bash
-   gh pr view {pr} --json number,baseRefName,isCrossRepository
+   gh pr view {pr} --json number,baseRefName,isCrossRepository,isDraft
    ```
    **If `isCrossRepository` is true, stop and ask the user before continuing** — a fork's author isn't trusted, yet controls the code the verifiers read and the fixes would build on.
 2. **Repo owner/name:**
@@ -264,7 +264,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 5 — Push, re-request, watch, loop
 
-1. **Push** the branch.
+1. **Test, then push** the branch. First run the specs the fixes touch and the project's linter on the changed files, and push only when both pass. On a draft this is the only test run before the PR is ready, because a draft's CI may skip the suite.
 2. **Re-request Copilot review — GraphQL, not REST.** REST `requested_reviewers` with `"Copilot"` silently no-ops (collaborator-only rule). Use `requestReviews` with Copilot's **bot node id**, the constant `BOT_kgDOCnlnWA` (the identity table's GraphQL row):
    ```bash
    gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}"){ pullRequest(number:{pr}){ id } } }' \
@@ -299,8 +299,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    Run with `run_in_background: true`.
    - `REVIEW_READY` → set the high-water mark to the printed `submittedAt` and **loop back to Phase 2** (no front-load — that's first-round only).
    - `STOP: …` → a review under Copilot's login carries another id; stop and report it — don't converge or keep watching.
-   - `TIMEOUT` → report "no re-review within 15 min" and stop. (The merge-gate ruleset means the
-     human will notice a missing required review; Copilot occasionally no-ops.)
+   - `TIMEOUT` → report "no re-review within 15 min" and stop. Copilot occasionally no-ops. Its review only comments, so it can't be a required approval, and nothing else will notice that it's missing: say so plainly in the report.
 4. **Convergence / halt:** if a review round returns zero confirmed-actionable findings → **done**.
    If 10 unattended rounds pass without convergence → stop and flag.
 
@@ -315,6 +314,10 @@ When converged (or halted/timed-out), summarise the whole run:
 
 Note rounds run, whether it converged, any items paused for the human, and any tracking issues/HLRs
 opened. Stop any running watcher.
+
+**Checks.** List the PR's checks (`gh pr checks {pr}`). Some repositories document a check that fails on every draft by design, such as a required aggregate that stays red until the suite runs. On a draft, report such a failure as expected, but only when its output matches what the rules document. Any other failing check is a real failure.
+
+**On a draft, end with the promotion steps** from the repository's rules. Re-read `isDraft` first, because the owner may have marked the PR ready meanwhile. Typically these are: bring the branch up to date while it is still a draft, mark it ready (`gh pr ready`), and turn on auto-merge (`gh pr merge --auto --merge`). Print them and never run them. Marking a draft ready starts the suite and auto-merge merges, so both are the owner's call. Convergence means Copilot has nothing left to say; it doesn't mean the PR is ready to merge, because the suite hasn't run yet.
 
 ---
 
