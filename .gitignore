@@ -10,6 +10,7 @@ tasks/
 paste-cache/
 stats-cache.json
 mcp-needs-auth-cache.json
+gh-pr-status-cache.json
 statsig/
 history.jsonl
 
