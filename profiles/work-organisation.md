@@ -22,4 +22,4 @@ Capture:
 
 Label `project:hlr`; title prefix `[HLR] ` (e.g. `[HLR] Implement incremental analysis capability`).
 
-**Sub-issues don't inherit closure.** GitHub's sub-issue link (GraphQL `addSubIssue`) doesn't propagate closing, so the PR needs its own `Closes #N` for each sub-issue as well as the parent.
+**Sub-issues don't inherit closure.** GitHub's sub-issue link (GraphQL `addSubIssue`) doesn't propagate closing, so the PR needs its own `Closes #N` for each sub-issue as well as the parent. Closing keywords in a PR's description act only when the PR targets the default branch: into any other branch (a release or project branch), close the issues by hand.
