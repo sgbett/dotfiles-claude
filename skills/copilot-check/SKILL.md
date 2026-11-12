@@ -222,9 +222,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 4 — Act
 
-1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple
-   grep again for any string/identifier the fixes themselves touch. Commit with a Conventional
-   Commit referencing the PR.
+1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple grep again for any string/identifier the fixes themselves touch. Then run the specs the fixes touch and the project's linter on the changed files, and commit (a Conventional Commit referencing the PR) only when both pass. Test before posting anything, so that no reply, answered marker or resolved thread claims a fix that hasn't passed: a fix that won't pass goes to the human, as in Phase 3, not into a `Fixed` reply. On a draft this is the only test run before the PR is ready, because a draft's CI may skip the suite.
 2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big); reference it in both the PR and the Copilot reply. Write the title and body to files in `{scratch}` first and pass them as below, never inline, since they quote Copilot's text:
    ```bash
    gh issue create --title "$(cat {scratch}/issue-title.txt)" --body-file {scratch}/issue-body.md   # HLR: add --label project:hlr
@@ -264,7 +262,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
 
 ## Phase 5 — Push, re-request, watch, loop
 
-1. **Push** the branch.
+1. **Push** the branch. If the push fails, stop and report it, because Phase 4's replies already say the fixes are in.
 2. **Re-request Copilot review — GraphQL, not REST.** REST `requested_reviewers` with `"Copilot"` silently no-ops (collaborator-only rule). Use `requestReviews` with Copilot's **bot node id**, the constant `BOT_kgDOCnlnWA` (the identity table's GraphQL row):
    ```bash
    gh api graphql -f query='{ repository(owner:"{owner}", name:"{repo}"){ pullRequest(number:{pr}){ id } } }' \
@@ -299,8 +297,7 @@ If empty, proceed autonomously (increment the unattended-round counter; halt at 
    Run with `run_in_background: true`.
    - `REVIEW_READY` → set the high-water mark to the printed `submittedAt` and **loop back to Phase 2** (no front-load — that's first-round only).
    - `STOP: …` → a review under Copilot's login carries another id; stop and report it — don't converge or keep watching.
-   - `TIMEOUT` → report "no re-review within 15 min" and stop. (The merge-gate ruleset means the
-     human will notice a missing required review; Copilot occasionally no-ops.)
+   - `TIMEOUT` → report "no re-review within 15 min" and stop. Copilot occasionally no-ops. Its review only comments, so it can't be a required approval, and nothing else will notice that it's missing: say so plainly in the report.
 4. **Convergence / halt:** if a review round returns zero confirmed-actionable findings → **done**.
    If 10 unattended rounds pass without convergence → stop and flag.
 
@@ -315,6 +312,10 @@ When converged (or halted/timed-out), summarise the whole run:
 
 Note rounds run, whether it converged, any items paused for the human, and any tracking issues/HLRs
 opened. Stop any running watcher.
+
+**Checks.** Re-read `isDraft` first (`gh pr view {pr} --json isDraft`), because the owner may have marked the PR ready, or converted it to a draft, during the run. Then list the PR's checks (`gh pr checks {pr}`). Some repositories document a check that fails on every draft by design, such as a required aggregate that stays red until the suite runs. A failure is that one only when its text matches what the rules document. `gh pr checks` doesn't show the text, so read the check run's annotations (`gh api repos/{owner}/{repo}/check-runs/{id}/annotations`, where `{id}` is the job number at the end of the check's link). On a draft, report it as expected. On a PR that is no longer a draft, it's left over from a run made while it was one, and it stands until the new run's result replaces it: report the suite as still to come, not as a failure. Any other failing check is a real failure.
+
+**On a draft, end with the promotion steps** from the repository's rules, going by the `isDraft` just re-read. Typically these are: bring the branch up to date while it is still a draft, mark it ready (`gh pr ready`), and turn on auto-merge (`gh pr merge --auto --merge`). Print them and never run them. Marking a draft ready starts the suite and auto-merge merges, so both are the owner's call. Convergence means Copilot has nothing left to say; it doesn't mean the PR is ready to merge, because the suite hasn't run yet.
 
 ---
 
