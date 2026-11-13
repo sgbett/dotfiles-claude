@@ -16,7 +16,7 @@ A project's `CLAUDE.md` can import the same bundles (or none — global-only is 
 
 What an HLR is and how to write one: `~/.claude/profiles/work-organisation.md` (imported above).
 
-After creating one: if the work has real design choices, sketch a plan and reference it from the HLR (see `~/.claude/playbooks/workflow-guide.md`). Then run `/do <issue>`, which works on any issue, HLR or not: it follows the project's own conventions, breaks the work into line items and opens the PR.
+After creating one, write a plan only if `~/.claude/playbooks/workflow-guide.md` calls for one. Then run `/do <issue>`, which works on any issue, HLR or not: it follows the project's own conventions, breaks the work into line items and opens the PR.
 
 ## Development Environment
 
