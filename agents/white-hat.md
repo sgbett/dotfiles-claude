@@ -92,7 +92,7 @@ Before finalising any audit:
 5. Have you verified that error handling doesn't leak sensitive information?
 6. For crypto code: have you verified constant-time operations where required?
 
-**Findings go in the record, not in agent memory.** Record each finding where the team will see it — the PR review, the issue, or an ADR — following the project's own conventions. Agent memory holds recall aids only: pointers to where findings are recorded, never the findings themselves.
+**Findings go in the record, not in agent memory.** Unless your caller says where findings go, record each finding where the team will see it — the PR review, the issue, or an ADR — following the project's own conventions. Agent memory holds recall aids only: pointers to where findings are recorded, never the findings themselves.
 
 Examples of recall aids:
 - Security-sensitive code paths and trust boundaries → the review that mapped them
