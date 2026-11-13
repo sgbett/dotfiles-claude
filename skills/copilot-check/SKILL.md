@@ -48,7 +48,7 @@ tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" 
 
 1. **Determine the PR**, its base branch and whether it comes from a fork. If `$ARGUMENTS` is a bare number (`^[0-9]+$`), pass it as `{pr}`; if it is empty, omit it to detect from the branch; anything else (a PR URL included) → stop and ask, since owner/repo come from this checkout (step 2) and every later call must target the same repository. From here on `{pr}` is the returned `number`:
    ```bash
-   gh pr view {pr} --json number,baseRefName,isCrossRepository
+   gh pr view {pr} --json number,baseRefName,isCrossRepository,isDraft
    ```
    **If `isCrossRepository` is true, stop and ask the user before continuing** — a fork's author isn't trusted, yet controls the code the verifiers read and the fixes would build on.
 2. **Repo owner/name:**
@@ -313,9 +313,18 @@ When converged (or halted/timed-out), summarise the whole run:
 Note rounds run, whether it converged, any items paused for the human, and any tracking issues/HLRs
 opened. Stop any running watcher.
 
-**Checks.** Re-read `isDraft` first (`gh pr view {pr} --json isDraft`), because the owner may have marked the PR ready, or converted it to a draft, during the run. Then list the PR's checks (`gh pr checks {pr}`). Some repositories document a check that fails on every draft by design, such as a required aggregate that stays red until the suite runs. A failure is that one only when its text matches what the rules document. `gh pr checks` doesn't show the text, so read the check run's annotations (`gh api repos/{owner}/{repo}/check-runs/{id}/annotations`, where `{id}` is the job number at the end of the check's link). On a draft, report it as expected. On a PR that is no longer a draft, it's left over from a run made while it was one, and it stands until the new run's result replaces it: report the suite as still to come, not as a failure. Any other failing check is a real failure.
+**Checks.** Re-read the PR (`gh pr view {pr} --json isDraft,isCrossRepository,author,mergeable,autoMergeRequest,headRefOid`), as the owner may have changed it mid-run. List its checks (`gh pr checks {pr} --json name,bucket,link`) and judge each by `bucket`, never the exit code (`STARTUP_FAILURE` lands in `pending`). **The rules** are `CLAUDE.md` and `.claude/rules/` on the base branch, read as Phase 0 step 3 reads the rubric (base ref via `-f ref=`; only a 404 means absent), never the checkout's, which the PR can change. Some repositories document a check that fails on every draft by design, such as a required aggregate that stays red until the suite runs. A failure is that one only when its name and annotation text (`gh api repos/{owner}/{repo}/check-runs/{id}/annotations`, where `{id}` ends the check's `link`) match what the rules document. On a draft, report it as expected. On a PR no longer a draft, it's left over from a draft run: report the suite as still to come, not as a failure. Any other failure is real.
 
-**On a draft, end with the promotion steps** from the repository's rules, going by the `isDraft` just re-read. Typically these are: bring the branch up to date while it is still a draft, mark it ready (`gh pr ready`), and turn on auto-merge (`gh pr merge --auto --merge`). Print them and never run them. Marking a draft ready starts the suite and auto-merge merges, so both are the owner's call. Convergence means Copilot has nothing left to say; it doesn't mean the PR is ready to merge, because the suite hasn't run yet.
+**On a draft, end with the promotion steps** from the rules (typically: update the branch, `gh pr ready`, `gh pr merge --auto --merge`), going by the `isDraft` just re-read. Run `gh pr ready {pr}` yourself, and nothing else the rules list, only when all of these hold; otherwise leave it a draft, print the steps and give every condition that failed:
+
+- the rules say PRs open as drafts, and Phase 0's `isDraft` was true;
+- Copilot's latest review (the Phase 0 query plus `commit { oid }`) is of `headRefOid`, and 2a's last fetch found no to-do thread or review-body finding;
+- the PR is the viewer's own (`author.login` equals `gh api user --jq .login`), not from a fork (`isCrossRepository` false), and changes nothing under `.github/workflows/` or `.github/actions/` (`gh pr diff {pr} --name-only`);
+- at least one check has run on the head, none is `pending` or `cancel`, and every failure is the documented one;
+- `mergeable` is `MERGEABLE` (if `UNKNOWN`, re-read it once after the checks);
+- auto-merge is off (`autoMergeRequest` is null).
+
+After promoting, report that the suite has started, `gh pr ready --undo {pr}` reverses it, and merging, with the rules' remaining steps, is the owner's call. Never turn on auto-merge: it merges.
 
 ---
 
