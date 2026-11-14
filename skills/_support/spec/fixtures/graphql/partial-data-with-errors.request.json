@@ -1,0 +1,4 @@
+{
+  "query": "query($owner: String!, $name: String!, $login: String!) { found: repository(owner: $owner, name: $name) { nameWithOwner } missing: user(login: $login) { login } }",
+  "variables": { "owner": "twbs", "name": "bootstrap", "login": "example-owner-no-such-user-0" }
+}

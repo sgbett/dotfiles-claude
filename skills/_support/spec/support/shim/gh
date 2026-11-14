@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Stands in for gh in end-to-end specs (installed by GhShim). It answers only
+# a call whose exact argument list, and stdin where the fixture names one, it
+# has a fixture for, and fails loudly on anything else, so a missing fixture
+# can never fall through to the real gh and GitHub.
+
+require 'json'
+
+NO_FIXTURE_EXIT_STATUS = 97
+
+def refuse(message)
+  warn "gh shim: #{message}"
+  exit NO_FIXTURE_EXIT_STATUS
+end
+
+def served_indices(log_path)
+  File.exist?(log_path) ? File.readlines(log_path).filter_map { |line| JSON.parse(line)['fixture'] } : []
+end
+
+def matches?(entry, stdin)
+  entry['args'] == ARGV && (!entry.key?('stdin') || entry['stdin'] == stdin)
+end
+
+table_path = ENV.fetch('GH_SHIM_FIXTURES') { refuse('GH_SHIM_FIXTURES is not set') }
+log_path = ENV.fetch('GH_SHIM_LOG') { refuse('GH_SHIM_LOG is not set') }
+stdin = $stdin.tty? ? '' : $stdin.binmode.read.force_encoding(Encoding::UTF_8)
+entries = JSON.parse(File.read(table_path))
+served = served_indices(log_path)
+index = entries.each_index.find do |candidate|
+  matches?(entries[candidate], stdin) && (entries[candidate]['repeat'] || !served.include?(candidate))
+end
+
+File.open(log_path, 'a') { |log| log.puts(JSON.generate('args' => ARGV, 'stdin' => stdin, 'fixture' => index)) }
+if index.nil?
+  refuse("no fixture for gh #{ARGV.inspect}#{" with stdin #{stdin[0, 200].inspect}" unless stdin.empty?}")
+end
+
+entry = entries[index]
+$stdout.binmode.write(entry.key?('stdout_file') ? File.binread(entry['stdout_file']) : entry.fetch('stdout', ''))
+$stderr.write(entry.fetch('stderr', ''))
+exit entry.fetch('exit', 0)

@@ -1,0 +1,3 @@
+--require ./skills/_support/spec/spec_helper
+--default-path skills
+--pattern **/spec/**/*_spec.rb

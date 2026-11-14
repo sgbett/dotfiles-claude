@@ -42,6 +42,10 @@ Loop control:
 **Nothing is silently deferred.** Every finding and every sibling instance is either fixed or
 tracked (small → task issue; big → `[HLR]` + `project:hlr`). "Out of scope" alone is not an outcome.
 
+**Never turn on auto-merge** (`gh pr merge --auto`). Mark a draft ready only in Phase 6, when all its conditions hold.
+
+**If this file has been cut short** (it ends with a truncation note), re-read it in full before going on.
+
 ---
 
 ## Phase 0 — Setup (once per PR)

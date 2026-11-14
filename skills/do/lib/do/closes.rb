@@ -1,0 +1,93 @@
+# frozen_string_literal: true
+
+require_relative 'checklist'
+require_relative 'closing'
+require_relative 'reasons'
+require_relative 'record_issue'
+
+module Do
+  # `record closes <issue> --base B [--verified-items IDS] [--verified-boxes
+  # POSITIONS --boxes-digest D]`, which writes nothing, so takes no lock:
+  # the issues /do's PR closes under the Closing rule, as `Closes #N` lines
+  # when B is this repository's default branch, where GitHub acts on them,
+  # or else as the numbers the lead closes by hand; and every issue left
+  # open, with why. One that may not be named on GitHub is listed only
+  # under "session_only". The positions name boxes facts counted, whose
+  # digest is D. When the body's boxes no longer have it, or a line of the
+  # body or the ledger reads like a box Checklist can't place, nothing
+  # closes, and the issue is held open for it rather than the run stopped.
+  class Closes
+    # +options+ are RecordArguments' Options.
+    def initialize(options, runner:)
+      @options = options
+      @runner = runner
+    end
+
+    def call
+      RecordIssue.locate(@options.reference, runner: @runner, writes: false) { |issue| decide(issue) }
+    end
+
+    private
+
+    # QA's ids and positions are resolved only where the boxes they name can
+    # be placed.
+    def decide(issue)
+      return Reasons.stop(Reasons::NO_LEDGER) unless issue.ledger
+
+      boxes, unplaced = issue_boxes(issue)
+      items, verified_boxes, missing = unplaced.empty? ? verified(issue.ledger, boxes) : [[], [], []]
+      return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
+
+      report(issue.view, Closing.new(issue.view, boxes: boxes, verified_items: items, verified_boxes: verified_boxes,
+                                                 unplaced: unplaced))
+    end
+
+    # The issue body's boxes, nil where its criteria live in the ledger, and
+    # why the boxes QA verified can't be placed, if they can't: the body's
+    # boxes aren't the ones facts counted, or a line of the body or the
+    # ledger reads like a box Checklist can't place.
+    def issue_boxes(issue)
+      _body, reading = issue.issue_reading if issue.criteria_in_body?
+      ambiguous = reading&.ambiguous? || !issue.ledger.ambiguous.empty?
+      [reading&.boxes, [(:boxes_changed if changed?(reading)), (:boxes_ambiguous if ambiguous)].compact]
+    end
+
+    # Whether the body's boxes are no longer the ones facts counted, where
+    # the call gave their digest.
+    def changed?(reading)
+      !reading.nil? && !@options.boxes_digest.nil? && reading.digest != @options.boxes_digest
+    end
+
+    # The ledger items and the boxes QA verified, and the ids and positions
+    # that name none. Positions name boxes only where the body holds the
+    # criteria.
+    def verified(ledger, boxes)
+      items, missing_items = ledger.resolve(@options.verified_items || [])
+      found, missing_boxes = boxes ? Checklist.at(boxes, @options.verified_boxes || []) : [[], []]
+      [items, found, missing_items + missing_boxes]
+    end
+
+    def report(view, closing)
+      nameable, hidden = closing.held.partition { |held| view.nameable?(held.record) }
+      SkillSupport::Outcome.proceed(**closing_fields(view.query.default_branch_ref, closing),
+                                    criteria: closing.criteria, held: listed(view, nameable),
+                                    session_only: { held: listed(view, hidden) })
+    end
+
+    # GitHub acts on closing keywords only in a pull request into the
+    # default branch.
+    def closing_fields(default_branch, closing)
+      base_is_default = @options.base == default_branch
+      numbers = closing.closing
+      { base: @options.base, default_branch: default_branch, base_is_default: base_is_default,
+        closes_lines: base_is_default ? numbers.map { |number| "Closes ##{number}" } : [],
+        close_by_hand: base_is_default ? [] : numbers }
+    end
+
+    def listed(view, held)
+      held.map do |entry|
+        { reference: view.reference(entry.record), reasons: entry.reasons, unverified: entry.unverified }.compact
+      end
+    end
+  end
+end

@@ -1,0 +1,4 @@
+{
+  "query": "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { nameWithOwner labels(first: 2) { pageInfo { hasNextPage } nodes { name } } } }",
+  "variables": { "owner": "twbs", "name": "bootstrap" }
+}

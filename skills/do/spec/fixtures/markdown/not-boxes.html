@@ -1,0 +1,29 @@
+<ul class="contains-task-list">
+<li>
+<p>[ ]</p>
+</li>
+<li>
+<h2>[ ] A heading, not a box</h2>
+</li>
+<li>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>[ ] A</th>
+<th>table</th>
+</tr>
+</thead>
+</table></markdown-accessiblity-table>
+</li>
+<li class="task-list-item">
+<p><input type="checkbox" id="" disabled="" class="task-list-item-checkbox" aria-label="Incomplete task"> A box</p>
+</li>
+</ul>
+<h2>In a tight list, an empty box before a nested list renders</h2>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" id="" disabled="" class="task-list-item-checkbox" aria-label="Incomplete task">
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" id="" disabled="" class="task-list-item-checkbox" aria-label="Incomplete task"> Nested under an empty box</li>
+</ul>
+</li>
+</ul>

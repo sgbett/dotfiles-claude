@@ -1,0 +1,1 @@
+{"data":{"found":{"nameWithOwner":"twbs/bootstrap"},"missing":null},"errors":[{"type":"NOT_FOUND","path":["missing"],"locations":[{"line":1,"column":123}],"message":"Could not resolve to a User with the login of 'example-owner-no-such-user-0'."}]}
