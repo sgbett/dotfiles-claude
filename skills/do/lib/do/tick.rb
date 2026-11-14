@@ -7,14 +7,14 @@ require_relative 'record_issue'
 module Do
   # `record tick <issue> (--ledger IDS | --issue-boxes POSITIONS
   # --boxes-digest D) [--dry-run]`: ticks the boxes QA verified, in the
-  # ledger comment or, when its author is trusted, the issue body, which
-  # must still be the one facts read, whose digest is D. Each box named must
-  # be exactly one of the body's boxes as Checklist reads them, and the body
-  # must hold no line that reads like a box Checklist can't place, or
-  # nothing is written. Only "[ ]" becomes "[x]", through BodyEdit's
-  # one-writer discipline; nothing is written when every box is ticked
-  # already, and a dry run takes no lock. The output names boxes by id or
-  # position, never quoting the body.
+  # ledger comment or, when its author is trusted, the issue body, whose
+  # boxes must still be the ones facts counted, with digest D. Each box
+  # named must be exactly one of the body's boxes as Checklist reads them,
+  # and the body must hold no line that reads like a box Checklist can't
+  # place, or nothing is written. Only "[ ]" becomes "[x]", through
+  # BodyEdit's one-writer discipline; nothing is written when every box is
+  # ticked already, and a dry run takes no lock. The output names boxes by
+  # id or position, never quoting the body.
   class Tick
     # +options+ are RecordArguments' Options.
     def initialize(options, runner:)

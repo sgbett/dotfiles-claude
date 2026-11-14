@@ -39,7 +39,7 @@ exit SkillSupport::Cli.run('record', reasons: Do::Reasons::RECORD) { Do::Record.
 
 ## Runtime
 
-- **This repository's Ruby.** Claude Code's `PATH` has the Ruby of the directory it started in, possibly 2.x, so `ruby-launch` runs `mise which ruby` in its own directory, where this repository's `.ruby-version` applies, falling back to `ruby`.
+- **This repository's Ruby.** Claude Code's `PATH` has the Ruby of the directory it started in, possibly 2.x, so `ruby-launch` runs `mise which ruby` in its own directory, where this repository's `.ruby-version` applies, falling back to `ruby`. It lets mise read no config or tool-versions file but `mise.toml`, `.mise.toml` and `.tool-versions`, and no environment's or platform's `mise.<name>.toml`, so `/do`'s check that its scripts are the reviewed ones covers every file that can pick another Ruby: those, Ruby's own `.ruby-version` and `Gemfile`, and mise's early-init `.miserc.toml` and `.config/miserc.toml`.
 - **None of the caller's environment.** Ruby runs with `--disable=rubyopt`, and with `RUBYOPT`, `RUBYLIB`, `GEM_HOME`, `GEM_PATH` and `BUNDLE_GEMFILE` cleared, so the calling repository's Bundler, load path and gems can't reach the script.
 - **A version guard.** The preamble, in syntax Ruby 2 can parse (Ruby parses a whole file before running any of it), stops a Ruby older than 3.1 with a tool failure. The code it loads may use 3.1 syntax, never newer: `.rubocop.yml` targets 3.1.
 - **The standard library only.** No `Gemfile`, since Bundler walks up from the working directory, which is another repository. Specs and lint use RSpec and RuboCop as installed in this repository's Ruby.

@@ -89,15 +89,20 @@ module Do
       BodyEdit.issue(@github, repository, issue.number)
     end
 
-    # The issue body as it reads now, and its Checklist boxes. Raises
-    # BodyChanged when +digest+, facts' issue.boxes_digest, is given and the
-    # body no longer has it, as positions facts gave could then name other
+    # The issue body as it reads now, and Checklist's Reading of it.
+    def issue_reading
+      text = issue_body.read
+      [text, Checklist.scan(text, target: :issue_body)]
+    end
+
+    # The issue body as it reads now, and its Checklist boxes, to tick.
+    # Raises BodyChanged when its boxes no longer have +digest+, facts'
+    # issue.boxes_digest, as positions facts gave could then name other
     # boxes; and AmbiguousCheckbox when a line reads like a box Checklist
     # can't place.
     def issue_boxes(digest)
-      text = issue_body.read
-      reading = Checklist.scan(text, target: :issue_body)
-      raise BodyChanged unless digest.nil? || reading.digest == digest
+      text, reading = issue_reading
+      raise BodyChanged unless reading.digest == digest
       raise AmbiguousCheckbox.new(:issue_body, reading.ambiguous) if reading.ambiguous?
 
       [text, reading.boxes]

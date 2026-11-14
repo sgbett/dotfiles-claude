@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'digest'
+require_relative '../lib/do/checklist'
 require_relative 'support/scripts_clone'
 
 # record runs from a copy of the scripts in a checkout of their own, which
@@ -56,7 +56,7 @@ RSpec.describe 'skills/do/bin/record' do
          stdout_file: fixture_path('rest/issue-24.json') }]
     )
 
-    digest = Digest::SHA256.hexdigest(JSON.parse(fixture('rest/issue-24.json'))['body'])
+    digest = Do::Checklist.scan(JSON.parse(fixture('rest/issue-24.json'))['body'], target: :issue_body).digest
     exit_code, stdout, stderr = run_record('closes', '24', '--base', 'master', '--verified-items', 'L1',
                                            '--verified-boxes', '1', '--boxes-digest', digest,
                                            environment: hostile_environment)

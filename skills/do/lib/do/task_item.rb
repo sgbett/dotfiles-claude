@@ -14,8 +14,14 @@ module Do
     # What a reader may take for a box: brackets around nothing, spaces or
     # an x.
     BRACKETS = /\[(?: {0,4}|[xX])\]/
-    LEADING_BRACKETS = /\A#{BRACKETS}/
     BOX_LIKE = /\A(?:(?:[-*+]|[0-9]{1,9}[.)]) *)?#{BRACKETS}/
+    # An item's content GitHub may render as a box, past any leading
+    # whitespace, Unicode's included: those brackets, or what GitHub reads as
+    # them once it decodes escapes and character references and takes a
+    # non-ASCII space for a space. So "\[" or "&" first, or "[" before a
+    # space or anything but visible ASCII, before "\" or "&", or before an x
+    # that "\" or "&" follows. "[Docs](url)" and "[WIP]" are neither.
+    BOX_LIKE_CONTENT = /\A\p{Space}*(?:#{BRACKETS}|\\\[|&|\[(?:[^!-~]|[&\\]|[xX][&\\]))/
 
     # +mark+ is the offset of the box's mark in the line as written.
     Task = Struct.new(:mark, :checked, :text, keyword_init: true)
@@ -36,7 +42,7 @@ module Do
 
     # Whether the item's content, after its marker, reads like a box.
     def box_like_content?(scan, start, marker)
-      LEADING_BRACKETS.match?(scan.text[(start + marker.width)..].lstrip)
+      BOX_LIKE_CONTENT.match?(scan.text[(start + marker.width)..])
     end
 
     # Whether +text+, a line's content, reads like a box, after a list

@@ -19,8 +19,7 @@ module Do
       # Every file mise reads for the Ruby the scripts run on, in each
       # directory from the top level to skills/_support/bin, where it starts.
       RUBY_FILES = ['', 'skills/', 'skills/_support/', 'skills/_support/bin/'].flat_map do |directory|
-        %w[.ruby-version .tool-versions mise.toml .mise.toml mise.local.toml .mise.local.toml .config/mise.toml
-           .config/mise/config.toml .config/mise/conf.d/*.toml mise/config.toml .mise/config.toml]
+        %w[.ruby-version Gemfile .tool-versions mise.toml .mise.toml .miserc.toml .config/miserc.toml]
           .map { |name| "#{directory}#{name}" }
       end.freeze
       STATUS = %w[-c core.fsmonitor=false --no-optional-locks status --porcelain=v1 -z --untracked-files=all].freeze

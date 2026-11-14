@@ -21,12 +21,16 @@ module Do
     # The directory of skills/_support/ that ruby-launch lives and asks mise
     # for the Ruby in.
     LAUNCH_DIRECTORY = 'bin'
+    # The config and tool-versions files ruby-launch lets mise read, which
+    # makes every other one inert.
+    MISE_CONFIG_FILES = %w[mise.toml .mise.toml].freeze
+    MISE_TOOL_VERSIONS_FILES = %w[.tool-versions].freeze
     # What mise reads for that Ruby in each directory from there up to the
-    # checkout's root. Git often ignores them, as mise.local.toml is meant to
-    # be, so ignored ones count as changes too.
-    RUBY_FILES = %w[.ruby-version .tool-versions mise.toml .mise.toml mise.local.toml .mise.local.toml
-                    .config/mise.toml .config/mise/config.toml .config/mise/conf.d/*.toml mise/config.toml
-                    .mise/config.toml].freeze
+    # checkout's root: Ruby's own version files, those, and the early-init
+    # files whose settings can turn mise away from them. Git may ignore any
+    # of them, so ignored ones count as changes too.
+    RUBY_FILES = ['.ruby-version', 'Gemfile', *MISE_TOOL_VERSIONS_FILES, *MISE_CONFIG_FILES, '.miserc.toml',
+                  '.config/miserc.toml'].freeze
     DEFAULT_BRANCH = 'refs/remotes/origin/HEAD'
     ACCEPT_FLAG = '--accept-scripts'
     TOKEN = /\A[0-9a-f]{64}\z/

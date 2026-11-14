@@ -74,9 +74,9 @@ module Do
                    'the issue body and at the top level in the ledger, and those under missing match none or ' \
                    'several (sub-issue also needs a plain item, with no box for the sub-issue yet). Nothing was ' \
                    'written.',
-      body_changed: 'The body changed after it was read, by preflight facts, whose boxes digest the call was ' \
-                    'given, or by this call before its write: someone else has edited it. Nothing was written; ' \
-                    '/do can resume once they have finished.',
+      body_changed: "The issue body's boxes are no longer those preflight facts counted, whose boxes digest the " \
+                    'call was given, or the body changed between this call reading it and writing it: someone ' \
+                    'else has edited it. Nothing was written; /do can resume once they have finished.',
       untrusted_issue_author: "The issue's author isn't trusted, so record never edits its body. Nothing was " \
                               'written.',
       not_a_sub_issue: "That number isn't one of this issue's sub-issues in this repository, as GitHub lists " \
@@ -94,10 +94,11 @@ module Do
                          'it there. Nothing was written.',
       ambiguous_checkbox: 'Lines of the issue body or the ledger (target; lines, counting from 1) read like ' \
                           'checklist boxes that /do cannot place as GitHub renders them: a box with no list ' \
-                          'marker, with a tab, odd spacing or nothing after it, inside HTML or a footnote, where ' \
-                          'GitHub may not start a list or may make a heading or a table, or a carriage return ' \
-                          'GitHub reads as a line break. Nothing was written. Tell the user, who can fix those ' \
-                          'lines and run /do again.'
+                          'marker, with a tab, odd spacing or nothing after it, behind an escape, a character ' \
+                          'reference or a non-ASCII space, inside HTML or a footnote, where GitHub may not start ' \
+                          'a list or may make a heading or a table, a carriage return GitHub reads as a line ' \
+                          'break, or a form feed or vertical tab. Nothing was written. Tell the user, who can fix ' \
+                          'those lines and run /do again.'
     }.transform_values(&:freeze).freeze
   end
 end

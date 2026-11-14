@@ -18,12 +18,16 @@ module Do
     # +view+ is the issue's IssueView, which has a ledger. +boxes+ are the
     # Checklist boxes of the issue body, nil when its criteria live in the
     # ledger. +verified_items+ are the ledger Items, and +verified_boxes+
-    # the issue body's Boxes, QA verified.
-    def initialize(view, boxes:, verified_items:, verified_boxes:)
+    # the issue body's Boxes, QA verified. +unplaced+ are the reasons
+    # (Reasons::HELD) the boxes QA verified can't be placed, if they can't:
+    # then no box counts as verified or not, nothing closes, and the issue
+    # and this repository's open sub-issues are held open for them.
+    def initialize(view, boxes:, verified_items:, verified_boxes:, unplaced:)
       @view = view
       @boxes = boxes
       @item_positions = verified_items.map(&:position)
       @box_positions = verified_boxes.map(&:position)
+      @unplaced = unplaced
     end
 
     # :issue_boxes, or :ledger_items when the body holds no boxes, or isn't
@@ -34,6 +38,8 @@ module Do
 
     # The numbers of the issues to close, the issue's first.
     def closing
+      return [] unless @unplaced.empty?
+
       issue_number = issue.number if issue_reasons.empty?
       [issue_number, *verified_sub_issues].compact.uniq
     end
@@ -52,7 +58,7 @@ module Do
     end
 
     def issue_reasons
-      @issue_reasons ||= [criteria_reason, *elsewhere_reasons(elsewhere)].compact
+      @issue_reasons ||= [*@unplaced, criteria_reason, *elsewhere_reasons(elsewhere)].compact
     end
 
     def criteria_reason
@@ -68,6 +74,8 @@ module Do
     end
 
     def unverified
+      return [] unless @unplaced.empty?
+
       @unverified ||= criteria == :issue_boxes ? unverified_boxes : unverified_items
     end
 
@@ -94,12 +102,17 @@ module Do
     end
 
     # This repository's open sub-issues that QA hasn't verified, in the
-    # ledger or not.
+    # ledger or not: every one, when its boxes can't be placed.
     def sub_issues_held
-      open_here = @view.query.sub_issues.select { |sub_issue| @view.here?(sub_issue) && open?(sub_issue) }
+      return open_here.map { |sub_issue| Held.new(record: sub_issue, reasons: @unplaced) } unless @unplaced.empty?
+
       open_here.reject { |sub_issue| verified_sub_issues.include?(sub_issue.number) }.map do |sub_issue|
         Held.new(record: sub_issue, reasons: [in_ledger?(sub_issue) ? :unverified_items : :not_in_ledger])
       end
+    end
+
+    def open_here
+      @view.query.sub_issues.select { |sub_issue| @view.here?(sub_issue) && open?(sub_issue) }
     end
 
     def in_ledger?(sub_issue)

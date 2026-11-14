@@ -58,8 +58,8 @@ module Do
 
     # The body's boxes, when they hold the acceptance criteria, each by its
     # position; whether lines it can't place make it ambiguous; and the
-    # digest of the body they were counted in, which `record closes` and
-    # `record tick` check the body against.
+    # digest of the boxes as counted, which `record closes` and `record
+    # tick` check the body's boxes against.
     def boxes
       reading = @assessment.issue_boxes
       return { boxes: nil, boxes_ambiguous: nil, boxes_digest: nil } unless reading

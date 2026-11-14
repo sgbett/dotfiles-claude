@@ -30,14 +30,14 @@ RSpec.describe "/do's calls of its scripts" do
     expect(values).to all(match(/\A'[^']+'\z/))
   end
 
-  it "passes, with the issue body's box positions, the digest of the body facts counted them in" do
+  it "passes, with the issue body's box positions, the digest of the boxes facts counted" do
     positions = calls.grep(/--(?:verified-boxes|issue-boxes) /)
 
     expect(positions.length).to eq(2)
     expect(positions).to all(include('--boxes-digest <facts.issue.boxes_digest>'))
   end
 
-  it "pushes the run's HEAD to the branch, so a worktree detached at the push remote's tip pushes its own work" do
-    expect(skill).to include("`git push -u '<R>' 'HEAD:refs/heads/<NAME>'`")
+  it "pushes the run's HEAD from its worktree, so one detached at the push remote's tip pushes its own work" do
+    expect(skill).to include("`git -C '<worktree>' push -u '<R>' 'HEAD:refs/heads/<NAME>'`")
   end
 end

@@ -16,8 +16,9 @@ module Do
   # `preflight facts --argument-file <path>`, the read-only first half of
   # /do's pre-flight: gathers the issue's facts from GitHub and the
   # checkout, and stops, asks or proceeds with them. Lines that read like
-  # boxes Checklist can't place are reported, never a stop: only the record
-  # calls that act on boxes stop on them.
+  # boxes Checklist can't place are reported, never a stop: `record closes`
+  # holds the issue open on them, and only the record calls that write
+  # boxes stop.
   class Facts
     # +argument+ names the issue as the user gave it. Every gh and git call
     # goes through +runner+, in the working directory.

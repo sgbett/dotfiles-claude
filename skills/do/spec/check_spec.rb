@@ -338,13 +338,13 @@ RSpec.describe Do::Check do
         .to eq([' M skills/do/lib/do/check.rb', '?? skills/_support/x.rb'])
     end
 
-    it 'asks when git ignores a file that picks their Ruby, as it does mise.local.toml, naming it once' do
-      ruby_status = "!! mise.local.toml\0?? skills/_support/mise.toml\0"
+    it 'asks when git ignores a file that picks their Ruby, as it may a local .tool-versions, naming it once' do
+      ruby_status = "!! .tool-versions\0?? skills/_support/mise.toml\0"
       expect_check(scripts: { top: scripts_top, status: "?? skills/_support/mise.toml\0", ruby_status: ruby_status })
       exit_code, output = run_check
 
       expect([exit_code, output['asks'].map { |ask| ask['reason'] }]).to eq([3, ['scripts_unreviewed']])
-      expect(output['session_only']['scripts_changes']).to eq(['?? skills/_support/mise.toml', '!! mise.local.toml'])
+      expect(output['session_only']['scripts_changes']).to eq(['?? skills/_support/mise.toml', '!! .tool-versions'])
     end
 
     it "asks when its HEAD isn't in origin's default branch, or nothing says which that is" do

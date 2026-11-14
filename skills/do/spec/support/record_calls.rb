@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'digest'
 require_relative '../../lib/do/record'
 require_relative 'issue_responses'
 
@@ -107,7 +106,7 @@ module Do
 
       # The boxes digest preflight facts gives for an issue body of +body+.
       def boxes_digest(body)
-        Digest::SHA256.hexdigest(body.to_s)
+        Do::Checklist.scan(body, target: :issue_body).digest
       end
 
       # The directory a record call's lock file goes in, which a call that

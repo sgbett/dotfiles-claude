@@ -60,8 +60,12 @@ module Do
     # Why `record closes` leaves an issue open: QA hasn't verified every box
     # in the issue body, or (when they hold its criteria) every ledger item,
     # or this sub-issue's ledger box; a sub-issue in another repository is
-    # open, or its author isn't trusted; a sub-issue here has no ledger box.
-    HELD = %i[unverified_boxes unverified_items open_elsewhere untrusted_elsewhere not_in_ledger].freeze
+    # open, or its author isn't trusted; a sub-issue here has no ledger box;
+    # the issue body's boxes aren't the ones facts counted, or a line of the
+    # body or the ledger reads like a box /do can't place, so no box QA
+    # verified can be placed.
+    HELD = %i[unverified_boxes unverified_items open_elsewhere untrusted_elsewhere not_in_ledger boxes_changed
+              boxes_ambiguous].freeze
 
     module_function
 

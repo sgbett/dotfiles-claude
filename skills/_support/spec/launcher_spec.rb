@@ -30,6 +30,15 @@ RSpec.describe 'skills/_support/bin/ruby-launch' do
     ENV.fetch('PATH').split(File::PATH_SEPARATOR).any? { |directory| File.executable?(File.join(directory, program)) }
   end
 
+  # PATH with a ruby first that fails, as the launcher's fallback would.
+  def path_with_failing_ruby
+    fake_ruby = sandbox.path('fake-bin', 'ruby')
+    FileUtils.mkdir_p(File.dirname(fake_ruby))
+    File.write(fake_ruby, "#!/bin/sh\necho 'the Ruby on PATH ran' >&2\nexit 42\n")
+    File.chmod(0o755, fake_ruby)
+    [File.dirname(fake_ruby), ENV.fetch('PATH')].join(File::PATH_SEPARATOR)
+  end
+
   def old_ruby
     candidates = mise_rubies + ['/usr/bin/ruby']
     candidates.find { |ruby| File.executable?(ruby) && older_than_supported?(ruby) }
@@ -69,17 +78,32 @@ RSpec.describe 'skills/_support/bin/ruby-launch' do
 
   it "ignores the Ruby first on PATH and the calling directory's .ruby-version" do
     skip "mise isn't installed, so the launcher falls back to the Ruby on PATH" unless on_path?('mise')
-    fake_ruby = sandbox.path('fake-bin', 'ruby')
-    FileUtils.mkdir_p(File.dirname(fake_ruby))
-    File.write(fake_ruby, "#!/bin/sh\necho 'the Ruby on PATH ran' >&2\nexit 42\n")
-    File.chmod(0o755, fake_ruby)
     # Installed or not, an old pin consulted by mistake ends in a failure.
     File.write('.ruby-version', "2.7.4\n")
 
-    path = [File.dirname(fake_ruby), ENV.fetch('PATH')].join(File::PATH_SEPARATOR)
-    result = report(*Open3.capture3({ 'PATH' => path }, probe.command))
+    result = report(*Open3.capture3({ 'PATH' => path_with_failing_ruby }, probe.command))
 
     expect(result['ruby_version']).to eq(repository_ruby_version)
+  end
+
+  it "lets mise read no config file but those /do's scripts digest covers, nor an environment's or platform's" do
+    skip "mise isn't installed, so the launcher falls back to the Ruby on PATH" unless on_path?('mise')
+    copy = sandbox.path('tree', 'skills', '_support', 'bin', 'ruby-launch')
+    FileUtils.mkdir_p(File.dirname(copy))
+    FileUtils.cp(launcher, copy, preserve: true)
+    FileUtils.cp(File.join(repository_root, '.ruby-version'), sandbox.path('tree'))
+    %w[.rtx.toml .config/mise/mise.toml mise.local.toml mise.ci.toml mise.unix.toml].each do |name|
+      FileUtils.mkdir_p(File.dirname(File.join(File.dirname(copy), name)))
+      File.write(File.join(File.dirname(copy), name), "[tools]\nruby = '2.7.4'\n")
+    end
+    File.write('version.rb', 'print RUBY_VERSION')
+    # Trusted, so that mise would read each of them were it not kept from it.
+    environment = { 'PATH' => path_with_failing_ruby, 'MISE_TRUSTED_CONFIG_PATHS' => sandbox.path('tree'),
+                    'MISE_STATE_DIR' => sandbox.path('mise-state'), 'MISE_ENV' => 'ci', 'MISE_AUTO_ENV' => 'true' }
+
+    stdout, _stderr, status = Open3.capture3(environment, copy, File.expand_path('version.rb'))
+
+    expect([status.exitstatus, stdout]).to eq([0, repository_ruby_version])
   end
 
   it 'hands the arguments over verbatim' do

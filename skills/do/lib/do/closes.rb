@@ -12,8 +12,10 @@ module Do
   # when B is this repository's default branch, where GitHub acts on them,
   # or else as the numbers the lead closes by hand; and every issue left
   # open, with why. One that may not be named on GitHub is listed only
-  # under "session_only". The positions name boxes in the body facts read,
-  # whose digest is D.
+  # under "session_only". The positions name boxes facts counted, whose
+  # digest is D. When the body's boxes no longer have it, or a line of the
+  # body or the ledger reads like a box Checklist can't place, nothing
+  # closes, and the issue is held open for it rather than the run stopped.
   class Closes
     # +options+ are RecordArguments' Options.
     def initialize(options, runner:)
@@ -27,14 +29,33 @@ module Do
 
     private
 
+    # QA's ids and positions are resolved only where the boxes they name can
+    # be placed.
     def decide(issue)
       return Reasons.stop(Reasons::NO_LEDGER) unless issue.ledger
 
-      _body, boxes = issue.issue_boxes(@options.boxes_digest) if issue.criteria_in_body?
-      items, verified_boxes, missing = verified(issue.ledger, boxes)
+      boxes, unplaced = issue_boxes(issue)
+      items, verified_boxes, missing = unplaced.empty? ? verified(issue.ledger, boxes) : [[], [], []]
       return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
 
-      report(issue.view, Closing.new(issue.view, boxes: boxes, verified_items: items, verified_boxes: verified_boxes))
+      report(issue.view, Closing.new(issue.view, boxes: boxes, verified_items: items, verified_boxes: verified_boxes,
+                                                 unplaced: unplaced))
+    end
+
+    # The issue body's boxes, nil where its criteria live in the ledger, and
+    # why the boxes QA verified can't be placed, if they can't: the body's
+    # boxes aren't the ones facts counted, or a line of the body or the
+    # ledger reads like a box Checklist can't place.
+    def issue_boxes(issue)
+      _body, reading = issue.issue_reading if issue.criteria_in_body?
+      ambiguous = reading&.ambiguous? || !issue.ledger.ambiguous.empty?
+      [reading&.boxes, [(:boxes_changed if changed?(reading)), (:boxes_ambiguous if ambiguous)].compact]
+    end
+
+    # Whether the body's boxes are no longer the ones facts counted, where
+    # the call gave their digest.
+    def changed?(reading)
+      !reading.nil? && !@options.boxes_digest.nil? && reading.digest != @options.boxes_digest
     end
 
     # The ledger items and the boxes QA verified, and the ids and positions

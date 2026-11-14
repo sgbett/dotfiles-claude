@@ -9,9 +9,10 @@ module Do
   # +depth+ is how many list items hold it, +quoted+ and +footnote+ whether
   # a block quote or a footnote definition does, +task+ the TaskItem::Task
   # of a task item the line starts, at any depth, and +box_like+ whether its
-  # content reads like a box. +doubtful+: GitHub's renderer may read the
-  # line's structure otherwise, as with a carriage return it reads as a line
-  # break, or a task's paragraph it makes a heading or a table.
+  # content, or that of an item it starts, reads like a box. +doubtful+:
+  # GitHub's renderer may read the line's structure otherwise, as with a
+  # carriage return it reads as a line break, or a task's paragraph it makes
+  # a heading or a table.
   BlockLine = Struct.new(:index, :text, :hidden, :quoted, :footnote, :depth, :task, :box_like, :doubtful,
                          keyword_init: true) do
     # Shown as +kind+, its content starting at +scan+'s position.
@@ -21,14 +22,18 @@ module Do
     end
 
     def read_content(scan)
-      self.box_like = TaskItem.box_like?(scan.rest)
+      self.box_like ||= TaskItem.box_like?(scan.rest)
     end
 
     # Opens an item whose +marker+ starts at column +start+ of +scan+'s line:
-    # one whose content reads like a box but isn't one is doubtful.
+    # one whose content reads like a box but isn't one is box-like and
+    # doubtful.
     def open_item(scan, start, marker)
       self.task = TaskItem.task(scan, start, marker)
-      self.doubtful ||= task.nil? && TaskItem.box_like_content?(scan, start, marker)
+      return if task || !TaskItem.box_like_content?(scan, start, marker)
+
+      self.box_like = true
+      self.doubtful = true
     end
 
     # Its paragraph became a heading or a table, so GitHub may render its

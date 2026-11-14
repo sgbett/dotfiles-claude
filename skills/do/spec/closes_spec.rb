@@ -19,6 +19,16 @@ RSpec.describe Do::Closes do
            *(['--verified-boxes', boxes, '--boxes-digest', boxes_digest(body)] if boxes))
   end
 
+  # closes with every box verified, once the body facts counted them in has
+  # become +edited+.
+  def closes_after(edited, base: 'master')
+    expect_base(base)
+    expect_located(record_response)
+    expect_read(Do::Testing::RecordCalls::ISSUE_PATH, edited)
+    record('closes', 'sgbett/dotfiles-claude#24', '--base', base, '--verified-boxes', '1,2,3',
+           '--boxes-digest', boxes_digest(body))
+  end
+
   def with_sub_issues(*nodes, ledger: "- [ ] **L1 One.**\n")
     record_response(ledger: ledger) { |issue| issue['subIssues'] = connection(nodes) }
   end
@@ -139,29 +149,60 @@ RSpec.describe Do::Closes do
     end
   end
 
+  describe 'boxes it cannot place' do
+    let(:held_open) { [{ 'reference' => '#24', 'reasons' => ['boxes_changed'] }] }
+
+    it 'goes on past an edit elsewhere in the body, or a box ticked since facts counted them' do
+      edits = ["#{body}\nA note added meanwhile.\n", body.sub('- [ ] Two', '- [x] Two')]
+
+      edits.each do |edited|
+        expect(closes_after(edited).last['closes_lines']).to eq(['Closes #24'])
+      end
+    end
+
+    it 'holds the issue open, closing nothing, once its boxes are reordered or edited, every one verified' do
+      edits = [body.sub("- [ ] One\n  - [ ] a detail\n", "- [ ] a detail\n- [ ] One\n"), body.sub('Two', 'Two, edited')]
+
+      edits.each do |edited|
+        exit_code, output = closes_after(edited)
+
+        expect([exit_code, output.values_at('status', 'closes_lines', 'held')])
+          .to eq([0, ['proceed', [], held_open]])
+      end
+    end
+
+    it 'holds the issue open, closing nothing, on a line of the body that reads like a box it cannot place' do
+      exit_code, output = closes(body: "- [ ] One\n- [ ]Two\n", boxes: '1')
+
+      expect([exit_code, output.values_at('closes_lines', 'held')])
+        .to eq([0, [[], [{ 'reference' => '#24', 'reasons' => ['boxes_ambiguous'] }]]])
+    end
+
+    it "holds the issue and this repository's open sub-issues open on a ledger line it cannot place" do
+      response = with_sub_issues(sub_issue_node(31), sub_issue_node(5, upstream),
+                                 ledger: "- [ ] #31 Ours\n[ ] **L2 No list marker.**\n")
+      exit_code, output = closes(response, items: '#31,L9', boxes: '1,2,3')
+
+      expect([exit_code, output.values_at('closes_lines', 'held')])
+        .to eq([0, [[], [{ 'reference' => '#24', 'reasons' => %w[boxes_ambiguous open_elsewhere] },
+                         { 'reference' => '#31', 'reasons' => ['boxes_ambiguous'] },
+                         { 'reference' => 'example-owner/upstream#5', 'reasons' => ['open_elsewhere'] }]]])
+    end
+
+    it 'gives nothing to close by hand on a base other than the default branch' do
+      edited = body.sub('Two', 'Two, edited')
+      output = closes_after(edited, base: 'feat/20-parent').last
+
+      expect(output.values_at('closes_lines', 'close_by_hand', 'held')).to eq([[], [], held_open])
+    end
+  end
+
   describe 'what it refuses' do
     it 'stops, naming them, on ids or positions that match no box, or several' do
       response = record_response(ledger: "- [ ] **L1 One.**\n- [ ] **L1 Again.**\n- [ ] **L2 Two.**\n")
       exit_code, output = closes(response, items: 'L1,L2,L9', boxes: '2,4')
 
       expect([exit_code, output['reason'], output['missing']]).to eq([2, 'box_missing', ['L1', 'L9', 4]])
-    end
-
-    it 'stops, naming the line, on a line of the body that reads like a box it cannot place' do
-      exit_code, output = closes(body: "- [ ] One\n- [ ]Two\n", boxes: '1')
-
-      expect([exit_code, output.values_at('reason', 'target', 'lines')])
-        .to eq([2, ['ambiguous_checkbox', 'issue_body', [2]]])
-    end
-
-    it "stops when the body isn't the one facts counted the positions in, as they could name other boxes" do
-      expect_base
-      expect_located(record_response)
-      expect_read(Do::Testing::RecordCalls::ISSUE_PATH, body)
-      exit_code, output = record('closes', 'sgbett/dotfiles-claude#24', '--base', 'master', '--verified-boxes', '1,2',
-                                 '--boxes-digest', boxes_digest("- [ ] One\n- [ ] Two\n"))
-
-      expect([exit_code, output['reason']]).to eq([2, 'body_changed'])
     end
 
     it 'stops when there is no ledger' do

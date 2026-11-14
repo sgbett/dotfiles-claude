@@ -73,11 +73,11 @@ F=skills/do/spec/fixtures
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/issues/24 > $F/rest/issue-24.json
 ```
 
-`Checklist`'s recordings are GitHub's renders of four synthetic bodies through its stateless Markdown endpoint, which reads no repository: `markdown/<name>.md` is the body sent and `markdown/<name>.html` what GitHub returned, and `checklist_renders_spec.rb` holds the boxes `Checklist` counts against the checkboxes GitHub rendered. `lists` holds nested, quoted and ordered boxes, `footnotes` boxes in a referenced and an unreferenced footnote, `html-and-bom` a byte order mark and `<!x` beside `<!X`, and `not-boxes` boxes GitHub renders only in some contexts. A footnote's id carries a hash that changes with every render, so `footnotes.html` records again with other ids.
+`Checklist`'s recordings are GitHub's renders of five synthetic bodies through its stateless Markdown endpoint, which reads no repository: `markdown/<name>.md` is the body sent and `markdown/<name>.html` what GitHub returned, and `checklist_renders_spec.rb` holds the boxes `Checklist` counts against the checkboxes GitHub rendered. `lists` holds nested, quoted and ordered boxes, `footnotes` boxes in a referenced and an unreferenced footnote, `html-and-bom` a byte order mark and `<!x` beside `<!X`, `not-boxes` boxes GitHub renders only in some contexts, and `encoded` boxes GitHub finds only once it decodes an escape or a character reference or reads a non-ASCII space or a form feed as a space, beside lines with a vertical tab, which GitHub writes as U+FFFD, and items that start with a link or a bracketed word. A footnote's id carries a hash that changes with every render, so `footnotes.html` records again with other ids.
 
 ```sh
 F=skills/do/spec/fixtures
-for name in lists footnotes html-and-bom not-boxes; do
+for name in lists footnotes html-and-bom not-boxes encoded; do
   gh api markdown -f mode=gfm -F text=@$F/markdown/$name.md > $F/markdown/$name.html
 done
 ```

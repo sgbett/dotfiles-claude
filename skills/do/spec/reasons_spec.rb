@@ -21,7 +21,8 @@ RSpec.describe Do::Reasons do
 
   it 'lists why record closes holds an issue open apart from any stop or ask' do
     expect(described_class::HELD)
-      .to eq(%i[unverified_boxes unverified_items open_elsewhere untrusted_elsewhere not_in_ledger])
+      .to eq(%i[unverified_boxes unverified_items open_elsewhere untrusted_elsewhere not_in_ledger boxes_changed
+                boxes_ambiguous])
     expect(described_class::HELD & described_class::ALL).to be_empty
   end
 
@@ -41,7 +42,7 @@ RSpec.describe Do::Reasons do
     expect(described_class::MESSAGES.values + described_class::NOT_AN_ISSUE_MESSAGES.values).to all(be_frozen)
   end
 
-  it 'stops only record calls that act on boxes on ambiguous_checkbox, telling the user, never to run it again' do
+  it 'stops only record calls that write boxes on ambiguous_checkbox, telling the user, never to run it again' do
     message = described_class::MESSAGES[:ambiguous_checkbox]
 
     expect([described_class::PREFLIGHT.include?(:ambiguous_checkbox), described_class::RECORD_STOPS])

@@ -134,6 +134,26 @@ RSpec.describe Do::Checklist do
       expect(ambiguous("- [ ] One\rText\n- [ ] Two\n")).to eq([1])
     end
 
+    it 'is an item GitHub reads as a box once it decodes an escape or a reference, or reads a non-ASCII space' do
+      body = "- \\[ ] escaped\n- [x\\] escaped closing\n- &#91; ] reference\n- [&nbsp;] named reference\n" \
+             "- [ &#93; closing reference\n- \u00A0[ ] no-break space before\n1. [\u2003] em space inside\n" \
+             "- [ ]\u00A0no-break space after\n"
+
+      expect(ambiguous(body)).to eq((1..8).to_a)
+    end
+
+    it 'is not an item that starts with a link or a bracketed word, which GitHub never reads as a box' do
+      expect(ambiguous("- [Docs](https://example.com) a link\n- [WIP] a word\n- [*x*] emphasis\n- [o] a letter\n"))
+        .to eq([])
+    end
+
+    it 'is a line with a form feed or a vertical tab where a box could be, never counted, but not one in code' do
+      body = "- [ ] One\fdone\n- [\v] Two\nText\fmore\n  - nested\vdetail\n```\n- [ ] fenced\f\n```\n"
+
+      expect([ambiguous(body), ambiguous(body, target: :issue_body), texts(body)])
+        .to eq([[1, 2, 3], [1, 2, 3, 4], []])
+    end
+
     it 'is one in a nested item or a quote only in the issue body, where boxes there count, and never one in code' do
       body = "- [ ] One\n  - [ ]x nested\n\t- [ ] tab-indented detail\n  - b\n  2. [ ] nested, after a lazy line\n" \
              "> [ ] quoted\n```\n[ ] fenced\n```\n"
@@ -143,12 +163,30 @@ RSpec.describe Do::Checklist do
   end
 
   describe '.scan' do
-    it 'gives the SHA-256 digest of the body as it came, a byte order mark included, ambiguous or not' do
-      body = "\uFEFF- [ ] One\n[ ] Two\n"
-      reading = described_class.scan(body, target: :issue_body)
+    let(:body) { "Intro\n- [ ] One\n  - [ ] Two\n" }
 
-      expect([reading.digest, reading.ambiguous?]).to eq([Digest::SHA256.hexdigest(body), true])
-      expect(described_class.scan(body.sub('One', 'One.'), target: :issue_body).digest).not_to eq(reading.digest)
+    def digest(text)
+      described_class.scan(text, target: :issue_body).digest
+    end
+
+    it "gives the SHA-256 digest of the boxes' texts in order, ambiguous or not" do
+      reading = described_class.scan("#{body}[ ] stray\n", target: :issue_body)
+
+      expect([reading.digest, reading.ambiguous?]).to eq([Digest::SHA256.hexdigest("One\nTwo\n"), true])
+    end
+
+    it 'keeps it through an edit elsewhere in the body, a byte order mark or a tick' do
+      edits = ["Intro, edited\n- [ ] One\n  - [ ] Two\n\nMore text.\n", "\uFEFF#{body}",
+               body.sub('[ ] One', '[x] One').sub('[ ] Two', '[X] Two')]
+
+      expect(edits.map { |text| digest(text) }).to all(eq(digest(body)))
+    end
+
+    it "changes it when a box's text is edited, the boxes are reordered, or one is added or removed" do
+      edits = [body.sub('One', 'One, edited'), "Intro\n- [ ] Two\n  - [ ] One\n", "#{body}- [ ] Three\n",
+               "Intro\n- [ ] One\n"]
+
+      expect(edits.map { |text| digest(text) }).not_to include(digest(body))
     end
   end
 

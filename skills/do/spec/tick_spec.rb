@@ -135,7 +135,18 @@ RSpec.describe Do::Tick do
       expect(output.values_at('flipped', 'already')).to eq([[4, 3, 1], []])
     end
 
-    it "stops, writing nothing, when the body isn't the one facts counted the positions in" do
+    it 'ticks past an edit elsewhere in the body since facts counted its boxes, writing from its fresh copy' do
+      edited = "#{body}\r\n\r\nA note added meanwhile.\r\n"
+      after = edited.sub('- [ ] One', '- [x] One')
+      output = tick_issue('1') do
+        expect_read(issue_path, edited)
+        expect_edit(issue_path, edited, after)
+      end.last
+
+      expect(output.values_at('target', 'flipped')).to eq(['issue_body', [1]])
+    end
+
+    it "stops, writing nothing, when the body's boxes aren't the ones facts counted the positions in" do
       edited = body.sub('- [ ] One', "- [ ] Inserted\r\n- [ ] One")
       exit_code, output = tick_issue('1') { expect_read(issue_path, edited) }
 

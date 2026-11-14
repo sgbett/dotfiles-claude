@@ -5,9 +5,9 @@ require_relative 'block_reader'
 
 module Do
   # Lines of a body read like checklist boxes that /do can't place as
-  # GitHub reads them. Not a tool failure: the scripts that act on boxes
-  # stop with Reasons::AMBIGUOUS_CHECKBOX, naming the body and the lines
-  # (from 1).
+  # GitHub reads them. Not a tool failure: a record call that writes boxes
+  # stops with Reasons::AMBIGUOUS_CHECKBOX, naming the body and the lines
+  # (from 1), where `record closes` holds the issue open instead.
   class AmbiguousCheckbox < StandardError
     attr_reader :target, :lines
 
@@ -27,10 +27,13 @@ module Do
   # a nested one being detail. One in code or an HTML block is text. A line
   # that reads like a box but isn't one /do can place makes the body
   # ambiguous rather than a guess: one with no list marker, a tab, odd
-  # spacing or nothing after the box, one whose paragraph GitHub makes a
-  # heading or a table, or one in a footnote definition, whose boxes GitHub
-  # renders after the body, or not at all. Ticking a box turns its "[ ]"
-  # into "[x]" and leaves every other byte of the body as it was.
+  # spacing or nothing after the box, one GitHub finds only once it decodes
+  # an escape or a character reference or reads a non-ASCII space as a
+  # space, one whose paragraph GitHub makes a heading or a table, or one in
+  # a footnote definition, whose boxes GitHub renders after the body, or not
+  # at all; so does a form feed or a vertical tab where a box could be.
+  # Ticking a box turns its "[ ]" into "[x]" and leaves every other byte of
+  # the body as it was.
   module Checklist
     TICKED = 'x'
     UNTICKED_BOX = '[ ]'
@@ -38,6 +41,9 @@ module Do
     DIGEST = /\A[0-9a-f]{64}\z/
     # GitHub reads a body from after one leading byte order mark.
     BYTE_ORDER_MARK = "\uFEFF"
+    # Characters GitHub may read as a space around a box, where BlockReader
+    # reads none.
+    FORM_FEED_OR_VERTICAL_TAB = /[\f\v]/
 
     # +position+ is the box's place among the body's boxes, from 1; +line+
     # its index among the body's lines and +mark+ the offset of its mark in
@@ -50,8 +56,10 @@ module Do
     end
 
     # A body as Checklist read it: its Boxes, the numbers (from 1) of the
-    # lines that make it ambiguous, and the SHA-256 digest of the body,
-    # which ties the boxes' positions to the text they were counted in.
+    # lines that make it ambiguous, and the SHA-256 digest of the boxes'
+    # texts in order, which ties their positions to the boxes they were
+    # counted as. Whether a box is ticked is left out, so neither a tick nor
+    # an edit elsewhere in the body changes it.
     Reading = Struct.new(:boxes, :ambiguous, :digest, keyword_init: true) do
       def ambiguous?
         !ambiguous.empty?
@@ -70,7 +78,13 @@ module Do
     # The Reading of +body+, the +target+'s text.
     def scan(body, target:)
       found, ambiguous = read(BlockReader.read(text(body)), target: target)
-      Reading.new(boxes: found, ambiguous: ambiguous, digest: Digest::SHA256.hexdigest(body.to_s))
+      Reading.new(boxes: found, ambiguous: ambiguous, digest: boxes_digest(found))
+    end
+
+    # A box's text ends at its line's end, so a newline after each keeps
+    # one box from running into the next.
+    def boxes_digest(boxes)
+      Digest::SHA256.hexdigest(boxes.map { |box| "#{box.text}\n" }.join)
     end
 
     # +body+ as GitHub reads it, without one leading byte order mark, which
@@ -124,7 +138,7 @@ module Do
     # A task item GitHub renders where the target's boxes are: at any depth
     # when +nested+, else at the top level.
     def counted?(line, nested)
-      line.task && !line.doubtful && !line.footnote && (nested || top_level?(line))
+      line.task && !line.doubtful && !line.footnote && !spaced_otherwise?(line) && (nested || top_level?(line))
     end
 
     # Outside any list item but its own, and any block quote.
@@ -132,16 +146,21 @@ module Do
       line.depth <= 1 && !line.quoted
     end
 
-    # A carriage return GitHub reads as a line break, or a box-like line
-    # where a counted box could be: one whose structure GitHub may read
-    # otherwise, or outside code and HTML that runs to a closing string.
+    # A carriage return GitHub reads as a line break, or, where a counted
+    # box could be, a line that reads like a box or holds a character GitHub
+    # may read as a space: one whose structure GitHub may read otherwise, or
+    # outside code and HTML that runs to a closing string.
     def ambiguous?(line, nested)
       return true if line.text.include?(BlockReader::CARRIAGE_RETURN)
-      return false unless line.box_like && (nested || top_level?(line))
+      return false unless (line.box_like || spaced_otherwise?(line)) && (nested || top_level?(line))
 
       line.doubtful || [nil, :html].include?(line.hidden)
     end
 
-    private_class_method :text, :ticked, :box, :counted?, :top_level?, :ambiguous?
+    def spaced_otherwise?(line)
+      FORM_FEED_OR_VERTICAL_TAB.match?(line.text)
+    end
+
+    private_class_method :boxes_digest, :text, :ticked, :box, :counted?, :top_level?, :ambiguous?, :spaced_otherwise?
   end
 end

@@ -10,7 +10,8 @@ module Do
   class Summary
     DELETED_ACCOUNT = 'a deleted account'
     NOT_NAMEABLE = "an issue in a repository that isn't public"
-    AMBIGUOUS_BOXES = '%<body>s, lines %<lines>s: boxes /do cannot place, which record closes and tick stop on'
+    AMBIGUOUS_BOXES = '%<body>s, lines %<lines>s: boxes /do cannot place, which hold the issue open in record ' \
+                      'closes and stop record tick'
 
     def initialize(assessment)
       @assessment = assessment

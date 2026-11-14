@@ -134,12 +134,12 @@ RSpec.describe Do::Facts do
       expect(boxes.map { |box| box['github_text']['label'].length }.max).to eq(60)
     end
 
-    it 'gives the digest of the body it counted them in, which closes and tick check' do
+    it 'gives the digest of the boxes it counted, as closes and tick work it out to check against' do
       body = JSON.parse(fixture('rest/issue-24.json'))['body']
       _exit_code, output = facts
 
       expect(output['issue'].values_at('boxes_ambiguous', 'boxes_digest'))
-        .to eq([false, Digest::SHA256.hexdigest(body)])
+        .to eq([false, Do::Checklist.scan(body, target: :issue_body).digest])
     end
 
     it 'counts them as GitHub renders them: any marker, nested ones included, those in comments left out' do
@@ -170,8 +170,10 @@ RSpec.describe Do::Facts do
       expect(body_output['issue'].values_at('boxes_ambiguous', 'boxes')).to match([true, [include('position' => 1)]])
       expect(ledger_output['ledger'].values_at('boxes_ambiguous', 'first_unbuilt')).to eq([true, 'L1'])
       expect([body_output, ledger_output].map { |output| output['summary']['ambiguous_boxes'] })
-        .to eq([['issue body, lines 2: boxes /do cannot place, which record closes and tick stop on'],
-                ['ledger, lines 3: boxes /do cannot place, which record closes and tick stop on']])
+        .to eq([['issue body, lines 2: boxes /do cannot place, which hold the issue open in record closes and ' \
+                 'stop record tick'],
+                ['ledger, lines 3: boxes /do cannot place, which hold the issue open in record closes and stop ' \
+                 'record tick']])
     end
   end
 

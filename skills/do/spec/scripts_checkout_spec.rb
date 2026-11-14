@@ -75,8 +75,7 @@ RSpec.describe Do::ScriptsCheckout do
   end
 
   it "asks about a change to any file mise reads for the scripts' Ruby, from the root to skills/_support/bin" do
-    names = %w[.ruby-version .tool-versions mise.toml .mise.toml mise.local.toml .mise.local.toml .config/mise.toml
-               .config/mise/config.toml .config/mise/conf.d/ruby.toml mise/config.toml .mise/config.toml]
+    names = %w[.ruby-version Gemfile .tool-versions mise.toml .mise.toml .miserc.toml .config/miserc.toml]
     ['', 'skills/', 'skills/_support/', 'skills/_support/bin/'].product(names).each do |directory, name|
       reviewed_checkout
       path = "#{directory}#{name}"
@@ -90,18 +89,39 @@ RSpec.describe Do::ScriptsCheckout do
     end
   end
 
-  it 'asks about such a file git ignores, as mise.local.toml often is, holding its contents in the digest' do
-    files['.gitignore'] = "mise.local.toml\n.config/\n*.log\n"
+  it 'covers the config and tool-versions files ruby-launch lets mise read, which leaves the rest inert' do
+    launcher = File.read(File.join(repository_root, 'skills', '_support', 'bin', 'ruby-launch'))
+    pinned = launcher.scan(/MISE_OVERRIDE_(CONFIG|TOOL_VERSIONS)_FILENAMES='([^']*)'/).to_h
+
+    expect(pinned.transform_values { |names| names.split(':') })
+      .to eq('CONFIG' => described_class::MISE_CONFIG_FILES,
+             'TOOL_VERSIONS' => described_class::MISE_TOOL_VERSIONS_FILES)
+    expect(described_class::RUBY_FILES).to include(*described_class::MISE_CONFIG_FILES,
+                                                   *described_class::MISE_TOOL_VERSIONS_FILES)
+  end
+
+  it 'takes no change to a config file ruby-launch keeps mise from reading, at the root or in skills/' do
     reviewed_checkout
-    FileUtils.mkdir_p(File.join(top, '.config', 'mise', 'conf.d'))
-    File.write(File.join(top, '.config', 'mise', 'conf.d', 'ruby.toml'), "[tools]\nruby = '3.4.2'\n")
+    %w[.rtx.toml mise.local.toml skills/.config/mise/config.toml skills/mise.unix.toml].each do |path|
+      FileUtils.mkdir_p(File.dirname(File.join(top, path)))
+      File.write(File.join(top, path), "[tools]\nruby = '2.7.0'\n")
+    end
+
+    expect(examine.unreviewed?).to be(false)
+  end
+
+  it 'asks about such a file git ignores, as a local .tool-versions may be, holding its contents in the digest' do
+    files['.gitignore'] = ".tool-versions\n.config/\n*.log\n"
+    reviewed_checkout
+    FileUtils.mkdir_p(File.join(top, '.config'))
+    File.write(File.join(top, '.config', 'miserc.toml'), "env = ['local']\n")
     File.write(File.join(skill_directory, 'debug.log'), "ignored, and no file mise reads\n")
-    File.write(File.join(top, 'mise.local.toml'), "[tools]\nruby = '2.7.0'\n")
+    File.write(File.join(top, '.tool-versions'), "ruby 2.7.0\n")
     inspection = examine
-    File.write(File.join(top, 'mise.local.toml'), "[tools]\nruby = '2.6.0'\n")
+    File.write(File.join(top, '.tool-versions'), "ruby 2.6.0\n")
 
     expect([inspection.changes.map(&:to_s), inspection.ask&.fetch(:reason)])
-      .to eq([['!! .config/mise/conf.d/ruby.toml', '!! mise.local.toml'], :scripts_unreviewed])
+      .to eq([['!! .config/miserc.toml', '!! .tool-versions'], :scripts_unreviewed])
     expect(examine(accepted: inspection.token).accepted).to be(false)
   end
 
