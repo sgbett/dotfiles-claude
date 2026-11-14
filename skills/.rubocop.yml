@@ -1,0 +1,11 @@
+# Skill scripts load after a version guard that admits Ruby 3.1, so their
+# syntax must stay within 3.1 although this repository pins a newer Ruby.
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  SuggestExtensions: false
+
+# RSpec example groups are long blocks by design.
+Metrics/BlockLength:
+  Exclude:
+    - '**/spec/**/*'
