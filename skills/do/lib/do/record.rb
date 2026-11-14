@@ -8,7 +8,7 @@ require_relative 'tick'
 
 module Do
   # skills/do/bin/record: /do's closing and recording. `closes` works out
-  # what step 7's PR closes and writes nothing; `tick`, `gate` and
+  # what /do's PR closes and writes nothing; `tick`, `gate` and
   # `sub-issue` each edit one record in place: the ledger comment, the issue
   # body or the local gate file.
   module Record

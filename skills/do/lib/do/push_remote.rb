@@ -3,7 +3,7 @@
 require_relative 'remote_url'
 
 module Do
-  # Pre-flight step 2 for the push remote: every URL it pushes to must be on
+  # `preflight check` on the push remote: every URL it pushes to must be on
   # the issue's host and resolve, through GitHub, to this repository or a
   # fork of it. The hosts are all checked before gh is asked about any URL.
   class PushRemote

@@ -9,8 +9,8 @@ require_relative 'reasons'
 require_relative 'record_issue'
 
 module Do
-  # `record gate <action> <issue> ...`: step 6's record of a blocking
-  # security finding, kept in the local gate file and on a plain ledger
+  # `record gate <action> <issue> ...`: the security gate's record of a
+  # blocking finding, kept in the local gate file and on a plain ledger
   # line. Each action is a subclass; nothing any of them prints quotes a
   # finding.
   class GateRecord

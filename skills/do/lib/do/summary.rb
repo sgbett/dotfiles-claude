@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 module Do
-  # The facts pre-flight step 8's one-line summary needs, as short strings:
-  # the issue, any untrusted author (the issue's or its parent's), the
-  # parent, the resume point, open gate findings, and ignored marker
-  # comments and skipped sub-issues with their authors. It names no
-  # repository that may not be named on GitHub.
+  # `preflight facts`' summary, the facts the lead's one-line summary needs
+  # as short strings: the issue, any untrusted author (the issue's or its
+  # parent's), the parent, the resume point, open gate findings, and
+  # ignored marker comments and skipped sub-issues with their authors. It
+  # names no repository that may not be named on GitHub.
   class Summary
     DELETED_ACCOUNT = 'a deleted account'
     NOT_NAMEABLE = "an issue in a repository that isn't public"
@@ -34,8 +34,8 @@ module Do
       @assessment.ignored_markers.map { |comment| "#{login(comment.author)} (comment #{comment.database_id})" }
     end
 
-    # Pre-flight step 7 seeds a ledger only from trusted sub-issues it may
-    # name.
+    # Resuming (references/resume.md) seeds a ledger only from trusted
+    # sub-issues it may name.
     def skipped_sub_issues
       @query.sub_issues.reject { |sub_issue| @assessment.seedable?(sub_issue) }.map do |sub_issue|
         next NOT_NAMEABLE unless @assessment.nameable?(sub_issue)

@@ -3,7 +3,7 @@
 require_relative 'reasons'
 
 module Do
-  # Pre-flight step 2's judgement of the branch the conventions name, made
+  # `preflight check`'s judgement of the branch the conventions name, made
   # from its BranchFacts alone. Resume on it only if it is on the push remote,
   # or is local, tracks the same-named branch there and isn't ahead of it. A
   # local branch whose remote or pushRemote is a URL or another remote, or

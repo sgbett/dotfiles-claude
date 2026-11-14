@@ -3,11 +3,12 @@
 require_relative 'focus_sections'
 
 module Do
-  # Pre-flight step 6's security focus: every "## Security focus" section of
-  # this repository's CLAUDE.md and of each file under .claude/rules/, as
-  # they stand at the base branch's commit. Read through GitHub rather than
-  # the checkout, so the diff under review can't change its own gate. Only a
-  # 404 means a file is absent; any other failure is a tool failure.
+  # The security_focus `preflight check` gives the security gate: every
+  # "## Security focus" section of this repository's CLAUDE.md and of each
+  # file under .claude/rules/, as they stand at the base branch's commit.
+  # Read through GitHub rather than the checkout, so the diff under review
+  # can't change its own gate. Only a 404 means a file is absent; any other
+  # failure is a tool failure.
   class SecurityFocus
     CLAUDE_MD = 'CLAUDE.md'
     RULES = '.claude/rules'

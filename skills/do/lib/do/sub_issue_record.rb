@@ -5,9 +5,9 @@ require_relative 'reasons'
 require_relative 'record_issue'
 
 module Do
-  # `record sub-issue <issue> --item ID --number M [--dry-run]`: step 3's
+  # `record sub-issue <issue> --item ID --number M [--dry-run]`: the
   # rewrite of a ledger item as "- [ ] #M <title>", once the lead has
-  # created #M. The title comes from GitHub's list of the issue's
+  # created sub-issue #M. The title comes from GitHub's list of the issue's
   # sub-issues, never from an argument, and only a trusted author's goes in
   # the ledger.
   class SubIssueRecord

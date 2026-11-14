@@ -3,7 +3,7 @@
 require_relative 'git'
 
 module Do
-  # The git facts pre-flight step 2 judges an existing branch on, from the
+  # The git facts `preflight check` judges an existing branch on, from the
   # working directory's repository and the push remote: the remote's copy,
   # the local copy and its branch.<name>.* configuration, and the local
   # commits the push remote lacks. BranchAssessment makes the decision.

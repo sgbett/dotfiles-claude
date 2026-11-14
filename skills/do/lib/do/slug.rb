@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Do
-  # Pre-flight step 3's default branch, feat/<N>-<slug>, with the slug made
+  # `preflight facts`' default_branch, feat/<N>-<slug>, and its slug, made
   # from the issue title: lower-cased, each run of characters outside
   # [a-z0-9] turned into one "-", trimmed, at most six words, and "issue"
   # if nothing is left.

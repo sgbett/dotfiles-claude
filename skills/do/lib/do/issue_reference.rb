@@ -6,7 +6,7 @@ module Do
   # URL, https://<host>/<owner>/<repo>/issues/<N>.
   module IssueReference
     DEFAULT_HOST = 'github.com'
-    # Pre-flight step 1 strips the # from "#42".
+    # A bare number may come with its "#", as in /do #42.
     NUMBER = /\A#?(?<number>[0-9]+)\z/
     SHORT = %r{\A(?<repository>[^/#]+/[^/#]+)#(?<number>[0-9]+)\z}
     URL = %r{\Ahttps://(?<host>[^/]+)/(?<repository>[^/]+/[^/]+)/issues/(?<number>[0-9]+)\z}

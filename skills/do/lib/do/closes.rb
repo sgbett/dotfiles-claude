@@ -7,7 +7,7 @@ require_relative 'record_issue'
 
 module Do
   # `record closes <issue> --base B [--verified-items IDS] [--verified-boxes
-  # POSITIONS]`, which writes nothing: the issues step 7's PR closes under
+  # POSITIONS]`, which writes nothing: the issues /do's PR closes under
   # the Closing rule, as `Closes #N` lines when B is this repository's
   # default branch, where GitHub acts on them, or else as the numbers the
   # lead closes by hand; and every issue left open, with why. One that may

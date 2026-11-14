@@ -62,7 +62,8 @@ module Do
       Reasons.ask(Reasons::GATE_RECORD_MISSING, findings: gate.missing) unless gate.missing.empty?
     end
 
-    # Pre-flight step 7: a ledger, or trusted work in flight to seed one from.
+    # Whether references/resume.md applies: a ledger, or trusted work in
+    # flight to seed one from.
     def resuming?
       !ledger.nil? || !query.branches.empty? || query.sub_issues.any? { |sub_issue| seedable?(sub_issue) }
     end
