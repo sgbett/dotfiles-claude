@@ -1,0 +1,9 @@
+{
+  "query": "query PreflightFacts($owner: String!, $name: String!, $number: Int!, $branchQuery: String!) {\n  viewer { login }\n  repository(owner: $owner, name: $name) {\n    id\n    nameWithOwner\n    visibility\n    owner { login }\n    defaultBranchRef { name }\n    labels(first: 100) {\n      pageInfo { hasNextPage hasPreviousPage }\n      nodes { id name }\n    }\n    issueOrPullRequest(number: $number) {\n      __typename\n      ... on Issue {\n        ...issueFacts\n        parent { ...issueFacts }\n        subIssues(first: 100) {\n          pageInfo { hasNextPage hasPreviousPage }\n          nodes { ...issueFacts }\n        }\n        projectItems(first: 20) { totalCount }\n        comments(first: 100) {\n          pageInfo { hasNextPage hasPreviousPage }\n          nodes { id databaseId author { login } authorAssociation viewerDidAuthor body }\n        }\n      }\n    }\n    refs(refPrefix: \"refs/heads/\", query: $branchQuery, first: 20) {\n      pageInfo { hasNextPage hasPreviousPage }\n      nodes {\n        name\n        associatedPullRequests(states: [OPEN], first: 10) {\n          pageInfo { hasNextPage hasPreviousPage }\n          nodes { number author { login } authorAssociation viewerDidAuthor baseRepository { nameWithOwner } }\n        }\n      }\n    }\n  }\n}\n\nfragment issueFacts on Issue {\n  id\n  number\n  title\n  state\n  author { login }\n  authorAssociation\n  viewerDidAuthor\n  repository { nameWithOwner visibility owner { login } }\n  userContentEdits(first: 100) {\n    pageInfo { hasNextPage hasPreviousPage }\n    nodes { editor { login } }\n  }\n  timelineItems(first: 100, itemTypes: [RENAMED_TITLE_EVENT]) {\n    pageInfo { hasNextPage hasPreviousPage }\n    nodes { ... on RenamedTitleEvent { actor { login } } }\n  }\n}\n",
+  "variables": {
+    "owner": "sgbett",
+    "name": "dotfiles-claude",
+    "number": 99999,
+    "branchQuery": "feat/99999-"
+  }
+}

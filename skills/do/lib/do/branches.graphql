@@ -1,0 +1,8 @@
+query Branches($owner: String!, $name: String!, $branchQuery: String!) {
+  repository(owner: $owner, name: $name) {
+    refs(refPrefix: "refs/heads/", query: $branchQuery, first: 20) {
+      pageInfo { hasNextPage hasPreviousPage }
+      nodes { name }
+    }
+  }
+}
