@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'body_files'
 require_relative 'changed_files'
 require_relative 'checkout_repository'
 require_relative 'checks'
@@ -14,10 +15,10 @@ require_relative 'verdict'
 
 module CopilotCheck
   # `promote-check check --pr N --rules-file PATH --start-file PATH
-  # --outcome OUTCOME [--reviews-without-findings IDS]`: reads every fact
-  # Phase 6's conditions rest on, fresh from GitHub and the checkout, and
-  # gives the Verdict. A HOLD is no stop, as the lead goes on to report it;
-  # this stops only where the thread fetch does.
+  # --outcome OUTCOME [--reviews-without-findings IDS --bodies-dir PATH]`:
+  # reads every fact Phase 6's conditions rest on, fresh from GitHub and the
+  # checkout, and gives the Verdict. A HOLD is no stop, as the lead goes on
+  # to report it; this stops only where the thread fetch does.
   class PromotionGate
     UNKNOWN = 'UNKNOWN'
     LOCAL_HEAD = %w[git rev-parse --verify HEAD].freeze
@@ -28,13 +29,14 @@ module CopilotCheck
       @runner = runner
     end
 
-    # The files the lead wrote are read before anything is asked of GitHub.
+    # The files the lead wrote are read before anything is asked of GitHub;
+    # the start file's repository is checked once the checkout's is known.
     def call
       rules = PromotionRules.read(@options.rules_file)
-      started_as_draft = StartState.draft?(@options.start_file, @options.pr)
+      start = StartState.read(@options.start_file, @options.pr)
       @repository = CheckoutRepository.resolve(@runner)
       @github = SkillSupport::Gh.new(host: @repository.host, runner: @runner)
-      report(Verdict.new(facts(rules, started_as_draft)))
+      report(Verdict.new(facts(rules, start.draft?(@repository))))
     rescue Stop => e
       Reasons.stop(e.reason, repository: GateReport.repository_fields(@repository),
                              pull_request: { number: @options.pr })
@@ -57,9 +59,17 @@ module CopilotCheck
     # Read in this order, Phase 6's, so that mergeable, re-read only after
     # the checks, has had longest to settle from UNKNOWN.
     def fetched(rules, pull_request)
-      { threads: Threads.new(@github).fetch(name, @options.pr), local_head: local_head,
+      threads = Threads.new(@github).fetch(name, @options.pr)
+      { threads: threads, reviews_read: reviews_read(threads), local_head: local_head,
         files: ChangedFiles.new(@github).list(name, @options.pr, changed_files: pull_request.changed_files),
         checks: checks(rules), mergeable: mergeable(pull_request) }
+    end
+
+    # The to-do reviews given as free of findings whose body file the run
+    # read is still their body.
+    def reviews_read(threads)
+      given = threads.todo_reviews.select { |review| @options.reviews_without_findings.include?(review.review_id) }
+      BodyFiles.current_reviews(@options.bodies_dir, given)
     end
 
     def checks(rules)

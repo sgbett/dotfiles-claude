@@ -33,11 +33,13 @@ module CopilotCheck
       threads.select { |thread| to_do?(thread) }.map { |thread| todo_thread(thread) }
     end
 
-    # The TodoReviews among Copilot's review nodes +reviews+, given the pull
-    # request's comment nodes +comments+, of which only ours count.
+    # The TodoReviews among the review nodes +reviews+ that Copilot wrote,
+    # given the pull request's comment nodes +comments+, of which only ours
+    # count.
     def reviews(reviews, comments)
       answered = answered_ids(comments)
-      reviews.map { |review| TodoReview.new(review_id: review_id(review), body: review['body']) }
+      reviews.select { |review| Copilot.authored?(review) }
+             .map { |review| TodoReview.new(review_id: review_id(review), body: review['body']) }
              .reject { |review| answered.include?(review.review_id) }
     end
 

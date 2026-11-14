@@ -68,9 +68,11 @@ module CopilotCheck
       raise SkillSupport::UnexpectedResponse, "the thread fetch's #{list} came back without their nodes"
     end
 
+    # Copilot's latest review, nil when it hasn't reviewed, as when the
+    # latest under its login isn't a bot's.
     def latest_review(pull_request)
       node = nodes(pull_request, 'latest').first
-      return unless node
+      return unless Copilot.bot_review?(node)
 
       copilot!(node)
       comments = node.dig('comments', 'totalCount')
@@ -81,12 +83,15 @@ module CopilotCheck
       LatestReview.new(submitted_at: node['submittedAt'], comments: comments, commit: node.dig('commit', 'oid'))
     end
 
-    # Every review the login filter returned must carry Copilot's id, as
-    # must a thread a bot started under Copilot's comment login.
+    # Every review a bot wrote that the login filter returned must carry
+    # Copilot's id, as must a thread a bot started under Copilot's comment
+    # login. Any other author, such as the organisation that holds the bare
+    # login, isn't Copilot, and TodoSelection leaves its reviews and threads
+    # out.
     def copilot_ids!(reviews, threads)
       comments = threads.map { |thread| TodoSelection.first_comment(thread) }
                         .select { |comment| Copilot.comment_login?(comment) }
-      (reviews + comments).each { |node| copilot!(node) }
+      (reviews.select { |review| Copilot.bot_review?(review) } + comments).each { |node| copilot!(node) }
     end
 
     # 2a's guard: when Copilot's latest review made inline comments, some

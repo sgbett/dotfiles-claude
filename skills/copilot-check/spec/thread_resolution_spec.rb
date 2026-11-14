@@ -75,6 +75,42 @@ RSpec.describe CopilotCheck::ThreadResolution do
     expect(resolve(response).last.values_at('resolved', 'changed')).to eq([[], []])
   end
 
+  describe "Copilot's look-alikes (#12)" do
+    let(:organisation) { { '__typename' => 'Organization', 'login' => CopilotCheck::Copilot::COMMENT_LOGIN } }
+
+    # #3 with our reply last on +first+, whose first comment +author+
+    # wrote, and a review under Copilot's login by +review_author+.
+    def look_alike(author, review_author)
+      answered(first).tap do |response|
+        pull_request = threads_pull_request(response)
+        thread = pull_request['reviewThreads']['nodes'].find { |node| node['id'] == first }
+        thread['first']['nodes'].first['author'] = author
+        pull_request['reviews']['nodes'] << { 'databaseId' => 7, 'author' => review_author, 'body' => 'A look-alike.' }
+      end
+    end
+
+    it "never resolves, nor stops on, a thread or review the organisation wrote under Copilot's GraphQL login" do
+      expect(resolve(look_alike(organisation, {})).last.values_at('status', 'resolved', 'changed'))
+        .to eq(['proceed', [], []])
+    end
+
+    it 'never resolves, nor stops on, a thread or review whose author GitHub gives as null' do
+      expect(resolve(look_alike(nil, nil)).last.values_at('status', 'resolved', 'changed'))
+        .to eq(['proceed', [], []])
+    end
+
+    it "leaves a thread whose re-read shows the organisation, or nobody, where Copilot's comment was" do
+      [organisation, nil].each do |author|
+        reread = thread_reread_response(first)
+        reread['data']['node']['first']['nodes'].first['author'] = author
+
+        output = resolve(answered(first)) { expect_thread_reread(first, reread) }.last
+
+        expect(output.values_at('resolved', 'changed')).to eq([[], [first]]), author.inspect
+      end
+    end
+  end
+
   it 'resolves nothing on a dry run, giving the threads it would resolve' do
     expect(resolve(answered(first), '--dry-run').last.values_at('resolved', 'changed', 'dry_run'))
       .to eq([[first], [], true])

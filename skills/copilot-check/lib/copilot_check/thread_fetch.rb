@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'body_files'
 require_relative 'checkout_repository'
 require_relative 'output_file'
 require_relative 'reasons'
@@ -11,7 +12,9 @@ module CopilotCheck
   # review is still to do, from one fresh fetch with every stop 2a makes
   # (Threads): its threads, by their ids and location, and its reviews, by
   # id. Each one's body, Copilot's text, goes to a file in DIR for the
-  # verifiers, never to stdout, and a thread's path is printed only as
+  # verifiers, never to stdout, as does an outdated thread's file as it
+  # stood at the commit Copilot commented on, read through GitHub so that
+  # no path reaches a command line; a thread's path is printed only as
   # GitHub text.
   class ThreadFetch
     # +options+ are ThreadsArguments' Options.
@@ -33,23 +36,31 @@ module CopilotCheck
     private
 
     def fetch
-      repository = CheckoutRepository.resolve(@runner)
-      Threads.new(SkillSupport::Gh.new(host: repository.host, runner: @runner))
-             .fetch(repository.name_with_owner, @options.pr)
+      @repository = CheckoutRepository.resolve(@runner)
+      @github = SkillSupport::Gh.new(host: @repository.host, runner: @runner)
+      Threads.new(@github).fetch(@repository.name_with_owner, @options.pr)
     end
 
-    # +line+ is nil, and the code at +original_line+ in +original_commit+,
+    # +line+ is nil, and the code at +original_line+ in +original_file+,
     # once later commits have moved it.
     def thread_entry(thread)
       comment_id = SkillSupport::Identifiers.comment_id!(thread.comment_id)
+      path = path(thread)
       { thread_id: SkillSupport::Identifiers.node_id!(thread.thread_id), comment_id: comment_id,
         outdated: outdated(thread), line: line(thread.line), original_line: line(thread.original_line),
-        original_commit: thread.original_commit && SkillSupport::Identifiers.commit_sha!(thread.original_commit),
-        body_file: body_file("thread-#{comment_id}.md", thread.body), github_text: { path: path(thread) } }
+        **original(thread, comment_id, path), body_file: body_file(BodyFiles.thread(comment_id), thread.body),
+        github_text: { path: path } }
+    end
+
+    # The commit an outdated thread's code is in, and the file as it stood
+    # there.
+    def original(thread, comment_id, path)
+      commit = thread.original_commit && SkillSupport::Identifiers.commit_sha!(thread.original_commit)
+      { original_commit: commit, original_file: (original_file(comment_id, path, commit) if thread.outdated) }
     end
 
     def review_entry(review)
-      { review_id: review.review_id, body_file: body_file("review-#{review.review_id}.md", review.body) }
+      { review_id: review.review_id, body_file: body_file(BodyFiles.review(review.review_id), review.body) }
     end
 
     # Writes +body+ to the file +name+ in the bodies directory and returns
@@ -57,6 +68,33 @@ module CopilotCheck
     def body_file(name, body)
       OutputFile.write(File.join(@directory, name), body.to_s)
       name
+    end
+
+    # Writes the file at +path+ as it stood at +commit+ to the bodies
+    # directory and returns its name, or nil when GitHub says the path
+    # didn't exist there.
+    def original_file(comment_id, path, commit)
+      unless commit
+        raise SkillSupport::UnexpectedResponse, "outdated review comment #{comment_id} has no original commit"
+      end
+
+      text = original_text(comment_id, path, commit)
+      body_file(BodyFiles.original(comment_id), text) unless text.nil?
+    end
+
+    # The file at +path+ as it stood at +commit+, or nil when the path didn't
+    # exist there. The path is GitHub text, so a failure names the comment
+    # instead.
+    def original_text(comment_id, path, commit)
+      text = SkillSupport::RepositoryFiles.new(@github).read(@repository.name_with_owner, path, ref: commit)
+      text.is_a?(Array) ? not_a_file!(comment_id) : text
+    rescue SkillSupport::UnexpectedResponse
+      not_a_file!(comment_id)
+    end
+
+    def not_a_file!(comment_id)
+      raise SkillSupport::UnexpectedResponse, "review comment #{comment_id}'s path isn't a file of at most 1 MB at " \
+                                              'its original commit'
     end
 
     def outdated(thread)

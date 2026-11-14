@@ -41,7 +41,7 @@ module CopilotCheck
     def copilot
       threads = @facts.threads
       { reviewed_commit: threads.latest_review&.commit, todo_threads: threads.todo_threads.length,
-        todo_reviews: threads.todo_reviews.map(&:review_id) }
+        todo_reviews: threads.todo_reviews.map(&:review_id), unread_reviews: @verdict.unread_reviews }
     end
 
     def files

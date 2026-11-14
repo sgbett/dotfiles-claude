@@ -10,9 +10,12 @@ RSpec.describe CopilotCheck::ThreadFetch do
   let(:todo_comments) { [3_523_393_698, 3_523_393_706, 3_523_393_712, 3_523_393_716, 3_523_393_720] }
   let(:todo_reviews) { [4_629_353_421, 4_629_383_851, 4_629_808_973] }
 
+  # Runs `threads fetch` on the fetch +response+, after which the block
+  # expects any further calls the case makes.
   def fetch(response = threads_response('threads-3'), number: 3)
     expect_repo_view
     expect_threads(response, number: number)
+    yield if block_given?
     outcome = CopilotCheck::ThreadsCommand.call(['fetch', '--pr', number.to_s, '--bodies-dir', bodies],
                                                 runner: fake_runner)
     [outcome.exit_code, JSON.parse(outcome.to_json)]
@@ -20,6 +23,32 @@ RSpec.describe CopilotCheck::ThreadFetch do
 
   def recorded_threads
     threads_pull_request(threads_response('threads-3'))['reviewThreads']['nodes']
+  end
+
+  # #3 as recorded, with its first thread, outdated and resolved, still to
+  # do, and its first comment's +path+ changed if given.
+  def outdated_to_do(path: nil)
+    threads_response('threads-3').tap do |response|
+      first = threads_pull_request(response)['reviewThreads']['nodes'].first
+      first['isResolved'] = false
+      first['last']['nodes'] = [{ 'viewerDidAuthor' => false }]
+      first['first']['nodes'].first['path'] = path if path
+    end
+  end
+
+  # The read of +path+ at the outdated thread's original commit, as
+  # recorded, answered with +body+, or GitHub's recorded 404 for nil.
+  def expect_original(body, path: 'skills/copilot-check/SKILL.md')
+    call = ['gh', 'api', '--hostname', 'github.com', '-X', 'GET', "repos/sgbett/dotfiles-claude/contents/#{path}",
+            '-f', "ref=#{outdated_commit}"]
+    return fake_runner.expect_call(call, stdout: as_json(body)) if body
+
+    fake_runner.expect_call(call, exit_status: 1, stdout: fixture('contents/rubric-not-found.json'),
+                                  stderr: fixture('contents/rubric-not-found.stderr'))
+  end
+
+  def outdated_commit
+    'c8e07c074ff42da979bccbbef2d6e61465ad1e31'
   end
 
   it "gives #3's threads and reviews still to do, as recorded, by their ids and locations" do
@@ -30,7 +59,8 @@ RSpec.describe CopilotCheck::ThreadFetch do
     expect(output['todo_threads'].first)
       .to eq('thread_id' => 'PRRT_kwDOQzoXSs6OWG23', 'comment_id' => 3_523_393_698, 'outdated' => false, 'line' => 109,
              'original_line' => 109, 'original_commit' => 'c53d8440d9c3179cf9a5406eb286f9c2550a09d2',
-             'body_file' => 'thread-3523393698.md', 'github_text' => { 'path' => 'skills/copilot-check/SKILL.md' })
+             'original_file' => nil, 'body_file' => 'thread-3523393698.md',
+             'github_text' => { 'path' => 'skills/copilot-check/SKILL.md' })
     expect(output['todo_reviews'])
       .to eq(todo_reviews.map { |id| { 'review_id' => id, 'body_file' => "review-#{id}.md" } })
   end
@@ -50,16 +80,41 @@ RSpec.describe CopilotCheck::ThreadFetch do
     expect(File.stat(bodies).mode & 0o777).to eq(0o700)
   end
 
-  it "gives an outdated thread's location as its original line in its original commit" do
-    response = threads_response('threads-3')
-    first = threads_pull_request(response)['reviewThreads']['nodes'].first
-    first['isResolved'] = false
-    first['last']['nodes'] = [{ 'viewerDidAuthor' => false }]
+  it "writes an outdated thread's file as it stood at its original commit, read through GitHub, never a command " \
+     'line naming its path' do
+    text = "# Check Copilot Review Comments\n\nAs the file stood.\n"
+    thread = fetch(outdated_to_do) { expect_original(rubric_response(text)) }.last['todo_threads'].first
 
-    thread = fetch(response).last['todo_threads'].first
+    expect(thread.values_at('outdated', 'line', 'original_line', 'original_commit', 'original_file'))
+      .to eq([true, nil, 4, outdated_commit, 'original-3523012650'])
+    written = File.join(bodies, 'original-3523012650')
+    expect([File.read(written), File.stat(written).mode & 0o777]).to eq([text, 0o600])
+    expect(fake_runner.calls.map { |call| call[:argv].first }.uniq).to eq(['gh'])
+  end
 
-    expect(thread.values_at('outdated', 'line', 'original_line', 'original_commit'))
-      .to eq([true, nil, 4, 'c8e07c074ff42da979bccbbef2d6e61465ad1e31'])
+  it "gives no original file, and writes none, when GitHub says the path didn't exist at that commit" do
+    thread = fetch(outdated_to_do) { expect_original(nil) }.last['todo_threads'].first
+
+    expect([thread.values_at('outdated', 'original_file'), File.exist?(File.join(bodies, 'original-3523012650'))])
+      .to eq([[true, nil], false])
+  end
+
+  it 'reads a path no shell could take whole as one percent-encoded API path, and never prints it' do
+    path = "lib/$(touch x); 'a' \"b\".rb"
+    thread = fetch(outdated_to_do(path: path)) do
+      expect_original(rubric_response('x'), path: 'lib/%24%28touch%20x%29%3B%20%27a%27%20%22b%22.rb')
+    end.last['todo_threads'].first
+
+    expect([thread['original_file'], thread['github_text']]).to eq(['original-3523012650', { 'path' => path }])
+  end
+
+  it "fails as a tool, naming the comment and not the path, when the path at that commit isn't a file" do
+    [[{ 'type' => 'file', 'name' => 'a.rb' }], { 'type' => 'symlink', 'target' => 'elsewhere' },
+     { 'type' => 'file', 'encoding' => 'none', 'content' => '' }].each do |body|
+      expect { fetch(outdated_to_do) { expect_original(body) } }
+        .to raise_error(SkillSupport::UnexpectedResponse, /\Areview comment 3523012650's path isn't a file/),
+            body.inspect
+    end
   end
 
   it 'gives nothing to do once every thread is answered and every review marked, as on #14 recorded' do

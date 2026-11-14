@@ -9,15 +9,24 @@ module CopilotCheck
   # resolves itself. Its URL must name the checkout's repository, so that
   # every later call targets the same one.
   class PullRequestView
-    FIELDS = %w[number baseRefName isCrossRepository isDraft headRefOid url].freeze
+    FIELDS = %w[number baseRefName isCrossRepository isDraft headRefOid state url].freeze
     URL = %r{\Ahttps://(?<host>[^/]+)/(?<path>[^/]+/[^/]+)/pull/(?<number>[1-9][0-9]*)\z}
+    OPEN = 'OPEN'
+    STATES = [OPEN, 'CLOSED', 'MERGED'].freeze
 
-    # +base+ is the base branch's name; +head+ the head commit's oid.
-    PullRequest = Struct.new(:number, :base, :draft, :cross_repository, :head, keyword_init: true) do
-      # What the start file records: the pull request as it was when the run
-      # began, as promote-check reads it.
-      def start_state
-        { 'number' => number, 'baseRefName' => base, 'isCrossRepository' => cross_repository, 'isDraft' => draft }
+    # +base+ is the base branch's name; +head+ the head commit's oid; +state+
+    # one of STATES.
+    PullRequest = Struct.new(:number, :base, :draft, :cross_repository, :head, :state, keyword_init: true) do
+      def open?
+        state == OPEN
+      end
+
+      # What the start file records: the pull request of +repository+, the
+      # CheckoutRepository::Repository, as it was when the run began, as
+      # promote-check reads it (StartState).
+      def start_state(repository)
+        { 'number' => number, 'repository' => repository.argument, 'baseRefName' => base,
+          'isCrossRepository' => cross_repository, 'isDraft' => draft }
       end
     end
 
@@ -57,7 +66,7 @@ module CopilotCheck
 
       PullRequest.new(number: number, base: base(view), draft: flag(view, 'isDraft'),
                       cross_repository: flag(view, 'isCrossRepository'),
-                      head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']))
+                      head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']), state: state(view))
     end
 
     def this_repository?(url, number)
@@ -77,6 +86,12 @@ module CopilotCheck
       return view[name] if [true, false].include?(view[name])
 
       raise SkillSupport::UnexpectedResponse, "gh pr view gave no #{name}"
+    end
+
+    def state(view)
+      return view['state'] if STATES.include?(view['state'])
+
+      raise SkillSupport::UnexpectedResponse, 'gh pr view gave no state'
     end
   end
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../lib/copilot_check/promote_check'
+require_relative 'lead_files'
 
 module CopilotCheck
   module Testing
@@ -11,6 +12,8 @@ module CopilotCheck
     #
     #   expect_gate(checks: { entries: [check_entry('lint', 'pending')] })
     module GateCalls
+      include LeadFiles
+
       HERE = 'sgbett/dotfiles-claude'
       NUMBER = 18
       # #18's head, the commit Copilot's latest recorded review is of.
@@ -120,28 +123,15 @@ module CopilotCheck
         expect_pull_request_step(response: reread) if reread
       end
 
-      def annotation(message)
-        { 'path' => '.github', 'start_line' => 1, 'end_line' => 1, 'annotation_level' => 'failure', 'title' => '',
+      def annotation(message, level: 'failure')
+        { 'path' => '.github', 'start_line' => 1, 'end_line' => 1, 'annotation_level' => level, 'title' => '',
           'message' => message, 'raw_details' => '' }
       end
 
-      # The rules file, as the lead writes it: the rules say PRs open as
-      # drafts and merging is the owner's, unless +rules+ say otherwise.
-      def rules_file(**rules)
-        rules = { draft_flow: true, merge_is_owners_step: true, expected_failures: [] }.merge(rules)
-        sandbox.path('promotion-rules.json').tap { |path| File.write(path, JSON.generate(rules)) }
-      end
-
-      # Phase 0's pr0.json for #18, a draft when the run began unless
-      # +draft+ is false.
-      def start_file(draft: true, number: NUMBER)
-        state = { 'baseRefName' => 'master', 'isCrossRepository' => false, 'isDraft' => draft, 'number' => number }
-        sandbox.path('pr0.json').tap { |path| File.write(path, JSON.generate(state)) }
-      end
-
-      def gate_arguments(outcome: 'converged', reviews: REVIEWS, rules: rules_file, start: start_file)
+      def gate_arguments(outcome: 'converged', reviews: REVIEWS, rules: rules_file, start: start_file,
+                         bodies: bodies_directory)
         ['check', '--pr', NUMBER.to_s, '--rules-file', rules, '--start-file', start, '--outcome', outcome,
-         *(['--reviews-without-findings', reviews.join(',')] unless reviews.empty?)]
+         *(['--reviews-without-findings', reviews.join(','), '--bodies-dir', bodies] unless reviews.empty?)]
       end
 
       # Runs `promote-check` on +arguments+ in process, returning the exit

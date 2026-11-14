@@ -18,10 +18,12 @@ module CopilotCheck
     # PullRequestQuery::PullRequest, with +mergeable+ re-read once if it was
     # UNKNOWN; +local_head+ the checkout's HEAD; +threads+ a fresh
     # Threads::Result, of which the reviews in +reviews_without_findings+
-    # (ids) the run read and found no finding in; +files+ a
-    # ChangedFiles::Result; +checks+ the Checks::Checks on the head.
+    # (ids) the run says it read and found no finding in, and those in
+    # +reviews_read+ (ids) have a body file the run read that is still
+    # their body; +files+ a ChangedFiles::Result; +checks+ the
+    # Checks::Checks on the head.
     Facts = Struct.new(:rules, :started_as_draft, :outcome, :pull_request, :mergeable, :local_head, :threads,
-                       :reviews_without_findings, :files, :checks, keyword_init: true)
+                       :reviews_without_findings, :reviews_read, :files, :checks, keyword_init: true)
 
     attr_reader :facts
 
@@ -34,8 +36,14 @@ module CopilotCheck
     end
 
     def reasons
-      @reasons ||= [*pull_request_reasons, *rules_reasons, *run_reasons, *author_reasons, *files_reasons,
-                    *checks_reasons, *merge_reasons].freeze
+      @reasons ||= [*pull_request_reasons, *rules_reasons, *run_reasons, *review_reasons, *author_reasons,
+                    *files_reasons, *checks_reasons, *merge_reasons].freeze
+    end
+
+    # The to-do reviews the run says it found free of findings, but whose
+    # body file it read isn't their body now.
+    def unread_reviews
+      (todo_reviews & @facts.reviews_without_findings) - @facts.reviews_read
     end
 
     private
@@ -51,12 +59,15 @@ module CopilotCheck
     end
 
     def run_reasons
-      threads = @facts.threads
       [(:not_converged unless @facts.outcome == CONVERGED),
        (:local_head_differs unless @facts.local_head == pull_request.head),
-       (:copilot_not_on_head unless threads.latest_review&.commit == pull_request.head),
-       (:todo_threads unless threads.todo_threads.empty?),
-       (:unanswered_reviews unless unjudged_reviews.empty?)].compact
+       (:copilot_not_on_head unless @facts.threads.latest_review&.commit == pull_request.head)].compact
+    end
+
+    def review_reasons
+      [(:todo_threads unless @facts.threads.todo_threads.empty?),
+       (:unanswered_reviews unless unanswered_reviews.empty?),
+       (:review_bodies_unread unless unread_reviews.empty?)].compact
     end
 
     def author_reasons
@@ -83,9 +94,13 @@ module CopilotCheck
       [(:not_mergeable unless @facts.mergeable == MERGEABLE), (:auto_merge_on if pull_request.auto_merge)].compact
     end
 
-    # The to-do reviews the run didn't find free of findings.
-    def unjudged_reviews
-      @facts.threads.todo_reviews.map(&:review_id) - @facts.reviews_without_findings
+    # The to-do reviews the run doesn't say it found free of findings.
+    def unanswered_reviews
+      todo_reviews - @facts.reviews_without_findings
+    end
+
+    def todo_reviews
+      @facts.threads.todo_reviews.map(&:review_id)
     end
 
     def pull_request

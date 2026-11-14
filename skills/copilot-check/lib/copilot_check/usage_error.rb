@@ -6,11 +6,11 @@ module CopilotCheck
     USAGE = [
       'usage: promote-check check --pr <number> --rules-file <path> --start-file <path>',
       '                           --outcome converged|halted|timeout|stop|push-failed',
-      '                           [--reviews-without-findings <review ids>]',
+      '                           [--reviews-without-findings <review ids> --bodies-dir <path>]',
       '       promote-check verify --pr <number> --head <sha>',
       "where the rules file is the JSON the lead writes from the repository's rules, the start file is",
-      "Phase 0's pr0.json, and <review ids>, comma-separated, are the to-do Copilot reviews the run read",
-      'and found no finding in'
+      "Phase 0's pr0.json, <review ids>, comma-separated, are the to-do Copilot reviews the run read and",
+      'found no finding in, and --bodies-dir is the directory of the threads fetch whose body files it read'
     ].join("\n").freeze
 
     def initialize
@@ -22,6 +22,7 @@ module CopilotCheck
   class SetupUsageError < UsageError
     USAGE = [
       'usage: setup --argument-file <path> --start-file <path> --rubric-file <path> [--accept-fork <sha>]',
+      '             [--accept-scripts <digest>]',
       "where the argument file holds the skill's argument as the user gave it, a pull request number or",
       'nothing, and setup writes the start file and the rubric file, at absolute paths'
     ].join("\n").freeze

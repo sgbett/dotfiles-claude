@@ -51,7 +51,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
   end
 
   it 'hands promote-check the start file setup writes, and single-quotes every path and the mark' do
-    quoted = calls.flat_map { |_script, call| call.scan(/(\S*\{(?:scratch|mark)\}\S*)/).flatten }
+    quoted = calls.flat_map { |_script, call| call.delete('[]').scan(/(\S*\{(?:scratch|mark)\}\S*)/).flatten }
 
     expect(parsed('setup').first.start_file).to eq(parsed('promote-check').first.start_file)
     expect(quoted.length).to be >= 7
@@ -61,8 +61,33 @@ RSpec.describe "/copilot-check's calls of its scripts" do
   it 'calls check and verify with what the run gives them' do
     check, = parsed('promote-check')
 
-    expect(check.to_h.values_at(:rules_file, :reviews_without_findings))
-      .to eq(['/scratch/promotion-rules.json', [5_881_418_347, 5_881_467_821]])
+    expect(check.to_h.values_at(:rules_file, :reviews_without_findings, :bodies_dir))
+      .to eq(['/scratch/promotion-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/round-1'])
+  end
+
+  it "hands threads fetch and check the same round's bodies directory, and puts no thread's path on a command line" do
+    fetch, = parsed('threads')
+    check, = parsed('promote-check')
+
+    expect(check.bodies_dir).to eq(fetch.bodies_dir)
+    expect(skill).not_to match(/git show|\{path\}/)
+  end
+
+  it "ends the run at a stop from Phase 6's own call, rather than going by way of Phase 6 again" do
+    expect(skill).to include('by way of Phase 6, with outcome `timeout` after reason `copilot_timeout`, else `stop`, ' \
+                             "though a stop from Phase 6's own call ends it there.")
+  end
+
+  it 'takes the review ids only from the fetch whose body files the lead read, and holds a HOLD for the run' do
+    expect(skill).to include("whose body files from the last round's `threads fetch`, round `{n}`, you read and " \
+                             'found no finding in, and no others')
+    expect(skill).to include('**On `HOLD`**, leave the PR as it is: the verdict is final for the run, so never run ' \
+                             '`check` again.')
+  end
+
+  it "says in Phase 0 that setup stops on a pull request that isn't open, and asks about its own scripts" do
+    expect(skill).to include("stops on a PR that isn't open, and asks before going on with a PR from a fork or with " \
+                             'scripts that may not be the reviewed ones.')
   end
 
   it 'names every outcome check takes, and the rules file by its keys' do
@@ -96,12 +121,15 @@ RSpec.describe "/copilot-check's calls of its scripts" do
     it "are setup's" do
       expect_repo_view
       expect_pr_view
+      expect_scripts_step
       fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
       expect_rubric
       expect_latest_review
       argument = sandbox.path('argument.txt').tap { |path| File.write(path, '18') }
-      output = run(CopilotCheck::Setup, ['--argument-file', argument, '--start-file', sandbox.path('pr0.json'),
-                                         '--rubric-file', sandbox.path('rubric.md')])
+      outcome = CopilotCheck::Setup.call(['--argument-file', argument, '--start-file', sandbox.path('pr0.json'),
+                                          '--rubric-file', sandbox.path('rubric.md')],
+                                         runner: fake_runner, skill_directory: scripts_skill_directory)
+      output = JSON.parse(outcome.to_json)
       fields = %w[pull_request.number repository.name_with_owner repository.host pull_request.base high_water_mark
                   rubric_found]
 
@@ -117,7 +145,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       expect_pull_request_id
       requested = run(CopilotCheck::Rereview, %w[request --pr 18 --dry-run])
 
-      expect(%w[thread_id comment_id line original_line original_commit body_file github_text]
+      expect(%w[thread_id comment_id line original_line original_commit original_file body_file github_text]
                .reject { |field| named?(field) && thread.key?(field) }).to be_empty
       expect([named?('todo_reviews'), fetched['todo_reviews'].first.key?('body_file')]).to eq([true, true])
       expect([named?('review_request'), requested.key?('review_request')]).to eq([true, true])

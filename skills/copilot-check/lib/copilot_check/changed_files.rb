@@ -10,7 +10,9 @@ module CopilotCheck
     # GitHub lists at most 3,000 of a pull request's files.
     MAX_PAGES = 30
     WORKFLOW_DIRECTORIES = %w[.github/workflows/ .github/actions/].freeze
-    RULES_FILE = 'CLAUDE.md'
+    # What Claude Code loads from a checkout: its rules, local rules and
+    # project MCP servers.
+    CLAUDE_FILES = %w[CLAUDE.md CLAUDE.local.md .mcp.json].freeze
     RULES_DIRECTORY = '.claude'
 
     # +paths+ are each file's path and a renamed file's previous one;
@@ -22,12 +24,15 @@ module CopilotCheck
     end
 
     # Whether +path+ is under .github/workflows/ or .github/actions/, is a
-    # file named CLAUDE.md, or is under a .claude directory at any depth.
-    # Case is ignored, as a case-insensitive file system ignores it.
+    # file named CLAUDE.md, CLAUDE.local.md or .mcp.json, or is under a
+    # .claude directory, the last three at any depth, as Claude Code can
+    # start in any directory of a checkout. Case is ignored, as a
+    # case-insensitive file system ignores it.
     def self.protected?(path)
       directories = path.split('/')[0...-1]
       WORKFLOW_DIRECTORIES.any? { |directory| path.downcase.start_with?(directory) } ||
-        File.basename(path).casecmp?(RULES_FILE) || directories.any? { |name| name.casecmp?(RULES_DIRECTORY) }
+        CLAUDE_FILES.any? { |name| File.basename(path).casecmp?(name) } ||
+        directories.any? { |name| name.casecmp?(RULES_DIRECTORY) }
     end
 
     # +github+ is the SkillSupport::Gh for the repository's host.

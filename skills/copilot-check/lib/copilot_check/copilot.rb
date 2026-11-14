@@ -26,5 +26,13 @@ module CopilotCheck
       author = comment && comment['author']
       author.is_a?(Hash) && author['__typename'] == BOT_TYPE && author['login'] == COMMENT_LOGIN
     end
+
+    # Whether a bot wrote GraphQL review +review+, whatever its id: under
+    # author { ... on Bot { id } }, only a bot's author carries an id, so the
+    # login's other holder, an organisation, has none.
+    def bot_review?(review)
+      author = review && review['author']
+      author.is_a?(Hash) && author.key?('id')
+    end
   end
 end

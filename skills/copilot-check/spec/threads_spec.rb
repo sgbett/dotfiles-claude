@@ -150,6 +150,62 @@ RSpec.describe CopilotCheck::Threads do
     end
   end
 
+  describe "Copilot's look-alikes (#12)" do
+    # The organisation that holds Copilot's bare GraphQL login, as a
+    # comment's author gives it; as a review's, under author { ... on Bot
+    # { id } }, it gives nothing.
+    let(:organisation) { { '__typename' => 'Organization', 'login' => CopilotCheck::Copilot::COMMENT_LOGIN } }
+
+    it "takes no thread or review the organisation wrote under Copilot's GraphQL login for Copilot's, and stops " \
+       "on neither's id" do
+      response = changed_threads do |pull_request|
+        thread_of(pull_request)['isResolved'] = false
+        thread_of(pull_request)['first']['nodes'].first['author'] = organisation
+        pull_request['reviews']['nodes'] << { 'databaseId' => 7, 'author' => {}, 'body' => 'A look-alike.' }
+      end
+
+      result = fetch(response)
+
+      expect([result.todo_threads, result.resolvable_threads, result.todo_reviews.map(&:review_id)])
+        .to eq([[], [], [5_670_324_332]])
+    end
+
+    it "takes the organisation's review as no latest review of Copilot's, rather than a changed id" do
+      response = changed_threads do |pull_request|
+        pull_request['latest']['nodes'] = [{ 'submittedAt' => '2026-11-14T09:00:00Z', 'author' => {},
+                                             'comments' => { 'totalCount' => 1 }, 'commit' => { 'oid' => 'a' * 40 } }]
+      end
+
+      expect(fetch(response).latest_review).to be_nil
+    end
+
+    it 'takes a thread whose author GitHub gives as null, a deleted account, for nobody\'s, stopping on nothing' do
+      response = changed_threads do |pull_request|
+        thread_of(pull_request)['isResolved'] = false
+        thread_of(pull_request)['first']['nodes'].first['author'] = nil
+        pull_request['reviews']['nodes'] << { 'databaseId' => 8, 'author' => nil, 'body' => 'A ghost.' }
+      end
+
+      result = fetch(response)
+
+      expect([result.todo_threads, result.resolvable_threads, result.todo_reviews.map(&:review_id)])
+        .to eq([[], [], [5_670_324_332]])
+    end
+
+    it "still stops on a bot's review or thread under Copilot's login with another id" do
+      bot_review = { 'databaseId' => 7, 'author' => { 'id' => 'BOT_x' }, 'body' => '' }
+      cases = [
+        changed_threads { |pull_request| pull_request['reviews']['nodes'] << bot_review },
+        changed_threads do |pull_request|
+          thread_of(pull_request)['first']['nodes'].first['author'] =
+            { '__typename' => 'Bot', 'login' => CopilotCheck::Copilot::COMMENT_LOGIN, 'id' => 'BOT_x' }
+        end
+      ]
+
+      expect(cases.map { |response| stop_reason { fetch(response) } }).to all(eq(:copilot_id_changed))
+    end
+  end
+
   describe 'where Phase 2a stops' do
     it 'stops when a review under Copilot\'s login, its latest one or a thread it started carries another id' do
       other_id = { 'id' => 'BOT_kgDOOtherId' }

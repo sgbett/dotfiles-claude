@@ -15,7 +15,18 @@ RSpec.describe 'The arguments of setup, threads and rereview' do
       options = described_class.parse([*setup_flags.drop(2), '--accept-fork', head.upcase, *setup_flags.take(2)])
 
       expect(options.to_h).to eq(argument_file: '/scratch/argument.txt', start_file: '/scratch/pr0.json',
-                                 rubric_file: '/scratch/rubric.md', accept_fork: head)
+                                 rubric_file: '/scratch/rubric.md', accept_fork: head, accept_scripts: nil)
+    end
+
+    it 'takes the digest a yes to its scripts was given for, and only a whole SHA-256 digest' do
+      digest = 'c' * 64
+
+      expect(described_class.parse([*setup_flags, '--accept-scripts', digest]).accept_scripts).to eq(digest)
+      ['C' * 64, 'c' * 63, 'yes'].each do |value|
+        expect { described_class.parse([*setup_flags, '--accept-scripts', value]) }
+          .to raise_error(SkillSupport::InvalidIdentifier, 'invalid scripts_digest'), value
+      end
+      expect { described_class.parse([*setup_flags, '--accept-scripts']) }.to raise_error(CopilotCheck::SetupUsageError)
     end
 
     it 'refuses a flag it lacks, repeats or does not take, and a subcommand' do

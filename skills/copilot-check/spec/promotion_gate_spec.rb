@@ -22,7 +22,7 @@ RSpec.describe CopilotCheck::PromotionGate do
                                  'mergeable' => 'MERGEABLE' },
              'local_head' => head,
              'copilot' => { 'reviewed_commit' => head, 'todo_threads' => 0,
-                            'todo_reviews' => CopilotCheck::Testing::GateCalls::REVIEWS },
+                            'todo_reviews' => CopilotCheck::Testing::GateCalls::REVIEWS, 'unread_reviews' => [] },
              'files' => { 'complete' => true, 'protected_paths' => 0, 'github_text' => { 'protected_paths' => [] } },
              'checks' => [{ 'bucket' => 'pass', 'github_text' => { 'name' => 'test' } }])
   end
@@ -58,6 +58,62 @@ RSpec.describe CopilotCheck::PromotionGate do
     output = run_promote_check(gate_arguments).last
     expect([output['reasons'].map { |reason| reason['reason'] }, output['pull_request']['mergeable']])
       .to eq([%w[not_mergeable], 'UNKNOWN'])
+  end
+
+  it "holds a review given as free of findings whose body file is missing, or isn't its body now" do
+    first, second = CopilotCheck::Testing::GateCalls::REVIEWS
+    bodies = bodies_directory
+    File.delete(File.join(bodies, "review-#{first}.md"))
+    File.write(File.join(bodies, "review-#{second}.md"), 'An earlier body')
+    expect_gate
+
+    output = run_promote_check(gate_arguments(bodies: bodies)).last
+
+    expect([output['verdict'], output['reasons'].map { |reason| reason['reason'] }])
+      .to eq(['HOLD', %w[review_bodies_unread]])
+    expect(output['copilot']['unread_reviews']).to eq([first, second])
+  end
+
+  it 'holds a review given as free of findings whose body file is a symlink to its body, reading it not at all' do
+    first, = CopilotCheck::Testing::GateCalls::REVIEWS
+    bodies = bodies_directory
+    real = File.join(bodies, "review-#{first}.md")
+    File.rename(real, sandbox.path('elsewhere.md'))
+    File.symlink(sandbox.path('elsewhere.md'), real)
+    expect_gate
+
+    expect(run_promote_check(gate_arguments(bodies: bodies)).last['copilot']['unread_reviews']).to eq([first])
+  end
+
+  it "fails as a tool on a start file naming another repository, once it knows the checkout's, reading nothing more" do
+    start = start_file(repository: 'github.com/example-owner/dotfiles-claude')
+    expect_gate(through: :repository)
+
+    expect { run_promote_check(gate_arguments(start: start)) }
+      .to raise_error(CopilotCheck::UnusableStartFile, /another repository than the checkout's/)
+    expect(fake_runner.calls.map { |call| call[:argv] }).to eq([CopilotCheck::Testing::GateCalls::REPO_VIEW])
+  end
+
+  it 'holds a change to CLAUDE.local.md or .mcp.json at any depth, as to CLAUDE.md' do
+    files = [{ 'filename' => 'docs/CLAUDE.local.md' }, { 'filename' => '.mcp.json' }]
+    expect_gate(files: { pages: [files] })
+
+    output = run_promote_check(gate_arguments).last
+
+    expect([output['reasons'].map { |reason| reason['reason'] }, output['files']['github_text']['protected_paths']])
+      .to eq([%w[protected_paths_changed], %w[docs/CLAUDE.local.md .mcp.json]])
+  end
+
+  it "holds a documented failure beside a failure annotation the rules don't give, and passes it once they do" do
+    text = 'The suite runs once the pull request is ready.'
+    exit_code = 'Process completed with exit code 1.'
+    checks = { entries: [check_entry('CI result', 'fail', job_link)], annotations: { 41 => [text, exit_code] } }
+    rules = ->(*texts) { rules_file(expected_failures: texts.map { |given| { name: 'CI result', text: given } }) }
+
+    expect_gate(checks: checks)
+    expect(run_promote_check(gate_arguments(rules: rules.call(text))).last['verdict']).to eq('HOLD')
+    expect_gate(checks: checks)
+    expect(run_promote_check(gate_arguments(rules: rules.call(text, exit_code))).last['verdict']).to eq('PROMOTE')
   end
 
   it 'promotes past a failure the rules document by name and annotation text' do

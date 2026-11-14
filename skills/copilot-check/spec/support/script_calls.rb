@@ -15,7 +15,7 @@ module CopilotCheck
       include GateCalls
       include ScriptRuns
 
-      PR_VIEW_FIELDS = 'number,baseRefName,isCrossRepository,isDraft,headRefOid,url'
+      PR_VIEW_FIELDS = 'number,baseRefName,isCrossRepository,isDraft,headRefOid,state,url'
       RUBRIC = ['gh', 'api', '--hostname', 'github.com', '-X', 'GET',
                 "repos/#{GateCalls::HERE}/contents/.github/copilot-instructions.md", '-f', 'ref=master'].freeze
       BRANCH_CHECK = %w[git check-ref-format --branch master].freeze
@@ -31,17 +31,36 @@ module CopilotCheck
          PR_VIEW_FIELDS]
       end
 
-      # #18 as gh pr view recorded it, with +fields+ changed.
+      # #18 as gh pr view recorded it, merged, with +fields+ changed.
       def pr_view_response(**fields)
         JSON.parse(fixture('pr-view/pull-request-18.json')).merge(fields.transform_keys(&:to_s))
+      end
+
+      # #18 as recorded but open, as a run needs it, with +fields+ changed.
+      def open_pr_view_response(**fields)
+        pr_view_response(state: 'OPEN', **fields)
       end
 
       def expect_repo_view
         fake_runner.expect_call(GateCalls::REPO_VIEW, stdout: fixture('repo-view/checkout.json'))
       end
 
-      def expect_pr_view(number = GateCalls::NUMBER, response: pr_view_response, **result)
+      def expect_pr_view(number = GateCalls::NUMBER, response: open_pr_view_response, **result)
         fake_runner.expect_call(pr_view_call(number), stdout: as_json(response), **result)
+      end
+
+      # setup's look at the checkout its scripts run from, which in a unit
+      # spec is a directory in no checkout at all.
+      def expect_scripts_step
+        fake_runner.expect_call(['git', '-C', scripts_skill_directory, 'rev-parse', '--show-toplevel'],
+                                exit_status: 128, stderr: "fatal: not a git repository\n")
+      end
+
+      # A directory to stand for the running skill's, with nothing in it.
+      def scripts_skill_directory
+        @scripts_skill_directory ||= sandbox.path('scripts', 'skills', 'copilot-check').tap do |path|
+          FileUtils.mkdir_p(path)
+        end
       end
 
       # The rubric read: +text+ the file's, or nil for GitHub's recorded 404.

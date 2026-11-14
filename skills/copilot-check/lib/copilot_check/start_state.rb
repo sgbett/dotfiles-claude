@@ -6,23 +6,39 @@ module CopilotCheck
   # The start file isn't one promote-check can take.
   class UnusableStartFile < SkillSupport::UnusableFile; end
 
-  # The pull request as it was when the run began: the file Phase 0 saved
-  # from `gh pr view --json number,baseRefName,isCrossRepository,isDraft`.
-  module StartState
-    module_function
-
-    # Whether pull request +number+ was a draft when the run began, from the
-    # file at +path+. Raises UnusableStartFile when the file isn't that
-    # JSON, or records another pull request.
-    def draft?(path, number)
+  # The pull request as it was when the run began: the start file setup
+  # writes (PullRequestView::PullRequest#start_state), which promote-check
+  # reads.
+  class StartState
+    # The start file at +path+, which must record pull request +number+, its
+    # repository and whether it was a draft. Raises UnusableStartFile when
+    # the file isn't that JSON, or records another pull request.
+    def self.read(path, number)
       state = JSON.parse(SkillSupport::WrittenFile.read(path, error: UnusableStartFile))
-      unless state.is_a?(Hash) && state['number'] == number && [true, false].include?(state['isDraft'])
-        raise UnusableStartFile, "#{path} doesn't record pull request #{number}'s number and isDraft"
+      unless state.is_a?(Hash) && state['number'] == number && state['repository'].is_a?(String) &&
+             [true, false].include?(state['isDraft'])
+        raise UnusableStartFile, "#{path} doesn't record pull request #{number}'s number, repository and isDraft"
       end
 
-      state['isDraft']
+      new(path, state)
     rescue JSON::ParserError
       raise UnusableStartFile, "#{path} isn't JSON"
+    end
+
+    def initialize(path, state)
+      @path = path
+      @state = state
+    end
+
+    # Whether the pull request was a draft when the run began. Raises
+    # UnusableStartFile when the file records a repository other than
+    # +repository+, the CheckoutRepository::Repository promote-check runs in.
+    def draft?(repository)
+      unless @state['repository'].casecmp?(repository.argument)
+        raise UnusableStartFile, "#{@path} records another repository than the checkout's"
+      end
+
+      @state['isDraft']
     end
   end
 end

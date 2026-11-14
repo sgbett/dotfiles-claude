@@ -46,7 +46,7 @@ RSpec.describe CopilotCheck::Verdict do
   def facts(**overrides)
     CopilotCheck::Verdict::Facts.new(rules: rules, started_as_draft: true, outcome: 'converged',
                                      pull_request: pull_request, mergeable: 'MERGEABLE', local_head: head,
-                                     threads: threads, reviews_without_findings: [], files: files,
+                                     threads: threads, reviews_without_findings: [], reviews_read: [], files: files,
                                      checks: [check('pass')], **overrides)
   end
 
@@ -66,6 +66,7 @@ RSpec.describe CopilotCheck::Verdict do
     copilot_not_on_head: -> { { threads: threads(commit: other) } },
     todo_threads: -> { { threads: threads(todo_threads: [todo_thread]) } },
     unanswered_reviews: -> { { threads: threads(todo_reviews: [7]) } },
+    review_bodies_unread: -> { { threads: threads(todo_reviews: [7]), reviews_without_findings: [7] } },
     not_viewers_own: -> { { pull_request: pull_request(author: 'example-stranger') } },
     from_fork: -> { { pull_request: pull_request(cross_repository: true) } },
     files_unlisted: -> { { files: files(complete: false) } },
@@ -98,7 +99,8 @@ RSpec.describe CopilotCheck::Verdict do
       pull_request: pull_request(state: 'MERGED', draft: false, author: 'example-stranger', cross_repository: true,
                                  auto_merge: true),
       rules: rules(draft_flow: false, merge_is_owners_step: false), started_as_draft: false, outcome: 'stop',
-      local_head: other, threads: threads(commit: other, todo_threads: [todo_thread], todo_reviews: [7]),
+      local_head: other, threads: threads(commit: other, todo_threads: [todo_thread], todo_reviews: [7, 8]),
+      reviews_without_findings: [8],
       files: files(paths: %w[.github/workflows/ci.yml], complete: false), mergeable: 'CONFLICTING',
       checks: [check('pending'), check('cancel'), check('fail', documented: false)]
     }
@@ -123,11 +125,18 @@ RSpec.describe CopilotCheck::Verdict do
     expect(verdict(mergeable: 'CONFLICTING').reasons).to eq([:not_mergeable])
   end
 
-  it 'passes the to-do reviews the run found no finding in, and only those' do
+  it 'passes the to-do reviews the run found no finding in and whose body files it read, and only those' do
     reviewed = threads(todo_reviews: [7, 8])
 
-    expect(verdict(threads: reviewed, reviews_without_findings: [7, 8]).verdict).to eq('PROMOTE')
-    expect(verdict(threads: reviewed, reviews_without_findings: [7, 9]).reasons).to eq([:unanswered_reviews])
+    expect(verdict(threads: reviewed, reviews_without_findings: [7, 8], reviews_read: [7, 8]).verdict).to eq('PROMOTE')
+    expect(verdict(threads: reviewed, reviews_without_findings: [7, 9], reviews_read: [7, 9]).reasons)
+      .to eq([:unanswered_reviews])
+  end
+
+  it 'holds a review the run gave as free of findings whose body file it read is not its body now' do
+    unread = verdict(threads: threads(todo_reviews: [7, 8]), reviews_without_findings: [7, 8], reviews_read: [7])
+
+    expect([unread.reasons, unread.unread_reviews]).to eq([[:review_bodies_unread], [8]])
   end
 
   it 'passes a failure the rules document, and checks that passed or were skipped' do

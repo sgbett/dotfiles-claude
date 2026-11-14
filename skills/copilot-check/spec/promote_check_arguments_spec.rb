@@ -13,14 +13,22 @@ RSpec.describe CopilotCheck::PromoteCheckArguments do
     described_class.parse(arguments)
   end
 
-  it 'takes check with its flags in any order, and the reviews the run found no finding in' do
+  it 'takes check with its flags in any order, and the reviews the run found no finding in with their bodies' do
     options = parse(['check', *flags.drop(2), '--reviews-without-findings', '5881418347,5881467821,5881418347',
-                     *flags.take(2)])
+                     '--bodies-dir', '/scratch/round-2', *flags.take(2)])
 
     expect(options.to_h.compact)
       .to eq(command: 'check', pr: 18, rules_file: '/scratch/promotion-rules.json', start_file: '/scratch/pr0.json',
-             outcome: 'converged', reviews_without_findings: [5_881_418_347, 5_881_467_821])
-    expect(parse(check).reviews_without_findings).to eq([])
+             outcome: 'converged', reviews_without_findings: [5_881_418_347, 5_881_467_821],
+             bodies_dir: '/scratch/round-2')
+    expect(parse(check).to_h.values_at(:reviews_without_findings, :bodies_dir)).to eq([[], nil])
+  end
+
+  it 'refuses the reviews without the bodies directory the run read them in, and the directory without them' do
+    [[*check, '--reviews-without-findings', '5881418347'], [*check, '--bodies-dir', '/scratch/round-2']]
+      .each do |arguments|
+        expect { parse(arguments) }.to raise_error(CopilotCheck::UsageError, /--bodies-dir <path>/), arguments.inspect
+      end
   end
 
   it 'takes verify with the pull request and its head' do
@@ -39,8 +47,10 @@ RSpec.describe CopilotCheck::PromoteCheckArguments do
   it 'refuses a value that is not valid, or could be read as an option' do
     { %w[--pr 0] => 'issue_number', %w[--pr -18] => 'issue_number', %w[--outcome done] => 'outcome',
       %w[--rules-file -x] => 'rules_file', %w[--reviews-without-findings 1,,2] => 'review_ids',
-      %w[--reviews-without-findings x] => 'review_ids' }.each do |(flag, value), kind|
-      arguments = ['check', *flags.each_slice(2).to_h.merge(flag => value).flatten]
+      %w[--reviews-without-findings x] => 'review_ids', %w[--bodies-dir -x] => 'bodies_dir' }
+      .each do |(flag, value), kind|
+      paired = { '--reviews-without-findings' => '1', '--bodies-dir' => '/scratch/round-1' }
+      arguments = ['check', *flags.each_slice(2).to_h.merge(paired, flag => value).flatten]
       expect { parse(arguments) }
         .to raise_error(SkillSupport::InvalidIdentifier, "invalid #{kind}"), [flag, value].inspect
     end

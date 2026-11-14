@@ -55,9 +55,16 @@ RSpec.describe CopilotCheck::ChangedFiles do
       end
     end
 
+    it 'holds any CLAUDE.local.md and any .mcp.json, at any depth, ignoring case' do
+      %w[CLAUDE.local.md docs/CLAUDE.local.md skills/x/claude.LOCAL.md .mcp.json tools/server/.mcp.json
+         .MCP.JSON].each do |path|
+        expect(described_class.protected?(path)).to be(true), path
+      end
+    end
+
     it 'leaves other paths alone' do
       %w[.github/workflow.yml .github/CODEOWNERS docs/CLAUDE.md.bak .claude skills/.claudex/a.md
-         github/workflows/ci.yml README.md].each do |path|
+         github/workflows/ci.yml README.md CLAUDE.local.md.bak mcp.json .mcp.jsonc docs/mcp.json].each do |path|
         expect(described_class.protected?(path)).to be(false), path
       end
     end

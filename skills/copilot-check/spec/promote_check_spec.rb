@@ -79,13 +79,23 @@ RSpec.describe 'skills/copilot-check/bin/promote-check' do
                 unanswered_reviews no_checks not_mergeable])
   end
 
-  it "verifies the head after the ready, and stops when it isn't the one checked" do
+  it 'verifies the head and the state after the ready: an open, ready pull request with that head goes on' do
+    install_gh_shim([repo_view, { args: graphql, stdin: recorded_request('pull-request-18'),
+                                  stdout: JSON.generate(pull_request_response('isDraft' => false)) }])
+
+    exit_code, stdout, stderr = run('verify', '--pr', '18', '--head', CopilotCheck::Testing::GateCalls::HEAD)
+
+    expect([exit_code, stderr, JSON.parse(stdout)['status']]).to eq([0, '', 'proceed'])
+  end
+
+  it "stops on #18 as recorded, merged, with the head checked, and on a head that isn't the one checked" do
     install_gh_shim([repo_view.merge(repeat: true), recorded('pull-request-18', repeat: true)])
 
     same = run('verify', '--pr', '18', '--head', CopilotCheck::Testing::GateCalls::HEAD)
     changed = run('verify', '--pr', '18', '--head', CopilotCheck::Testing::GateCalls::OTHER_COMMIT)
 
-    expect([same.first, JSON.parse(same[1])['status']]).to eq([0, 'proceed'])
+    expect([same.first, JSON.parse(same[1]).values_at('status', 'reason')])
+      .to eq([2, %w[stop ready_state_unexpected]])
     expect([changed.first, JSON.parse(changed[1]).values_at('status', 'reason')]).to eq([2, %w[stop head_changed]])
   end
 

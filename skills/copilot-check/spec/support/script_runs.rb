@@ -5,12 +5,13 @@ module CopilotCheck
     # Running setup, threads and rereview end to end, against the gh shim
     # (install_gh_shim), which serves fixtures by exact arguments and stdin.
     module ScriptRuns
-      # Runs +script+ ("setup", "threads" or "rereview") from bin/ with
-      # +arguments+, returning the exit code, the output parsed as JSON (nil
-      # for none), and stderr.
-      def run_script(script, *arguments, environment: {})
-        path = File.join(repository_root, 'skills', 'copilot-check', 'bin', script)
-        stdout, stderr, status = Open3.capture3(environment, path, *arguments)
+      # Runs +script+ ("setup", "threads" or "rereview") from bin/ of
+      # +skill+, this repository's copy of the skill unless a spec gives
+      # another, with +arguments+, returning the exit code, the output parsed
+      # as JSON (nil for none), and stderr.
+      def run_script(script, *arguments, environment: {},
+                     skill: File.join(repository_root, 'skills', 'copilot-check'))
+        stdout, stderr, status = Open3.capture3(environment, File.join(skill, 'bin', script), *arguments)
         [status.exitstatus, stdout.empty? ? nil : JSON.parse(stdout), stderr]
       end
 
