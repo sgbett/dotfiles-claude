@@ -24,7 +24,12 @@ module SkillSupport
     HOST_MAX_LENGTH = 253
     # A branch name reaches the lead's command lines, where quoting alone
     # can't make every character git allows safe, so it takes only these.
-    BRANCH_CHARACTERS = %r{\A[A-Za-z0-9._/+-]+\z}
+    # The lead single-quotes every one, so "#" can't start a comment, as
+    # hierarchical names such as project/#12_title/master need.
+    BRANCH_CHARACTERS = %r{\A[A-Za-z0-9._/+#-]+\z}
+    # A remote's name reaches git as an argument and in --remotes=<name>,
+    # which reads a glob, so it takes no "/" or glob character.
+    REMOTE_NAME = /\A[A-Za-z0-9._-]+\z/
     DOT_SEGMENTS = %w[. ..].freeze
     CONTROL_CHARACTER = /[[:cntrl:]]/
 
@@ -78,6 +83,11 @@ module SkillSupport
       raise InvalidIdentifier.new(:branch, value) unless accepted
 
       name
+    end
+
+    # A git remote's name, unchanged.
+    def remote!(value)
+      matching!(:remote, REMOTE_NAME, value)
     end
 
     def matching!(kind, pattern, value)

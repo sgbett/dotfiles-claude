@@ -7,11 +7,13 @@ require_relative 'issue_locator'
 require_relative 'issue_query'
 require_relative 'issue_view'
 require_relative 'reasons'
+require_relative 'record_lock'
 
 module Do
   # The issue a `record` subcommand acts on: located and fetched as
   # pre-flight's facts are, read under the same rules, with the bodies and
-  # the gate file record edits.
+  # the gate file record edits. Each call holds the issue's RecordLock from
+  # the moment the issue's node id, which names the lock, is known.
   class RecordIssue
     # Visibilities where what is pushed isn't public, so the owner needn't
     # choose between a fix in the open and a private security advisory.
@@ -20,22 +22,32 @@ module Do
     attr_reader :view
 
     # Yields the RecordIssue for +argument+, the issue as the user gave it,
-    # and returns what the block returns; or returns the stop or ask that
-    # comes first, as pre-flight would.
-    def self.locate(argument, runner:)
+    # with its lock held, and returns what the block returns; or returns the
+    # stop or ask that comes first, as pre-flight would.
+    def self.locate(argument, runner:, &block)
       IssueLocator.new(runner).locate(argument) do |reference|
         github = SkillSupport::Gh.new(host: reference.host, runner: runner)
         result = IssueQuery.new(github).fetch(reference.repository, reference.number)
         next Reasons.not_an_issue(result.kind) unless result.kind == :issue
 
-        yield new(IssueView.new(result), github: github, runner: runner)
+        locked(result, github, Checkout.new(runner).common_directory, &block)
       end
     end
 
-    def initialize(view, github:, runner:)
+    # Yields the RecordIssue for +result+, IssueQuery's Result for an issue,
+    # with the issue's lock held.
+    def self.locked(result, github, common_directory)
+      RecordLock.hold(RecordLock.path(common_directory, result.issue.id)) do
+        yield new(IssueView.new(result), github: github, common_directory: common_directory)
+      end
+    end
+
+    private_class_method :locked
+
+    def initialize(view, github:, common_directory:)
       @view = view
       @github = github
-      @runner = runner
+      @common_directory = common_directory
     end
 
     def ledger
@@ -86,7 +98,7 @@ module Do
     end
 
     def gate_path
-      GateFile.path(Checkout.new(@runner).common_directory, issue.id)
+      GateFile.path(@common_directory, issue.id)
     end
 
     private

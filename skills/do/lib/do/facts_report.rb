@@ -7,10 +7,11 @@ require_relative 'summary'
 
 module Do
   # The fields of `preflight facts` output, in the order the lead reads
-  # them. GitHub text (titles, label names) sits only under "github_text"
-  # keys, beside its author's trust where it has one. Whatever may not go on
-  # GitHub, such as an issue in a repository that isn't public or a local
-  # path, sits only under "session_only". No body is printed.
+  # them. GitHub text (titles, label names, the start of each box's text)
+  # sits only under "github_text" keys, beside its author's trust where it
+  # has one. Whatever may not go on GitHub, such as an issue in a repository
+  # that isn't public or a local path, sits only under "session_only". No
+  # body is printed.
   class FactsReport
     # +assessment+ is the issue's Assessment; +parent_branches+ the names of
     # the parent's feat/<N>-* branches when it lives here.
@@ -50,8 +51,13 @@ module Do
     def issue
       issue = @query.issue
       { id: issue.id, number: issue.number, state: issue.state, author: issue.author.login,
-        **trust(@assessment.trust.here(issue.author)), project_items: @query.project_items,
+        **trust(@assessment.trust.here(issue.author)), project_items: @query.project_items, boxes: boxes,
         github_text: { title: issue.title } }
+    end
+
+    # The body's boxes, when they hold the acceptance criteria.
+    def boxes
+      @assessment.boxes&.map { |box| { **box.to_h.slice(:position, :checked), github_text: { label: box.label } } }
     end
 
     def parent

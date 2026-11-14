@@ -1,7 +1,13 @@
 # frozen_string_literal: true
 
+require_relative 'support/scripts_clone'
+
+# record runs from a copy of the scripts in a checkout of their own, which
+# it finds reviewed, whatever state this repository is in.
 RSpec.describe 'skills/do/bin/record' do
-  let(:record) { File.join(repository_root, 'skills', 'do', 'bin', 'record') }
+  include Do::Testing::ScriptsClone
+
+  let(:record) { scripts_clone('record') }
   let(:graphql) { %w[api graphql --hostname github.com --input -] }
   let(:issue) { 'sgbett/dotfiles-claude#24' }
   let(:ledger_path) { 'repos/sgbett/dotfiles-claude/issues/comments/6867069660' }

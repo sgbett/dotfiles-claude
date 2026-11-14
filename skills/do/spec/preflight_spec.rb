@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'base64'
+require_relative '../lib/do/check_query'
 require_relative 'support/scripts_clone'
 
 RSpec.describe 'skills/do/bin/preflight' do
@@ -105,7 +106,9 @@ RSpec.describe 'skills/do/bin/preflight' do
     shim = install_gh_shim(
       [login, { args: ['repo', 'view', origin, '--json', 'nameWithOwner,url'],
                 stdout_file: fixture_path('repo-view/origin.json') },
-       { args: graphql, stdin: recorded_request('issue-24'), stdout_file: fixture_path('graphql/issue-24.json') }]
+       { args: graphql, stdin: recorded_request('issue-24'), stdout_file: fixture_path('graphql/issue-24.json') },
+       { args: %w[api --hostname github.com -X GET repos/sgbett/dotfiles-claude/issues/24],
+         stdout_file: fixture_path('rest/issue-24.json') }]
     )
 
     exit_code, stdout, stderr = preflight_run('facts', '24', environment: hostile_environment)
@@ -116,6 +119,8 @@ RSpec.describe 'skills/do/bin/preflight' do
     expect(output.values_at('status', 'reference', 'default_branch', 'read'))
       .to eq(['proceed', 'sgbett/dotfiles-claude#24', branch, ['references/resume.md']])
     expect(output['ledger']['items'].map { |item| item['id'] }).to eq((1..11).map { |n| "L#{n}" })
+    expect(output['issue']['boxes'].map { |box| box.values_at('position', 'checked') })
+      .to eq((1..11).map { |n| [n, false] })
     expect(output['session_only']['gate_file'])
       .to eq(File.join(sandbox.work_directory, '.git', 'do', 'I_kwDOQzoXSs8AAAABfBUanQ-gate.md'))
   end
@@ -187,6 +192,36 @@ RSpec.describe 'skills/do/bin/preflight' do
       .to eq([0, ['resume_push_remote', github_tip]])
     expect(stdout).not_to include(elsewhere_tip)
     expect(system('git', 'cat-file', '-e', "#{github_tip}^{commit}")).to be(true)
+  end
+
+  it 'takes a hierarchical base and branch holding "#", as the lead single-quotes them, to GitHub whole' do
+    base = 'project/#7_skills/master'
+    work = 'project/#7_skills/feat/24-scripts'
+    github = bare_repository('github.git')
+    checkout_with_origin(ssh_push_url, fetch_from: github)
+    request = lambda do |query, variables|
+      JSON.generate('query' => query, 'variables' => { 'owner' => 'sgbett', 'name' => 'dotfiles-claude', **variables })
+    end
+    base_ref = { 'ref' => { 'name' => base, 'target' => { 'oid' => base_sha } } }
+    page = { 'hasNextPage' => false, 'hasPreviousPage' => false }
+    none_open = { 'pullRequests' => { 'pageInfo' => page, 'nodes' => [] } }
+    shim = install_gh_shim(
+      [login, recorded_graphql('check-issue-24'),
+       { args: ['repo', 'view', ssh_push_url, '--json', 'nameWithOwner,parent,viewerPermission'],
+         stdout_file: fixture_path('repo-view/push-origin.json') },
+       { args: graphql, stdin: request.call(Do::CheckQuery::BASE_QUERY, 'qualifiedName' => "refs/heads/#{base}"),
+         stdout: JSON.generate('data' => { 'repository' => base_ref }) },
+       { args: graphql, stdin: request.call(Do::CheckQuery::PULL_REQUESTS_QUERY, 'branch' => work),
+         stdout: JSON.generate('data' => { 'repository' => none_open }) },
+       *no_security_focus]
+    )
+    arguments = ['check', 'sgbett/dotfiles-claude#24', '--push-remote', 'origin', '--pr-target',
+                 'sgbett/dotfiles-claude', '--base', base, '--branch', work]
+
+    exit_code, stdout, stderr = preflight_run(*arguments, command: scripts_clone, environment: ssh_environment(github))
+
+    expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
+    expect(JSON.parse(stdout).values_at('base', 'branch')).to match([base, include('name' => work, 'state' => 'new')])
   end
 
   it 'stops a checkout of another repository at its push remote, asking gh nothing more' do

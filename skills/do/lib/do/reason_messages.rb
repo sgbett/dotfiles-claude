@@ -63,13 +63,13 @@ module Do
                              '(session_only.local_branch_commits). Show them to the user and ask whether to ' \
                              'resume on this branch; on a yes, run check again with accept_with added.',
       scripts_unreviewed: 'The checkout these scripts run from has changes under skills/do or ' \
-                          'skills/_support or to the files at its root that pick their Ruby, or its HEAD ' \
-                          "isn't in its default branch, so they may not be the reviewed scripts " \
-                          '(session_only.scripts_changes). Ask the user whether to go on with them; on a yes, ' \
-                          'run check again with accept_with added.',
+                          "skills/_support or to the files that pick their Ruby, or its HEAD isn't in its " \
+                          'default branch, so they may not be the reviewed scripts (session_only.scripts_changes). ' \
+                          'Ask the user whether to go on with them; on a yes, run the same call again with ' \
+                          'accept_with added.',
       no_ledger: "None of the issue's first 100 comments is a ledger: none by a trusted author begins with " \
                  '<!-- do:breakdown -->. Nothing was written.',
-      box_missing: 'Each box the call names must match exactly one top-level box outside code fences, and ' \
+      box_missing: 'Each box the call names must match exactly one top-level box as GitHub renders it, and ' \
                    'those under missing match none or several (sub-issue also needs a plain item, with no box ' \
                    'for the sub-issue yet). Nothing was written.',
       body_changed: 'The body changed between the read and the write: someone else is editing it. Nothing was ' \
@@ -88,7 +88,12 @@ module Do
                        'security advisory, saying whether the flaw predates the branch; record the answer with ' \
                        'gate answer, then run gate publish again.',
       gate_line_missing: 'The ledger has no Gate line for that finding, so marking it would leave no record of ' \
-                         'it there. Nothing was written.'
+                         'it there. Nothing was written.',
+      ambiguous_checkbox: 'Lines of the issue body or the ledger (target; lines, counting from 1) read like ' \
+                          'checklist boxes that /do cannot place as GitHub renders them: a box with no list ' \
+                          'marker, with a tab or odd spacing, inside HTML, or where GitHub may not start a list, ' \
+                          'or a carriage return GitHub reads as a line break. Nothing was written. Ask the user ' \
+                          'to fix those lines, then run the same call again.'
     }.transform_values(&:freeze).freeze
   end
 end

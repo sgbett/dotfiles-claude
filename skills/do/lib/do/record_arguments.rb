@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'ledger'
+require_relative 'scripts_checkout'
 require_relative 'usage_error'
 
 module Do
@@ -8,8 +9,9 @@ module Do
   # runs: the subcommand, the issue as the user gave it (IssueLocator's to
   # judge), then the subcommand's flags, each with its value, in any order.
   module RecordArguments
-    # Each subcommand's flags that take a value, those it needs (all of
-    # +required+, exactly one of +one_of+), and whether it takes --dry-run.
+    # Each subcommand's flags that take a value, beside the yes every one
+    # takes, those it needs (all of +required+, exactly one of +one_of+), and
+    # whether it takes --dry-run.
     SUBCOMMANDS = {
       'closes' => { values: %w[--base --verified-items --verified-boxes], required: %w[--base] },
       'tick' => { values: %w[--ledger --issue-boxes], one_of: %w[--ledger --issue-boxes], dry_run: true },
@@ -18,7 +20,7 @@ module Do
       'gate publish' => { values: %w[--k], required: %w[--k], dry_run: true },
       'gate mark' => { values: %w[--k --state], required: %w[--k --state], dry_run: true },
       'sub-issue' => { values: %w[--item --number], required: %w[--item --number], dry_run: true }
-    }.freeze
+    }.transform_values { |spec| spec.merge(values: [*spec[:values], ScriptsCheckout::ACCEPT_FLAG]) }.freeze
     DRY_RUN = '--dry-run'
     LIST_SEPARATOR = ','
     LINE_ITEM_ID = /\A[LP][1-9][0-9]{0,5}\z/
@@ -30,15 +32,17 @@ module Do
     ANSWERS = { 'fix-here' => 'fix here', 'advisory' => 'advisory' }.freeze
     STATES = { 'fixed' => 'fixed', 'user-decided' => 'user decided' }.freeze
     CONTROL_CHARACTER = /[[:cntrl:]]/
-    # How each flag's value is checked, and turned into its option's value.
+    # How each flag's value is checked, and turned into its option's value;
+    # convert hands --base, --number and --accept-scripts to the checks
+    # other modules own.
     CONVERTERS = {
       '--verified-items' => :ledger_ids!, '--ledger' => :ledger_ids!, '--verified-boxes' => :positions!,
       '--issue-boxes' => :positions!, '--finding-file' => :file_path!, '--k' => :gate_id!, '--answer' => :answer!,
-      '--state' => :state!, '--item' => :item!, '--number' => :number!
+      '--state' => :state!, '--item' => :item!
     }.freeze
 
-    Options = Struct.new(:command, :reference, :base, :verified_items, :verified_boxes, :ledger, :issue_boxes,
-                         :finding_file, :k, :answer, :state, :item, :number, :dry_run, keyword_init: true)
+    Options = Struct.new(:command, :reference, :base, :verified_items, :verified_boxes, :ledger, :issue_boxes, :k,
+                         :finding_file, :answer, :state, :item, :number, :accept_scripts, :dry_run, keyword_init: true)
 
     module_function
 
@@ -91,9 +95,12 @@ module Do
     end
 
     def convert(flag, value, runner)
-      return SkillSupport::Identifiers.branch!(value, runner: runner) if flag == '--base'
-
-      send(CONVERTERS.fetch(flag), value)
+      case flag
+      when '--base' then SkillSupport::Identifiers.branch!(value, runner: runner)
+      when '--number' then SkillSupport::Identifiers.issue_number!(value)
+      when ScriptsCheckout::ACCEPT_FLAG then ScriptsCheckout.token!(value)
+      else send(CONVERTERS.fetch(flag), value)
+      end
     end
 
     def ledger_ids!(value)
@@ -133,10 +140,6 @@ module Do
       STATES.fetch(value) { raise SkillSupport::InvalidIdentifier.new(:state, value) }
     end
 
-    def number!(value)
-      SkillSupport::Identifiers.issue_number!(value)
-    end
-
     # A path the lead wrote with the Write tool; FindingFile reads it.
     def file_path!(value)
       if value.empty? || value.start_with?('-') || CONTROL_CHARACTER.match?(value)
@@ -147,6 +150,6 @@ module Do
     end
 
     private_class_method :command, :flags, :values, :check_presence, :option, :convert, :ledger_ids!, :positions!,
-                         :list, :gate_id!, :item!, :answer!, :state!, :number!, :file_path!
+                         :list, :gate_id!, :item!, :answer!, :state!, :file_path!
   end
 end

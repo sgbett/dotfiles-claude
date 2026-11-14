@@ -16,8 +16,7 @@ RSpec.describe "/do closing, #21's walk-throughs" do
   def closes(node, base: 'master')
     expect_base(base)
     response = record_response(ledger: "- [ ] **L1 One.**\n") { |issue| issue['subIssues'] = connection([node]) }
-    expect_gh_login
-    expect_issue_query(response)
+    expect_located(response)
     expect_read(Do::Testing::RecordCalls::ISSUE_PATH, "- [ ] One\n- [ ] Two\n")
     record('closes', 'sgbett/dotfiles-claude#24', '--base', base, '--verified-items', 'L1', '--verified-boxes', '1,2')
       .last

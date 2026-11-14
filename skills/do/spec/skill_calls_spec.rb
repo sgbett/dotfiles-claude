@@ -3,8 +3,9 @@
 # SKILL.md's calls of the scripts, as the lead runs them. Claude Code puts
 # the user's text in place of $ARGUMENTS as it stands, so only the first
 # call, `preflight facts`, takes it, once the lead has checked its form;
-# every later call takes the canonical reference facts gives. A branch is
-# single-quoted on each, as a "#" in one would start a shell comment.
+# every later call takes the canonical reference facts gives. A branch, a
+# remote and a repository are single-quoted on each, as a "#" in a branch
+# would start a shell comment.
 RSpec.describe "/do's calls of its scripts" do
   let(:skill) { File.read(File.expand_path('../SKILL.md', __dir__)) }
   let(:calls) { skill.scan(%r{`("\$\{CLAUDE_SKILL_DIR\}/bin/[^`]+)`}).flatten }
@@ -21,10 +22,10 @@ RSpec.describe "/do's calls of its scripts" do
     expect(calls.drop(1).reject { |call| call.include?(" '<facts.reference>' ") }).to be_empty
   end
 
-  it 'single-quotes every branch a call names' do
-    branches = calls.flat_map { |call| call.scan(/--(?:base|branch) (\S+)/).flatten }
+  it 'single-quotes every branch, remote and repository a call names' do
+    values = calls.flat_map { |call| call.scan(/--(?:base|branch|push-remote|pr-target) (\S+)/).flatten }
 
-    expect(branches).to include("'<B>'", "'<NAME>'")
-    expect(branches).to all(match(/\A'[^']+'\z/))
+    expect(values).to include("'<B>'", "'<NAME>'", "'<R>'", "'<owner/repo>'")
+    expect(values).to all(match(/\A'[^']+'\z/))
   end
 end

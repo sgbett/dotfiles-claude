@@ -23,10 +23,20 @@ RSpec.describe Do::Facts do
     fake_runner.expect_call(['git', 'check-ref-format', '--branch', branch], stdout: "#{branch}\n")
   end
 
-  def facts(response = issue_response, reference: 'sgbett/dotfiles-claude#24')
+  # The issue body's read, which follows them when it holds the acceptance
+  # criteria: by default #24's, as recorded.
+  def expect_issue_body(body = nil, host: 'github.com', repository: recorded_repository)
+    stdout = body ? JSON.generate('body' => body) : fixture('rest/issue-24.json')
+    fake_runner.expect_call(['gh', 'api', '--hostname', host, '-X', 'GET', "repos/#{repository}/issues/24"],
+                            stdout: stdout)
+  end
+
+  # +body+ is false when the criteria live in the ledger, so no body is read.
+  def facts(response = issue_response, reference: 'sgbett/dotfiles-claude#24', body: nil)
     expect_gh_login
     expect_issue_query(response)
     expect_local_calls
+    expect_issue_body(body) unless body == false
     run(reference)
   end
 
@@ -98,6 +108,7 @@ RSpec.describe Do::Facts do
       expect_gh_login
       expect_issue_query(issue_response, repository: 'SGBETT/Dotfiles-Claude')
       expect_local_calls
+      expect_issue_body
 
       expect(run('SGBETT/Dotfiles-Claude#24').last['reference']).to eq('sgbett/dotfiles-claude#24')
     end
@@ -109,6 +120,45 @@ RSpec.describe Do::Facts do
 
       expect([output['status'], output['repository']['labels'].length, output['repository']['labels_truncated']])
         .to eq(['proceed', 10, true])
+    end
+  end
+
+  describe "the issue body's boxes" do
+    it 'lists each by position, ticked or not, with the start of its text as a label under github_text' do
+      _exit_code, output = facts
+
+      boxes = output['issue']['boxes']
+      expect(boxes.map { |box| box.values_at('position', 'checked') }).to eq((1..11).map { |n| [n, false] })
+      expect(boxes.first['github_text']['label'])
+        .to eq('**Pre-flight is a tested script.** `skills/do/bin/preflight…')
+      expect(boxes.map { |box| box['github_text']['label'].length }.max).to eq(60)
+    end
+
+    it 'counts them as GitHub renders them: any marker, nested ones and those in comments left out' do
+      body = "Intro\n1. [ ] One\n   - [x] a detail\n2. [X] Two\n\n<!--\n- [ ] Not rendered\n-->\n * [ ] Three\n"
+      _exit_code, output = facts(body: body)
+
+      expect(output['issue']['boxes'].map { |box| [box['position'], box['checked'], box['github_text']['label']] })
+        .to eq([[1, false, 'One'], [2, true, 'Two'], [3, false, 'Three']])
+    end
+
+    it 'lists none, reading no body, when the acceptance criteria live in the ledger' do
+      response = issue_response do |issue|
+        untrusted!(issue)
+        issue['comments']['nodes'][0]['body'] += "\n### Adopted acceptance criteria\n- the confirmed criteria\n"
+      end
+
+      expect(facts(response, body: false).last['issue']['boxes']).to be_nil
+    end
+
+    it 'stops, naming the lines, when a line of the body or the ledger reads like a box it cannot place' do
+      body_stop = facts(body: "- [ ] One\n[ ] Two, with no list marker\n").last
+      ledger_stop = facts(issue_response do |issue|
+        issue['comments']['nodes'][0]['body'] = "<!-- do:breakdown -->\n- [ ] **L1 One.**\n-  [ ]x **L2**\n"
+      end).last
+
+      expect([body_stop, ledger_stop].map { |output| output.values_at('status', 'reason', 'target', 'lines') })
+        .to eq([['stop', 'ambiguous_checkbox', 'issue_body', [2]], ['stop', 'ambiguous_checkbox', 'ledger', [3]]])
     end
   end
 
@@ -124,6 +174,7 @@ RSpec.describe Do::Facts do
       fake_runner.expect_call(%w[gh api graphql --hostname ghe.example.com --input -], stdin: issue_request(ghe, 24),
                                                                                        stdout: JSON.generate(response))
       expect_local_calls
+      expect_issue_body("- [ ] One\n", host: 'ghe.example.com', repository: ghe)
 
       expect(run("https://ghe.example.com/#{ghe}/issues/24").last['reference'])
         .to eq("https://ghe.example.com/#{ghe}/issues/24")
@@ -155,6 +206,7 @@ RSpec.describe Do::Facts do
                               stdout: fixture('repo-view/origin.json'))
       expect_issue_query(issue_response)
       expect_local_calls
+      expect_issue_body
       output = run('24').last
 
       expect(output.values_at('reference', 'summary'))
@@ -218,7 +270,7 @@ RSpec.describe Do::Facts do
 
   describe 'trust' do
     it "asks for the criteria to adopt when the issue's author isn't trusted, with the facts beside it" do
-      exit_code, output = facts(issue_response { |issue| untrusted!(issue) })
+      exit_code, output = facts(issue_response { |issue| untrusted!(issue) }, body: false)
 
       expect([exit_code, output['status'], output['asks']])
         .to eq([3, 'ask', [{ 'reason' => 'untrusted_author_criteria',
@@ -234,13 +286,13 @@ RSpec.describe Do::Facts do
         issue['comments']['nodes'][0]['body'] += "\n### Adopted acceptance criteria\n- the confirmed criteria\n"
       end
 
-      expect(facts(response).first).to eq(0)
+      expect(facts(response, body: false).first).to eq(0)
     end
 
     it "asks when a parent elsewhere isn't trusted, and points to other-repositories.md" do
       exit_code, output = facts(issue_response do |issue|
         issue['parent'] = issue_node(3, 'example-owner/upstream', by: authored_by('example-author'))
-      end)
+      end, body: false)
 
       expect([exit_code, output['asks'].map { |ask| ask['authors'] }]).to eq([3, [['parent']]])
       expect(output['parent']).to include('reference' => 'example-owner/upstream#3', 'same_repository' => false,
@@ -252,7 +304,7 @@ RSpec.describe Do::Facts do
       _exit_code, output = facts(issue_response do |issue|
         issue['parent'] = issue_node(3, 'example-owner/upstream')
                           .merge('timelineItems' => connection([{ 'actor' => { 'login' => 'example-stranger' } }]))
-      end)
+      end, body: false)
 
       expect(output['parent']).to include('trusted' => false, 'trust_reason' => 'edited_by_others')
       expect(output['asks'].map { |ask| ask['authors'] }).to eq([['parent']])
@@ -341,6 +393,7 @@ RSpec.describe Do::Facts do
       expect_issue_query(issue_response { |issue| issue['parent'] = issue_node(20, recorded_repository) })
       expect_branches_query(20, %w[feat/20-parent old/feat/20-parent])
       expect_local_calls
+      expect_issue_body
       output = run.last
 
       expect([output['parent_branches'], output['summary']['parent']]).to eq([['feat/20-parent'], '#20'])
@@ -386,6 +439,7 @@ RSpec.describe Do::Facts do
       end)
       expect_branches_query(20, ['feat/20-parent', 'feat/20-$(y)'])
       expect_local_calls
+      expect_issue_body
       output = run.last
 
       expect(output.values_at('branches', 'parent_branches'))

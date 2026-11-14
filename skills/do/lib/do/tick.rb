@@ -8,10 +8,11 @@ module Do
   # `record tick <issue> (--ledger IDS | --issue-boxes POSITIONS)
   # [--dry-run]`: ticks the boxes QA verified, in the ledger comment or, when
   # its author is trusted, the issue body. Each box named must be exactly
-  # one top-level box outside code fences, or nothing is written. Only
-  # "[ ]" becomes "[x]", through BodyEdit's one-writer discipline; nothing
-  # is written when every box is ticked already. The output names boxes by
-  # id or position, never quoting the body.
+  # one of the body's boxes as Checklist reads them, and the body must hold
+  # no line that reads like a box Checklist can't place, or nothing is
+  # written. Only "[ ]" becomes "[x]", through BodyEdit's one-writer
+  # discipline; nothing is written when every box is ticked already. The
+  # output names boxes by id or position, never quoting the body.
   class Tick
     # +options+ are RecordArguments' Options.
     def initialize(options, runner:)
@@ -41,7 +42,7 @@ module Do
 
       body = issue.issue_body
       before = body.read
-      boxes, missing = Checklist.at(Checklist.boxes(before), @options.issue_boxes)
+      boxes, missing = Checklist.at(Checklist.boxes(before, target: :issue_body), @options.issue_boxes)
       return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
 
       tick(body, before, @options.issue_boxes.zip(boxes), target: :issue_body)
@@ -51,9 +52,7 @@ module Do
     # Item or a Checklist Box.
     def tick(body, before, named, target:)
       ticked, unticked = named.partition { |_name, box| box.checked }
-      unless @options.dry_run || unticked.empty?
-        body.write(before, Checklist.tick(before, unticked.map { |_name, box| box.line }))
-      end
+      body.write(before, Checklist.tick(before, unticked.map(&:last))) unless @options.dry_run || unticked.empty?
       SkillSupport::Outcome.proceed(target: target, flipped: unticked.map(&:first), already: ticked.map(&:first),
                                     dry_run: @options.dry_run)
     end

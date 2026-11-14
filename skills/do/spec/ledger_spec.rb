@@ -54,6 +54,32 @@ RSpec.describe Do::Ledger do
                                  ['P4', :item, false], ['P5', :item, false]])
     end
 
+    it 'reads the boxes GitHub renders at the top level, whatever their marker or indentation' do
+      expect(items("1. [ ] **L1 One.**\n   - [ ] detail\n - [x] **L2 Two.**\n").map(&:first)).to eq(%w[L1 L2])
+    end
+
+    it 'ignores checklists, gate lines and the adopted heading inside HTML comments' do
+      hidden = ledger("<!--\n- [ ] **L1 Hidden.**\nGate G1: open\n### Adopted acceptance criteria\n-->\n" \
+                      "- [ ] **L2 Real.**\n")
+
+      expect([hidden.items.map(&:id), hidden.gates, hidden.adopted_criteria?]).to eq([['L2'], [], false])
+    end
+
+    it 'reads a gate line in HTML that GitHub shows as text, but not a box there' do
+      shown = ledger("- [ ] **L1 One.**\n\n<details>\nGate G1: open\n- [ ] **L2 Raw.**\n</details>\n")
+
+      expect(shown.gates.map(&:id)).to eq(['G1'])
+      expect { shown.items }.to raise_error(Do::AmbiguousCheckbox) { |error| expect(error.lines).to eq([6]) }
+    end
+
+    it 'raises on its items when a line reads like a box it cannot place, while its gate lines stand' do
+      ambiguous = ledger("- [ ] **L1 One.**\n[ ] **L2 No marker.**\n\nGate G1: open\n")
+
+      expect { ambiguous.items }.to raise_error(Do::AmbiguousCheckbox) { |error| expect(error.lines).to eq([3]) }
+      expect { ambiguous.first_unbuilt }.to raise_error(Do::AmbiguousCheckbox)
+      expect(ambiguous.gates.map(&:id)).to eq(['G1'])
+    end
+
     it 'ignores checklists inside code fences' do
       body = "- [ ] **L1 Real.**\n```markdown\n- [ ] **L2 Quoted.**\n```\n" \
              "~~~\n- [ ] #5 quoted\n~~~\n- [ ] **L3 Real.**\n"
@@ -100,7 +126,8 @@ RSpec.describe Do::Ledger do
     it "gives each item its index among the body's lines, counting fenced lines too" do
       body = "Intro\n```\n- [ ] **L9 Quoted.**\n```\n- [ ] **L1 One.**\r\n  - [ ] detail\n- [x] **L2 Two.**"
 
-      expect(ledger(body).items.map { |item| [item.id, item.position, item.line] }).to eq([['L1', 1, 5], ['L2', 2, 7]])
+      expect(ledger(body).items.map { |item| [item.id, item.position, item.line, item.mark] })
+        .to eq([['L1', 1, 5, 3], ['L2', 2, 7, 3]])
     end
   end
 

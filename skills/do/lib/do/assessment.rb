@@ -15,13 +15,15 @@ module Do
     def_delegators :@view, :query, :trust, :ledger, :ignored_markers, :nameable?, :here?, :reference,
                    :untrusted_authors
 
-    attr_reader :gate
+    attr_reader :gate, :boxes
 
-    # +query+ is IssueQuery's Result for an issue, +gate_file+ the issue's
-    # GateFile.
-    def initialize(query, gate_file)
-      @view = IssueView.new(query)
+    # +view+ is the issue's IssueView, +gate_file+ its GateFile, and +boxes+
+    # its body's Checklist boxes, nil when its acceptance criteria live in
+    # the ledger instead.
+    def initialize(view, gate_file, boxes:)
+      @view = view
       @gate = gate_file.status(ledger ? ledger.gates : [])
+      @boxes = boxes
     end
 
     def stop_reason

@@ -12,15 +12,20 @@ module Do
   # swap the scripts mid-run, so the lead builds in a worktree. When it has
   # changes under the skill's own directories or to the files that pick
   # their Ruby, or its HEAD isn't in its default branch, the scripts may not
-  # be the reviewed ones, so the lead asks first; the yes names a digest of
-  # what was there when it was given.
+  # be the reviewed ones, so `check` and `record` ask first; the yes names a
+  # digest of what was there when it was given.
   class ScriptsCheckout
     SKILL_DIRECTORY = File.expand_path('../..', __dir__)
     SUPPORT_DIRECTORY = '_support'
-    # What mise reads, at the checkout's root, for the Ruby ruby-launch runs.
-    RUBY_VERSION_FILES = %w[.ruby-version mise.toml .mise.toml .tool-versions].freeze
+    # What mise reads, at the checkout's root and in skills/, for the Ruby
+    # ruby-launch runs; what it reads in skills/_support/ is under review
+    # with the rest of that directory.
+    ROOT_RUBY_FILES = %w[.ruby-version mise.toml .mise.toml .tool-versions mise.local.toml .config/mise.toml
+                         .mise/config.toml].freeze
+    SKILLS_RUBY_FILES = %w[.ruby-version .tool-versions mise.toml].freeze
     DEFAULT_BRANCH = 'refs/remotes/origin/HEAD'
     ACCEPT_FLAG = '--accept-scripts'
+    TOKEN = /\A[0-9a-f]{64}\z/
     NOT_A_REPOSITORY = 128
 
     # +top_level+ is nil when the scripts aren't in a git checkout, such as
@@ -41,15 +46,23 @@ module Do
       end
     end
 
+    # +value+, the digest a yes names, as --accept-scripts takes it.
+    def self.token!(value)
+      return value if value.is_a?(String) && TOKEN.match?(value)
+
+      raise SkillSupport::InvalidIdentifier.new(:scripts_digest, value)
+    end
+
     # +skill_directory+ is the running skill's directory, symlinks resolved.
     def initialize(runner, skill_directory: SKILL_DIRECTORY)
       @git = Git.new(runner)
       @skill_directory = skill_directory
     end
 
-    # +work_tree+ is the working directory's top level; +accepted+ the token
-    # a yes was given for, if any.
-    def examine(work_tree:, accepted: nil)
+    # +work_tree+ is the working directory's top level, when whether the
+    # scripts live there matters; +accepted+ the token a yes was given for,
+    # if any.
+    def examine(work_tree: nil, accepted: nil)
       top = top_level
       return Inspection.new(in_work_tree: false, on_default_branch: true, accepted: false) unless top
 
@@ -69,13 +82,16 @@ module Do
     end
 
     # The skill's directory and skills/_support beside it, as the top level
-    # sees them, then the root's Ruby version files; a symlinked _support is
+    # sees them, then the files that pick the Ruby; a symlinked _support is
     # checked as the link.
     def pathspecs(top)
-      directories = [@skill_directory, File.join(File.dirname(@skill_directory), SUPPORT_DIRECTORY)].map do |path|
-        Pathname(path).relative_path_from(Pathname(top)).to_s
-      end
-      directories + RUBY_VERSION_FILES
+      skills = File.dirname(@skill_directory)
+      directories = [@skill_directory, File.join(skills, SUPPORT_DIRECTORY)].map { |path| relative(path, top) }
+      directories + ROOT_RUBY_FILES + SKILLS_RUBY_FILES.map { |name| File.join(relative(skills, top), name) }
+    end
+
+    def relative(path, top)
+      Pathname(path).relative_path_from(Pathname(top)).to_s
     end
 
     def status(top)

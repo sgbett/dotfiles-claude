@@ -38,20 +38,22 @@ module Do
     GATE_ANSWERED = :gate_answered
     GATE_UNANSWERED = :gate_unanswered
     GATE_LINE_MISSING = :gate_line_missing
+    AMBIGUOUS_CHECKBOX = :ambiguous_checkbox
 
     PREFLIGHT_STOPS = [NOT_AN_ISSUE, HOST_NOT_LOGGED_IN, GATE_ADVISORY, REMOTE_MISSING, HOST_MISMATCH,
                        REMOTE_UNRESOLVABLE, PUSH_REMOTE_NOT_THIS_REPOSITORY, FORK_NOT_WRITABLE,
                        PR_TARGET_NOT_THIS_REPOSITORY, BRANCH_IS_BASE_OR_DEFAULT, BASE_MISSING, CHECKED_OUT_PR,
-                       REMOTE_TIPS_DIFFER, UNTRUSTED_PULL_REQUEST].freeze
+                       REMOTE_TIPS_DIFFER, UNTRUSTED_PULL_REQUEST, AMBIGUOUS_CHECKBOX].freeze
     PREFLIGHT_ASKS = [NO_ORIGIN, COMMENTS_TRUNCATED, UNTRUSTED_AUTHOR_CRITERIA, GATE_RECORD_MISSING,
                       LOCAL_BRANCH_UNPUSHED, SCRIPTS_UNREVIEWED].freeze
     PREFLIGHT = (PREFLIGHT_STOPS + PREFLIGHT_ASKS).freeze
     # record finds its issue as pre-flight does (IssueLocator), so it shares
-    # host_not_logged_in and no_origin.
+    # host_not_logged_in and no_origin, and examines its own checkout as
+    # check does.
     RECORD_STOPS = [NOT_AN_ISSUE, HOST_NOT_LOGGED_IN, NO_LEDGER, BOX_MISSING, BODY_CHANGED, UNTRUSTED_ISSUE_AUTHOR,
                     NOT_A_SUB_ISSUE, UNTRUSTED_SUB_ISSUE, NO_SUCH_FINDING, GATE_ADVISORY, GATE_ANSWERED,
-                    GATE_LINE_MISSING].freeze
-    RECORD_ASKS = [NO_ORIGIN, GATE_UNANSWERED].freeze
+                    GATE_LINE_MISSING, AMBIGUOUS_CHECKBOX].freeze
+    RECORD_ASKS = [NO_ORIGIN, GATE_UNANSWERED, SCRIPTS_UNREVIEWED].freeze
     RECORD = (RECORD_STOPS + RECORD_ASKS).freeze
     ALL = (PREFLIGHT | RECORD).freeze
 

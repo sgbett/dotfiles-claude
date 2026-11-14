@@ -25,8 +25,11 @@ RSpec.describe Do::CheckArguments do
     expect(options.to_h.values_at(:accept_local_branch, :accept_scripts)).to eq(['a' * 40, digest])
   end
 
-  it 'takes a remote name with a slash, as git allows' do
-    expect(parse('24', *required.drop(2), '--push-remote', 'team/fork').push_remote).to eq('team/fork')
+  it 'takes a base and branch holding "#", as hierarchical names do, which SKILL.md single-quotes' do
+    options = parse('24', *required.first(4), '--base', 'project/#12_skills/master', '--branch',
+                    'project/#12_skills/feat/24')
+
+    expect(options.to_h.values_at(:base, :branch)).to eq(%w[project/#12_skills/master project/#12_skills/feat/24])
   end
 
   it 'refuses a flag that is missing, unknown, repeated or without its value, and no issue' do
@@ -38,8 +41,9 @@ RSpec.describe Do::CheckArguments do
   end
 
   it 'refuses any value that is not valid, or could be read as an option' do
-    invalid = { '--push-remote' => ['-x', '', "origin\n"], '--pr-target' => ['sgbett', '-o/r', 'o/r/x'],
-                '--base' => ['-master', 'a..b', '', 'feat/#24'], '--branch' => ['--help', 'feat x', '@{-1}', "x'y"] }
+    invalid = { '--push-remote' => ['-x', '', "origin\n", 'team/fork', 'fork*', "or'x"],
+                '--pr-target' => ['sgbett', '-o/r', 'o/r/x', "o/r'x"],
+                '--base' => ['-master', 'a..b', '', 'feat/$x'], '--branch' => ['--help', 'feat x', '@{-1}', "x'y"] }
     invalid.each do |flag, values|
       values.each do |value|
         flags = required.each_slice(2).to_h.merge(flag => value).flatten

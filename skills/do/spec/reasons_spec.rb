@@ -8,12 +8,12 @@ RSpec.describe Do::Reasons do
       .to eq(%i[not_an_issue host_not_logged_in gate_advisory remote_missing host_mismatch remote_unresolvable
                 push_remote_not_this_repository fork_not_writable pr_target_not_this_repository
                 branch_is_base_or_default base_missing checked_out_pr remote_tips_differ untrusted_pull_request
-                no_origin comments_truncated untrusted_author_criteria gate_record_missing local_branch_unpushed
-                scripts_unreviewed])
+                ambiguous_checkbox no_origin comments_truncated untrusted_author_criteria gate_record_missing
+                local_branch_unpushed scripts_unreviewed])
     expect(described_class::RECORD)
       .to eq(%i[not_an_issue host_not_logged_in no_ledger box_missing body_changed untrusted_issue_author
                 not_a_sub_issue untrusted_sub_issue no_such_finding gate_advisory gate_answered gate_line_missing
-                no_origin gate_unanswered])
+                ambiguous_checkbox no_origin gate_unanswered scripts_unreviewed])
     expect([described_class::PREFLIGHT_STOPS & described_class::PREFLIGHT_ASKS,
             described_class::RECORD_STOPS & described_class::RECORD_ASKS]).to eq([[], []])
     expect(described_class::ALL).to match_array(described_class::PREFLIGHT | described_class::RECORD)

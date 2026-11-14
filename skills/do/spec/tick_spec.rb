@@ -23,8 +23,7 @@ RSpec.describe Do::Tick do
   # Expects the issue query, answered with +response+, then the calls the
   # block expects, and ticks +flag+'s +value+.
   def tick(flag, value, response = record_response(ledger: ledger), dry_run: false)
-    expect_gh_login
-    expect_issue_query(response)
+    expect_located(response)
     yield if block_given?
     record('tick', 'sgbett/dotfiles-claude#24', flag, value, *('--dry-run' if dry_run))
   end
@@ -84,7 +83,15 @@ RSpec.describe Do::Tick do
       exit_code, output = tick_ledger('L1,L2', dry_run: true)
 
       expect([exit_code, output.values_at('flipped', 'already', 'dry_run')]).to eq([0, [['L1'], ['L2'], true]])
-      expect(fake_runner.calls.length).to eq(2)
+      expect(fake_runner.calls.length).to eq(4)
+    end
+
+    it 'stops, naming the line, when a line reads like a box it cannot place, writing nothing' do
+      exit_code, output = tick_ledger('L1', record_response(ledger: "#{ledger}[ ] **L4 No list marker.**\n"))
+
+      expect([exit_code, output.values_at('reason', 'target', 'lines')])
+        .to eq([2, ['ambiguous_checkbox', 'ledger', [10]]])
+      expect(gh_writes).to eq([])
     end
   end
 
@@ -112,7 +119,26 @@ RSpec.describe Do::Tick do
 
       exit_code, output = tick_issue('1', response)
 
-      expect([exit_code, output['reason'], fake_runner.calls.length]).to eq([2, 'untrusted_issue_author', 2])
+      expect([exit_code, output['reason'], fake_runner.calls.length]).to eq([2, 'untrusted_issue_author', 4])
+    end
+
+    it 'counts the top-level boxes GitHub renders, and ticks each at its own mark' do
+      body = "1. [ ] One\n2. [ ] Two\n   - [ ] a detail\n\n <!-- - [ ] hidden -->\n - [ ] Three\n"
+      after = body.sub('1. [ ] One', '1. [x] One').sub(' - [ ] Three', ' - [x] Three')
+      output = tick_issue('3,1') do
+        expect_read(issue_path, body)
+        expect_edit(issue_path, body, after)
+      end.last
+
+      expect(output.values_at('flipped', 'already')).to eq([[3, 1], []])
+    end
+
+    it 'stops, naming the lines, when the body holds a line that reads like a box it cannot place' do
+      body = "- [ ] One\n[ ] Two\n-\t[ ] Three\n"
+      exit_code, output = tick_issue('1') { expect_read(issue_path, body) }
+
+      expect([exit_code, output.values_at('reason', 'target', 'lines'), gh_writes])
+        .to eq([2, ['ambiguous_checkbox', 'issue_body', [2, 3]], []])
     end
   end
 end

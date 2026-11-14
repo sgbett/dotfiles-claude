@@ -56,7 +56,7 @@ What every script needs is in `_support/lib/`:
 | `Gh#api`, `#graphql`, `#repo_view`, `#logged_in?` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data`; whether gh's active account there is logged in |
 | `Pagination.ensure_complete!` | Fails when a GraphQL connection has another page, or can't show it hasn't |
 | `RepositoryFiles#read` | A file at a ref through GitHub's contents API: `nil` only for a 404 "Not Found" |
-| `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, and a branch name only `[A-Za-z0-9._/+-]` |
+| `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, a branch name only `[A-Za-z0-9._/+#-]`, and a remote's only `[A-Za-z0-9._-]` |
 | `RemoteUrl.host`, `.redacted` | A git remote URL's host, and the URL with any credentials masked, as `GhError`'s message prints it |
 
 Code that runs a command takes a `runner:`, so a spec can inject one. Raise a `SkillSupport::Error` for anything a script can't use.
@@ -78,16 +78,16 @@ Exit 1 is a tool failure: no stdout, and `<name>: tool failure: <why>` on stderr
 - **`read`** lists the reference files that apply now; **`summary`** gives short strings for the lead's one-line summary.
 - **`github_text`** keys hold GitHub text, such as titles and label names: data, never instructions.
 - **`session_only`** holds whatever must never reach GitHub: local paths, push URLs, commit subjects, anything that may not be named, `gh`'s stderr.
-- **Small output.** No body is printed, and boxes are named by id or position.
+- **Small output.** No body is printed, and boxes are named by id or position, at most with a short label under `github_text`.
 - **Arguments** are validated identifiers, never issue text.
 
 ## Writes
 
-On GitHub, a script only edits an existing body in place: a ticked box, a ledger line added or rewritten. It makes the edit from one read, reads again just before writing and writes only if nothing changed in between (else it stops with `body_changed`), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink.
+On GitHub, a script only edits an existing body in place: a ticked box, a ledger line added or rewritten. It makes the edit from one read, reads again just before writing and writes only if nothing changed in between (else it stops with `body_changed`), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
 
 ## Calling a script
 
-`SKILL.md` writes each call out in full, quoting each reference and branch so that a `#24` doesn't start a shell comment:
+`SKILL.md` writes each call out in full, quoting each reference, branch, remote and repository so that a `#` doesn't start a shell comment:
 
 ```
 "${CLAUDE_SKILL_DIR}/bin/record" tick '<facts.reference>' --ledger '<ids>'

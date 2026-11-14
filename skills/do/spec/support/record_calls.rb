@@ -5,11 +5,13 @@ require_relative 'issue_responses'
 
 module Do
   module Testing
-    # The calls `record` makes, expected on the fake runner: the recorded
-    # #24 answer to the issue query, changed where a spec needs another
-    # ledger, issue body or sub-issue, then REST reads and writes of the
-    # issue body and the ledger comment, and the git calls for the base and
-    # the gate file. Every write is synthesised; none was recorded.
+    # The calls `record` makes, expected on the fake runner: the scripts'
+    # own checkout, which is none here, the recorded #24 answer to the issue
+    # query, changed where a spec needs another ledger, issue body or
+    # sub-issue, then REST reads and writes of the issue body and the ledger
+    # comment, and the git calls for the base and the common git directory
+    # the lock and the gate file live in. Every write is synthesised; none
+    # was recorded.
     module RecordCalls
       include IssueResponses
 
@@ -17,11 +19,37 @@ module Do
       LEDGER_PATH = 'repos/sgbett/dotfiles-claude/issues/comments/6867069660'
       MARKER = "<!-- do:breakdown -->\n"
 
-      # Runs record with +arguments+ on the fake runner, returning the exit
-      # code and the output as parsed JSON.
+      # Runs record with +arguments+ on the fake runner, its scripts in
+      # scripts_skill_directory, returning the exit code and the output as
+      # parsed JSON.
       def record(*arguments)
-        outcome = Do::Record.call(arguments, runner: fake_runner)
+        outcome = Do::Record.call(arguments, runner: fake_runner, skill_directory: scripts_skill_directory)
         [outcome.exit_code, JSON.parse(outcome.to_json)]
+      end
+
+      # A directory to stand for the running skill's, in no git checkout.
+      def scripts_skill_directory
+        @scripts_skill_directory ||= sandbox.path('scripts', 'skills', 'do').tap { |path| FileUtils.mkdir_p(path) }
+      end
+
+      # The calls every record subcommand makes before its own: its scripts'
+      # checkout, then those expect_issue_found expects.
+      def expect_located(response, **result)
+        expect_scripts_outside_checkout
+        expect_issue_found(response, **result)
+      end
+
+      # gh's login, the issue query answered with +response+, and the common
+      # git directory.
+      def expect_issue_found(response, **result)
+        expect_gh_login
+        expect_issue_query(response, **result)
+        expect_common_directory
+      end
+
+      def expect_scripts_outside_checkout
+        fake_runner.expect_call(['git', '-C', scripts_skill_directory, 'rev-parse', '--show-toplevel'],
+                                exit_status: 128, stderr: "fatal: not a git repository\n")
       end
 
       # The recorded answer with +ledger+ as the ledger's text after its

@@ -74,9 +74,11 @@ RSpec.describe Do::ScriptsCheckout do
       .to eq([['?? skills/_support/new.rb'], :scripts_unreviewed])
   end
 
-  it 'asks about a change to a file at the root that picks the Ruby the scripts run on, and digests it' do
-    Do::ScriptsCheckout::RUBY_VERSION_FILES.each do |name|
+  it 'asks about a change to any file mise reads for the Ruby the scripts run on, at the root or in skills/' do
+    ['.ruby-version', 'mise.toml', '.mise.toml', '.tool-versions', 'mise.local.toml', '.config/mise.toml',
+     '.mise/config.toml', 'skills/.ruby-version', 'skills/.tool-versions', 'skills/mise.toml'].each do |name|
       reviewed_checkout
+      FileUtils.mkdir_p(File.dirname(File.join(top, name)))
       File.write(File.join(top, name), "ruby 2.7.0\n")
       inspection = examine
 

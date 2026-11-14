@@ -66,7 +66,7 @@ gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/contents/.claud
 
 `check-issue-24.json` is #24 as GitHub names its repository, with its default branch, `base-master.json` and `base-missing.json` a base branch that exists and one that doesn't, `pull-requests-24.json` the branch with no pull request open, `push-origin.json` this repository through its push URL, `fork.json` a fork and its parent, each with the viewer's permission on it, and `rules-not-found.json` the 404 for an absent `.claude/rules/`.
 
-`record`'s one recording is #24 through REST, recorded the same way after the same check. `closes` reads the issue body from it; the GraphQL query is pre-flight's, so `record` reuses `issue-24.json`.
+`record`'s one recording is #24 through REST, recorded the same way after the same check: the issue body, which `closes` and `preflight facts` read. The GraphQL query is pre-flight's, so `record` reuses `issue-24.json`.
 
 ```sh
 F=skills/do/spec/fixtures
@@ -79,4 +79,4 @@ The specs build every other case in Ruby (`spec/support/issue_responses.rb`) by 
 
 `check`'s other cases are built in `spec/support/check_responses.rb` and the specs themselves: other remotes and forks, pull requests open on the branch, files with a security focus, and the git answers its unit specs expect. Its git layer is tested against real repositories made in each example's sandbox instead; an end-to-end `check` reaches its push URL, `git@github.com:sgbett/dotfiles-claude.git`, through a `GIT_SSH_COMMAND` that serves one of them, never the network.
 
-`record`'s other cases are built in `spec/support/record_calls.rb` and the specs themselves: other ledgers, issue bodies and sub-issues, and every write, whose answers are synthesised rather than recorded. Its gate file is written in each example's sandbox.
+`record`'s other cases are built in `spec/support/record_calls.rb` and the specs themselves: other ledgers, issue bodies and sub-issues, and every write, whose answers are synthesised rather than recorded. Its gate file and lock are written in each example's sandbox.

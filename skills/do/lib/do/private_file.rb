@@ -37,6 +37,8 @@ module Do
       raise
     end
 
+    # Makes +directory+ if it is missing, or tightens it, refusing a symlink
+    # or anything but a directory.
     def secure_directory(directory)
       Dir.mkdir(directory, DIRECTORY_MODE)
     rescue Errno::EEXIST
@@ -47,6 +49,6 @@ module Do
       File.chmod(DIRECTORY_MODE, directory)
     end
 
-    private_class_method :put_in_place, :secure_directory
+    private_class_method :put_in_place
   end
 end

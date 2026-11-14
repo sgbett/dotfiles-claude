@@ -12,8 +12,7 @@ RSpec.describe Do::Closes do
   # its criteria live in the ledger, an issue body of +body+.
   def closes(response = record_response, body: self.body, base: 'master', items: nil, boxes: nil)
     expect_base(base)
-    expect_gh_login
-    expect_issue_query(response)
+    expect_located(response)
     expect_read(Do::Testing::RecordCalls::ISSUE_PATH, body) if body
     record('closes', 'sgbett/dotfiles-claude#24', '--base', base, *(['--verified-items', items] if items),
            *(['--verified-boxes', boxes] if boxes))
@@ -42,6 +41,12 @@ RSpec.describe Do::Closes do
       _exit_code, output = closes(body: "- [x] One\n- [ ] Two\n", boxes: '2')
 
       expect(output['closes_lines']).to eq(['Closes #24'])
+    end
+
+    it "holds the issue open on a box GitHub renders at the top level, however it's marked or indented" do
+      _exit_code, output = closes(body: "1. [ ] One\n  - [ ] Two\n<!--\n- [ ] Not rendered\n-->\n", boxes: '1')
+
+      expect(output['held']).to eq([{ 'reference' => '#24', 'reasons' => ['unverified_boxes'], 'unverified' => [2] }])
     end
 
     it 'takes every ledger item instead when the body holds no box' do
@@ -141,11 +146,17 @@ RSpec.describe Do::Closes do
       expect([exit_code, output['reason'], output['missing']]).to eq([2, 'box_missing', ['L1', 'L9', 3]])
     end
 
+    it 'stops, naming the line, on a line of the body that reads like a box it cannot place' do
+      exit_code, output = closes(body: "- [ ] One\n- [ ]Two\n", boxes: '1')
+
+      expect([exit_code, output.values_at('reason', 'target', 'lines')])
+        .to eq([2, ['ambiguous_checkbox', 'issue_body', [2]]])
+    end
+
     it 'stops when there is no ledger' do
       response = issue_response { |issue| issue['comments'] = connection([]) }
       expect_base
-      expect_gh_login
-      expect_issue_query(response)
+      expect_located(response)
 
       expect(record('closes', 'sgbett/dotfiles-claude#24', '--base', 'master').last['reason']).to eq('no_ledger')
     end

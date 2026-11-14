@@ -13,8 +13,7 @@ RSpec.describe Do::SubIssueRecord do
   end
 
   def sub_issue(item, number, answer = response(sub_issue_node(31)), dry_run: false)
-    expect_gh_login
-    expect_issue_query(answer)
+    expect_located(answer)
     yield if block_given?
     record('sub-issue', 'sgbett/dotfiles-claude#24', '--item', item, '--number', number, *('--dry-run' if dry_run))
   end
@@ -64,7 +63,7 @@ RSpec.describe Do::SubIssueRecord do
 
   it 'reports the rewrite on a dry run, writing nothing' do
     expect(sub_issue('L2', '31', dry_run: true).last.values_at('updated', 'dry_run')).to eq([['ledger'], true])
-    expect(fake_runner.calls.length).to eq(2)
+    expect(fake_runner.calls.length).to eq(4)
   end
 
   it 'fails as a tool on a title that would break the line' do

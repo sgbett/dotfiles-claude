@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'scripts_checkout'
 require_relative 'usage_error'
 
 module Do
@@ -12,8 +13,6 @@ module Do
       '--accept-local-branch' => :accept_local_branch, '--accept-scripts' => :accept_scripts
     }.freeze
     REQUIRED = %i[push_remote pr_target base branch].freeze
-    DIGEST = /\A[0-9a-f]{64}\z/
-    CONTROL_CHARACTER = /[[:cntrl:]]/
 
     Options = Struct.new(:reference, *FLAGS.values, keyword_init: true)
 
@@ -42,7 +41,7 @@ module Do
     end
 
     def conventions(values, runner)
-      { push_remote: remote!(values[:push_remote]),
+      { push_remote: SkillSupport::Identifiers.remote!(values[:push_remote]),
         pr_target: SkillSupport::Identifiers.repository!(values[:pr_target]),
         base: SkillSupport::Identifiers.branch!(values[:base], runner: runner),
         branch: SkillSupport::Identifiers.branch!(values[:branch], runner: runner) }
@@ -51,24 +50,9 @@ module Do
     # The yeses given, each tied to the state it answered.
     def answers(values)
       { accept_local_branch: values[:accept_local_branch]&.then { |sha| SkillSupport::Identifiers.commit_sha!(sha) },
-        accept_scripts: values[:accept_scripts]&.then { |digest| digest!(digest) } }
+        accept_scripts: values[:accept_scripts]&.then { |digest| ScriptsCheckout.token!(digest) } }
     end
 
-    # git remote names can hold "/", so the only check here is that the
-    # name can't be read as an option.
-    def remote!(value)
-      valid = value.is_a?(String) && !value.empty? && !value.start_with?('-') && !CONTROL_CHARACTER.match?(value)
-      raise SkillSupport::InvalidIdentifier.new(:remote, value) unless valid
-
-      value
-    end
-
-    def digest!(value)
-      return value if value.is_a?(String) && DIGEST.match?(value)
-
-      raise SkillSupport::InvalidIdentifier.new(:scripts_digest, value)
-    end
-
-    private_class_method :values, :conventions, :answers, :remote!, :digest!
+    private_class_method :values, :conventions, :answers
   end
 end

@@ -28,7 +28,7 @@ module Do
     def decide(issue)
       return Reasons.stop(Reasons::NO_LEDGER) unless issue.ledger
 
-      boxes = Checklist.boxes(issue.issue_body.read) if issue.criteria_in_body?
+      boxes = Checklist.boxes(issue.issue_body.read, target: :issue_body) if issue.criteria_in_body?
       items, verified_boxes, missing = verified(issue.ledger, boxes)
       return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
 

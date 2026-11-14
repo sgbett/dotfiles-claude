@@ -14,9 +14,7 @@ RSpec.describe Do::GateRecord do
   # the query and the gate file's directory; the block expects whatever
   # calls follow.
   def gate(action, *flags, response: record_response(ledger: ledger))
-    expect_gh_login
-    expect_issue_query(response)
-    expect_common_directory
+    expect_located(response)
     yield if block_given?
     record('gate', action, 'sgbett/dotfiles-claude#24', *flags)
   end
@@ -105,6 +103,62 @@ RSpec.describe Do::GateRecord do
 
       expect { gate('add', '--finding-file', sandbox.path('link.md')) }
         .to raise_error(Do::UnusableFindingFile, /is a symlink/)
+      expect(File.exist?(gate_path)).to be(false)
+    end
+  end
+
+  describe 'two record calls on the issue at once' do
+    let(:second_finding) { sandbox.path('second.md').tap { |path| File.write(path, "Another flaw.\n") } }
+
+    # Pauses the first call to file a finding inside the gate file's
+    # read-modify-write, until the spec lets it go on.
+    def pause_first_edit(holding, release)
+      paused = false
+      allow(Do::GateEdits).to receive(:add).and_wrap_original do |original, *arguments|
+        unless paused
+          paused = true
+          holding << true
+          release.pop
+        end
+        original.call(*arguments)
+      end
+    end
+
+    def add_in_thread(finding)
+      Thread.new do
+        Thread.current.report_on_exception = false
+        record('gate', 'add', 'sgbett/dotfiles-claude#24', '--finding-file', finding)
+      end
+    end
+
+    it 'gives two interleaved gate adds a k each and keeps both findings, the second waiting for the first' do
+      holding = Queue.new
+      release = Queue.new
+      pause_first_edit(holding, release)
+      expect_located(record_response(ledger: ledger))
+      first = add_in_thread(finding_path)
+      holding.pop
+      expect_located(record_response(ledger: ledger))
+      second = add_in_thread(second_finding)
+
+      waited = second.join(0.5).nil?
+      release << true
+      expect([waited, [first, second].map { |thread| thread.value.last['k'] }]).to eq([true, %w[G1 G2]])
+      expect(gate_file.findings.map(&:id)).to eq(%w[G1 G2])
+      expect(File.read(gate_path)).to include(finding, "Another flaw.\n")
+    end
+
+    it 'fails as a tool when another call holds the lock past the wait' do
+      stub_const('Do::RecordLock::WAIT_SECONDS', 0.2)
+      lock = Do::RecordLock.path(File.join(sandbox.work_directory, '.git'), 'I_kwDOQzoXSs8AAAABfBUanQ')
+      FileUtils.mkdir_p(File.dirname(lock))
+      expect_located(record_response(ledger: ledger))
+
+      File.open(lock, File::RDWR | File::CREAT, 0o600) do |file|
+        file.flock(File::LOCK_EX)
+        expect { record('gate', 'add', 'sgbett/dotfiles-claude#24', '--finding-file', finding_path) }
+          .to raise_error(Do::LockTimeout)
+      end
       expect(File.exist?(gate_path)).to be(false)
     end
   end

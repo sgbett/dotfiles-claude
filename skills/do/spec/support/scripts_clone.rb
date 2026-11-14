@@ -11,17 +11,22 @@ module Do
                %w[update-ref refs/remotes/origin/master HEAD],
                %w[symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master]].freeze
 
-      # The copy's bin/preflight.
-      def scripts_clone
-        root = sandbox.path('clone')
-        skill = File.join(root, 'skills', 'do')
-        FileUtils.mkdir_p(skill)
-        %w[bin lib].each do |part|
-          FileUtils.cp_r(File.join(repository_root, 'skills', 'do', part), skill, preserve: true)
+      # The copy's bin/preflight, or its bin/+script+.
+      def scripts_clone(script = 'preflight')
+        File.join(cloned_skill, 'bin', script)
+      end
+
+      def cloned_skill
+        @cloned_skill ||= sandbox.path('clone').then do |root|
+          skill = File.join(root, 'skills', 'do')
+          FileUtils.mkdir_p(skill)
+          %w[bin lib].each do |part|
+            FileUtils.cp_r(File.join(repository_root, 'skills', 'do', part), skill, preserve: true)
+          end
+          File.symlink(File.join(repository_root, 'skills', '_support'), File.join(root, 'skills', '_support'))
+          SETUP.each { |arguments| system('git', '-C', root, *arguments, exception: true) }
+          skill
         end
-        File.symlink(File.join(repository_root, 'skills', '_support'), File.join(root, 'skills', '_support'))
-        SETUP.each { |arguments| system('git', '-C', root, *arguments, exception: true) }
-        File.join(skill, 'bin', 'preflight')
       end
     end
   end

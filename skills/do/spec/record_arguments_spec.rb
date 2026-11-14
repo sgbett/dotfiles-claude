@@ -39,13 +39,22 @@ RSpec.describe Do::RecordArguments do
       .to eq(command: 'sub-issue', reference: '24', item: 'L3', number: 31, dry_run: false)
   end
 
+  it "reads the yes to the scripts' checkout that every subcommand takes" do
+    digest = 'c' * 64
+
+    expect([options('closes', '24', '--accept-scripts', digest, '--base', 'master')[:accept_scripts],
+            options('gate', 'publish', '24', '--k', 'G1', '--accept-scripts', digest)[:accept_scripts]])
+      .to eq([digest, digest])
+  end
+
   it 'refuses an unknown subcommand, a missing issue, and a flag that is missing, unknown, repeated or unpaired' do
+    twice = %W[--accept-scripts #{'c' * 64} --accept-scripts #{'d' * 64}]
     [[], %w[close 24 --base master], %w[gate 24], %w[gate open 24 --k G1], %w[closes --base master],
      %w[closes 24], %w[closes 24 --base master --base main], %w[closes 24 --base master --dry-run],
      %w[closes 24 --base], %w[tick 24], %w[tick 24 --ledger L1 --issue-boxes 1],
      %w[tick 24 --ledger L1 --dry-run --dry-run], %w[gate add 24 --k G1],
      %w[gate answer 24 --k G1 --dry-run --answer advisory], %w[sub-issue 24 --item L1],
-     %w[closes 24 --base=master]].each do |arguments|
+     %w[closes 24 --base=master], %w[tick 24 --ledger L1] + twice].each do |arguments|
       expect { parse(*arguments) }.to raise_error(Do::RecordUsageError, /usage: record closes/), arguments.inspect
     end
   end
@@ -58,6 +67,7 @@ RSpec.describe Do::RecordArguments do
       %w[gate-mark --k G1 --state] => ['user decided', 'open'],
       %w[gate-publish --k] => %w[1 G0 g1 G1x],
       %w[gate-add --finding-file] => ['-f', "a\nb"],
+      %w[closes --base master --accept-scripts] => ['C' * 64, 'c' * 63, 'yes'],
       %w[sub-issue --number 31 --item] => %w[#31 L1a G1], %w[sub-issue --item L1 --number] => %w[0 -3 x] }
       .each do |(command, *flags), values|
         values.each do |value|

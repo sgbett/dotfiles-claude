@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'gate_state'
+require_relative 'local_records'
 require_relative 'markdown'
 require_relative 'private_file'
 
@@ -21,7 +22,6 @@ module Do
   # text is never read out: until it's fixed, it describes a live flaw.
   # GateEdits makes the text of a change, which .write puts in place.
   class GateFile
-    DIRECTORY = 'do'
     SUFFIX = '-gate.md'
     HEADING = /\A## (?<id>G[1-9][0-9]*):(?<state>.*)\z/
     ANSWER = /\AAnswer: (?<answer>fix here|advisory)[ \t]*\z/
@@ -41,11 +41,7 @@ module Do
 
     # Where the gate file of the issue with GraphQL node id +node_id+ lives.
     def self.path(common_directory, node_id)
-      directory = File.join(File.realpath(common_directory), DIRECTORY)
-      path = File.join(directory, "#{SkillSupport::Identifiers.node_id!(node_id)}#{SUFFIX}")
-      raise UnsafeGateFile, "#{path} is outside #{directory}" unless File.dirname(File.expand_path(path)) == directory
-
-      path
+      LocalRecords.path(common_directory, node_id, SUFFIX)
     end
 
     # The gate file at +path+, or an empty one when there is none.

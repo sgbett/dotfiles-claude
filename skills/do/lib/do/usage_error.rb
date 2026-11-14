@@ -26,9 +26,10 @@ module Do
       '       record gate publish <issue> --k G<k> [--dry-run]',
       '       record gate mark <issue> --k G<k> --state fixed|user-decided [--dry-run]',
       '       record sub-issue <issue> --item <L<n>|P<n>> --number <M> [--dry-run]',
-      'where <issue> is an issue number, owner/repo#N or https://<host>/<owner>/<repo>/issues/<N>,',
-      '<ids> are ledger ids (L<n>, P<n>, #M or owner/repo#M) and <positions> the places of the',
-      "issue body's top-level boxes, counting from 1, each list comma-separated"
+      'each taking [--accept-scripts <digest>], where <issue> is an issue number, owner/repo#N or',
+      'https://<host>/<owner>/<repo>/issues/<N>, <ids> are ledger ids (L<n>, P<n>, #M or owner/repo#M)',
+      "and <positions> the places of the issue body's top-level boxes, counting from 1, each list",
+      'comma-separated'
     ].join("\n").freeze
   end
 end

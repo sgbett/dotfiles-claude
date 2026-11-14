@@ -14,7 +14,10 @@ module Do
 
       SCRIPTS_DEFAULTS = { status: '', default: 'refs/remotes/origin/master', ancestor: true, head: BASE_SHA,
                            diff: '' }.freeze
-      PATHSPECS = ['--', 'skills/do', 'skills/_support', *Do::ScriptsCheckout::RUBY_VERSION_FILES].freeze
+      # The skill's directories, then every file mise reads for the Ruby they run on.
+      PATHSPECS = ['--', 'skills/do', 'skills/_support', '.ruby-version', 'mise.toml', '.mise.toml', '.tool-versions',
+                   'mise.local.toml', '.config/mise.toml', '.mise/config.toml', 'skills/.ruby-version',
+                   'skills/.tool-versions', 'skills/mise.toml'].freeze
 
       # +top+ nil means the scripts aren't in a git checkout. Otherwise
       # +checkout+ can give the porcelain +status+ for the skill's

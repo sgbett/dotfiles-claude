@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 module Do
-  # Reads Markdown line by line the way GitHub renders it, so a checklist,
-  # gate line or heading quoted in a fenced code block is never taken for
-  # a real one.
+  # Reads Markdown line by line, telling fenced code blocks apart, so a
+  # heading or answer line quoted in one is never taken for a real one: in
+  # the gate file, and in CLAUDE.md. GitHub-rendered checklists go through
+  # BlockReader, which knows list items and HTML blocks too.
   module Markdown
     # CommonMark: up to three spaces of indentation, then three or more
     # backticks or tildes; a backtick fence's info string holds no backtick.

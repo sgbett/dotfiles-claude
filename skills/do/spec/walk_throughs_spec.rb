@@ -57,6 +57,8 @@ RSpec.describe "/do pre-flight, #21's walk-throughs" do
                             stdout: "#{sandbox.work_directory}/.git\n")
     fake_runner.expect_call(['git', 'check-ref-format', '--branch', Do::Testing::CheckCalls::BRANCH],
                             stdout: "#{Do::Testing::CheckCalls::BRANCH}\n")
+    fake_runner.expect_call(['gh', 'api', '--hostname', 'github.com', '-X', 'GET', "repos/#{fork}/issues/24"],
+                            stdout: JSON.generate('body' => "- [ ] One\n"))
     outcome = Do::Facts.new('24', runner: fake_runner).call
 
     expect(JSON.parse(outcome.to_json)['summary']['issue']).to eq("#{fork}#24")
