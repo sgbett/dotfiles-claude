@@ -3,13 +3,25 @@
 require_relative '../lib/do/reasons'
 
 RSpec.describe Do::Reasons do
-  it 'is the whole enum of stops and asks, none of them both' do
-    expect(described_class::ALL).to eq(%i[not_an_issue gate_advisory remote_missing host_mismatch remote_unresolvable
-                                          push_remote_not_this_repository pr_target_not_this_repository base_missing
-                                          checked_out_pr untrusted_pull_request no_origin comments_truncated
-                                          untrusted_author_criteria gate_record_missing local_branch_unpushed
-                                          scripts_unreviewed])
-    expect(described_class::STOPS & described_class::ASKS).to be_empty
+  it "is each script's whole enum of stops and asks, none of them both" do
+    expect(described_class::PREFLIGHT)
+      .to eq(%i[not_an_issue gate_advisory remote_missing host_mismatch remote_unresolvable
+                push_remote_not_this_repository pr_target_not_this_repository base_missing checked_out_pr
+                untrusted_pull_request no_origin comments_truncated untrusted_author_criteria gate_record_missing
+                local_branch_unpushed scripts_unreviewed])
+    expect(described_class::RECORD)
+      .to eq(%i[not_an_issue no_ledger box_missing body_changed untrusted_issue_author not_a_sub_issue
+                untrusted_sub_issue no_such_finding gate_advisory gate_answered gate_line_missing no_origin
+                gate_unanswered])
+    expect([described_class::PREFLIGHT_STOPS & described_class::PREFLIGHT_ASKS,
+            described_class::RECORD_STOPS & described_class::RECORD_ASKS]).to eq([[], []])
+    expect(described_class::ALL).to match_array(described_class::PREFLIGHT | described_class::RECORD)
+  end
+
+  it 'lists why record closes holds an issue open apart from any stop or ask' do
+    expect(described_class::HELD)
+      .to eq(%i[unverified_boxes unverified_items open_elsewhere untrusted_elsewhere not_in_ledger])
+    expect(described_class::HELD & described_class::ALL).to be_empty
   end
 
   it "tells the user, for every stop on the remotes, to run /do from a checkout of the issue's repository or a fork" do

@@ -111,6 +111,33 @@ RSpec.describe Do::GateFile do
     end
   end
 
+  describe 'what a change needs' do
+    let(:text) { "## G1: fixed\n```\n## G2: open\n```\n## G3: open\n## G1: user decided\n" }
+
+    it 'gives the lines of each heading of a finding, outside code fences' do
+      expect([gate_file(text).heading_lines('G1'), gate_file(text).heading_lines('G2')]).to eq([[0, 5], []])
+    end
+
+    it 'tells whether every heading of a finding gives a state' do
+      expect([gate_file(text).marked?('G1', 'fixed'), gate_file("## G1: fixed\n## G1: fixed\n").marked?('G1', 'fixed')])
+        .to eq([false, true])
+    end
+
+    it 'takes the lowest G<k> that neither the file nor the ledger uses' do
+      expect([gate_file(text).next_id(%w[G2]), gate_file(text).next_id(%w[G2 G4]), gate_file('').next_id([])])
+        .to eq(%w[G4 G5 G1])
+    end
+  end
+
+  describe '.write' do
+    it 'makes the do directory 0700 and the file 0600, and reads back what it wrote' do
+      described_class.write(path, "## G1: open\n")
+
+      expect([File.stat(directory).mode & 0o777, File.stat(path).mode & 0o777]).to eq([0o700, 0o600])
+      expect(described_class.read(path).findings.map(&:id)).to eq(['G1'])
+    end
+  end
+
   describe '#status' do
     it 'counts a finding open while the file or the ledger says so' do
       status = gate_file("## G1: open\n## G2: fixed\n## G3: fixed\n")

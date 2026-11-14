@@ -67,7 +67,8 @@ module Do
       return unless ledger
 
       ledger_comment(ledger.comment).merge(
-        items: ledger.items.map { |item| ledger_item(item) }, gates: ledger.gates.map(&:to_h),
+        items: ledger.items.map { |item| ledger_item(item) },
+        gates: ledger.gates.map { |gate| { id: gate.id, state: gate.state } },
         first_unbuilt: ledger.first_unbuilt&.id, adopted_criteria: ledger.adopted_criteria?
       )
     end

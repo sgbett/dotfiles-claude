@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'checklist'
 require_relative 'gate_state'
 require_relative 'markdown'
 require_relative 'visibility'
@@ -11,8 +12,6 @@ module Do
   # heading. Boxes and lines inside fenced code blocks don't count.
   class Ledger
     MARKER = '<!-- do:breakdown -->'
-    # Unindented, as /do writes "- [ ] ...": a nested box is detail, not an item.
-    BOX = /\A[-*+] \[(?<mark>[ xX])\](?: (?<text>.*))?\z/
     LINE_ITEM = /\A\*\*(?<id>L[1-9][0-9]*)(?![0-9A-Za-z])/
     REPOSITORY = %r{#{SkillSupport::Identifiers::OWNER}/#{SkillSupport::Identifiers::REPOSITORY_NAME}}
     SUB_ISSUE = /\A(?<repository>#{REPOSITORY})?#(?<number>[1-9][0-9]*)(?![0-9A-Za-z])/
@@ -23,9 +22,10 @@ module Do
     # repository or "owner/repo#M" in another that may be named; otherwise
     # "P<position>", the box's place among the ledger's boxes. +kind+ is
     # :item, :sub_issue (in this repository) or :sub_issue_elsewhere, and
-    # +sub_issue+ the sub-issue's IssueRecord.
-    Item = Struct.new(:id, :position, :kind, :checked, :sub_issue, keyword_init: true)
-    Gate = Struct.new(:id, :state, keyword_init: true)
+    # +sub_issue+ the sub-issue's IssueRecord. +line+, for items and gate
+    # lines alike, is the index among the body's lines.
+    Item = Struct.new(:id, :position, :line, :kind, :checked, :sub_issue, keyword_init: true)
+    Gate = Struct.new(:id, :state, :line, keyword_init: true)
 
     attr_reader :comment, :items, :gates
 
@@ -47,7 +47,9 @@ module Do
       @items = []
       @gates = []
       @adopted_criteria = false
-      Markdown.unfenced_lines(comment.body).each { |line| read(line) }
+      Markdown.lines_with_fences(comment.body).each_with_index do |(line, fenced), index|
+        read(line, index) unless fenced
+      end
     end
 
     def adopted_criteria?
@@ -60,29 +62,35 @@ module Do
       items.find { |item| !item.checked && item.kind != :sub_issue_elsewhere }
     end
 
+    # The items each of +ids+ names, and the ids that name no box, or more
+    # than one when boxes repeat an id.
+    def resolve(ids)
+      found = ids.map { |id| items.select { |item| item.id == id } }
+      [found.select(&:one?).map(&:first), ids.select.with_index { |_id, index| !found[index].one? }]
+    end
+
     private
 
-    def read(line)
-      if (box = BOX.match(line))
-        @items << item(box, @items.length + 1)
+    def read(line, index)
+      if (box = Checklist::BOX.match(line))
+        @items << item(box, @items.length + 1, index)
       elsif (gate = GATE_LINE.match(line))
-        @gates << Gate.new(id: gate[:id], state: GateState.parse(gate[:state]))
+        @gates << Gate.new(id: gate[:id], state: GateState.parse(gate[:state]), line: index)
       elsif line.rstrip == ADOPTED_CRITERIA
         @adopted_criteria = true
       end
     end
 
-    def item(box, position)
-      checked = box[:mark] != ' '
+    def item(box, position, line)
+      place = { position: position, line: line, checked: box[:mark] != Checklist::UNTICKED }
       text = box[:text].to_s.lstrip
       line_item = LINE_ITEM.match(text)
-      return Item.new(id: line_item[:id], position: position, kind: :item, checked: checked) if line_item
+      return Item.new(id: line_item[:id], kind: :item, **place) if line_item
 
       sub_issue = linked_sub_issue(text)
-      return Item.new(id: "P#{position}", position: position, kind: :item, checked: checked) unless sub_issue
+      return Item.new(id: "P#{position}", kind: :item, **place) unless sub_issue
 
-      Item.new(id: sub_issue_id(sub_issue, position), position: position, kind: sub_issue_kind(sub_issue),
-               checked: checked, sub_issue: sub_issue)
+      Item.new(id: sub_issue_id(sub_issue, position), kind: sub_issue_kind(sub_issue), sub_issue: sub_issue, **place)
     end
 
     # The sub-issue a box starting "#M" or "owner/repo#M" names, if GraphQL

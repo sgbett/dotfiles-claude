@@ -1,47 +1,27 @@
 # frozen_string_literal: true
 
-require_relative 'ledger'
+require 'forwardable'
+require_relative 'issue_view'
 require_relative 'reasons'
 require_relative 'reference_files'
-require_relative 'trust'
-require_relative 'visibility'
 
 module Do
-  # What pre-flight makes of one issue's facts under /do's rules: who is
-  # trusted, what may be named, which comment is the ledger, where the
-  # security gate stands, and so whether to stop, ask or go on.
+  # What pre-flight makes of one issue's facts: the IssueView's reading of
+  # them under /do's rules, where the security gate stands, and so whether
+  # to stop, ask or go on.
   class Assessment
-    attr_reader :query, :trust, :ledger, :ignored_markers, :gate
+    extend Forwardable
+
+    def_delegators :@view, :query, :trust, :ledger, :ignored_markers, :nameable?, :here?, :reference,
+                   :untrusted_authors
+
+    attr_reader :gate
 
     # +query+ is IssueQuery's Result for an issue, +gate_file+ the issue's
     # GateFile.
     def initialize(query, gate_file)
-      @query = query
-      @trust = Trust.new(viewer: query.viewer, home: query.repository)
-      @ledger, @ignored_markers = locate_ledger
+      @view = IssueView.new(query)
       @gate = gate_file.status(ledger ? ledger.gates : [])
-    end
-
-    # The issue's parent or one of its sub-issues: may GitHub text name it?
-    def nameable?(record)
-      Visibility.nameable?(record.repository, query.repository)
-    end
-
-    def here?(record)
-      record.repository.same_as?(query.repository)
-    end
-
-    # "#M" for an issue here, "owner/repo#M" for one elsewhere.
-    def reference(record)
-      here?(record) ? "##{record.number}" : "#{record.repository.name_with_owner}##{record.number}"
-    end
-
-    # :issue and :parent when their authors aren't trusted.
-    def untrusted_authors
-      untrusted = []
-      untrusted << :issue unless trust.here(query.issue.author).trusted
-      untrusted << :parent if query.parent && !trust.issue(query.parent).trusted
-      untrusted
     end
 
     def stop_reason
@@ -64,11 +44,6 @@ module Do
     end
 
     private
-
-    def locate_ledger
-      comment, ignored = Ledger.locate(query.comments) { |marker| trust.here(marker.author).trusted }
-      [comment && Ledger.new(comment, sub_issues: query.sub_issues, home: query.repository), ignored]
-    end
 
     # A trusted ledger among the first 100 comments is the earliest there
     # is; without one, it may be on a later page.

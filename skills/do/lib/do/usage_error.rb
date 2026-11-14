@@ -12,7 +12,23 @@ module Do
     ].join("\n").freeze
 
     def initialize
-      super(USAGE)
+      super(self.class::USAGE)
     end
+  end
+
+  # record was called with arguments it doesn't take.
+  class RecordUsageError < UsageError
+    USAGE = [
+      'usage: record closes <issue> --base <branch> [--verified-items <ids>] [--verified-boxes <positions>]',
+      '       record tick <issue> (--ledger <ids> | --issue-boxes <positions>) [--dry-run]',
+      '       record gate add <issue> --finding-file <path>',
+      '       record gate answer <issue> --k G<k> --answer fix-here|advisory',
+      '       record gate publish <issue> --k G<k> [--dry-run]',
+      '       record gate mark <issue> --k G<k> --state fixed|user-decided [--dry-run]',
+      '       record sub-issue <issue> --item <L<n>|P<n>> --number <M> [--dry-run]',
+      'where <issue> is an issue number, owner/repo#N or https://<host>/<owner>/<repo>/issues/<N>,',
+      '<ids> are ledger ids (L<n>, P<n>, #M or owner/repo#M) and <positions> the places of the',
+      "issue body's top-level boxes, counting from 1, each list comma-separated"
+    ].join("\n").freeze
   end
 end

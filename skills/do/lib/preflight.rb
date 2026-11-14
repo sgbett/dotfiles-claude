@@ -20,4 +20,4 @@ require support
 
 require_relative 'do/preflight'
 
-exit SkillSupport::Cli.run('preflight', reasons: Do::Reasons::ALL) { Do::Preflight.call(ARGV) }
+exit SkillSupport::Cli.run('preflight', reasons: Do::Reasons::PREFLIGHT) { Do::Preflight.call(ARGV) }

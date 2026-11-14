@@ -96,6 +96,23 @@ RSpec.describe Do::Ledger do
     end
   end
 
+  describe 'line numbers' do
+    it "gives each item its index among the body's lines, counting fenced lines too" do
+      body = "Intro\n```\n- [ ] **L9 Quoted.**\n```\n- [ ] **L1 One.**\r\n  - [ ] detail\n- [x] **L2 Two.**"
+
+      expect(ledger(body).items.map { |item| [item.id, item.position, item.line] }).to eq([['L1', 1, 5], ['L2', 2, 7]])
+    end
+  end
+
+  describe '#resolve' do
+    it 'finds the item each id names, and lists ids that name none or several' do
+      found, missing = ledger("- [ ] **L1 One.**\n- [ ] **L2 Two.**\n- [x] **L2 Again.**\n- [ ] Plain\n")
+                       .resolve(%w[L1 P4 L2 L3])
+
+      expect([found.map(&:id), missing]).to eq([%w[L1 P4], %w[L2 L3]])
+    end
+  end
+
   describe '#first_unbuilt' do
     let(:elsewhere) { issue_record(number: 9, repository: repository('example-owner/other-repo')) }
 
@@ -118,11 +135,12 @@ RSpec.describe Do::Ledger do
   end
 
   describe 'gate lines' do
-    it 'reads plain "Gate G<k>: <state>" lines outside code fences' do
+    it 'reads plain "Gate G<k>: <state>" lines outside code fences, with their line numbers' do
       body = "Gate G1: open\nGate G2: fixed\nGate G3: user decided\n- [ ] Gate G4: open\n```\nGate G5: open\n```\n"
 
-      expect(ledger(body).gates.map(&:to_h)).to eq([{ id: 'G1', state: 'open' }, { id: 'G2', state: 'fixed' },
-                                                    { id: 'G3', state: 'user decided' }])
+      expect(ledger(body).gates.map(&:to_h)).to eq([{ id: 'G1', state: 'open', line: 1 },
+                                                    { id: 'G2', state: 'fixed', line: 2 },
+                                                    { id: 'G3', state: 'user decided', line: 3 }])
     end
 
     it 'reads any state it does not recognise as open' do
