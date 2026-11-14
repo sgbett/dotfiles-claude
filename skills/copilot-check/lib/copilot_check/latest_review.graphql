@@ -1,0 +1,9 @@
+query CopilotCheckLatestReview($owner: String!, $name: String!, $number: Int!, $copilot: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviews(last: 1, author: $copilot) {
+        nodes { submittedAt author { ... on Bot { id } } }
+      }
+    }
+  }
+}

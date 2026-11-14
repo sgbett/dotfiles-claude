@@ -84,7 +84,7 @@ Exit 1 is a tool failure: no stdout, and `<name>: tool failure: <why>` on stderr
 
 ## Writes
 
-On GitHub, a script only edits an existing body in place: a ticked box, a ledger line added or rewritten. It makes the edit from one read, reads again just before writing and writes only if nothing changed in between (else it stops with `body_changed`), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
+On GitHub, a script only changes what already exists, in place: a ticked box, a ledger line added or rewritten, a review thread resolved, or Copilot asked to review again. It makes an edit or a resolve from one read, reads again just before writing and writes only if nothing changed in between (else an edit stops with `body_changed`, and a thread is left for the next round), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
 
 ## Calling a script
 

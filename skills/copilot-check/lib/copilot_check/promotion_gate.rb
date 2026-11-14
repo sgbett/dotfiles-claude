@@ -35,7 +35,7 @@ module CopilotCheck
       @repository = CheckoutRepository.resolve(@runner)
       @github = SkillSupport::Gh.new(host: @repository.host, runner: @runner)
       report(Verdict.new(facts(rules, started_as_draft)))
-    rescue ThreadsStop => e
+    rescue Stop => e
       Reasons.stop(e.reason, repository: GateReport.repository_fields(@repository),
                              pull_request: { number: @options.pr })
     end

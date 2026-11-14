@@ -2,26 +2,17 @@
 
 require_relative 'copilot'
 require_relative 'reasons'
+require_relative 'stop'
 require_relative 'todo_selection'
 
 module CopilotCheck
-  # The thread fetch can't be read as SKILL.md's Phase 2a reads it. Not a
-  # tool failure: a script stops with +reason+, one of Reasons::THREAD_STOPS.
-  class ThreadsStop < StandardError
-    attr_reader :reason
-
-    def initialize(reason)
-      @reason = reason
-      super(reason.to_s)
-    end
-  end
-
   # Phase 2a's fetch, in one query with Copilot's latest review (Phase 0's):
   # a pull request's review threads, Copilot's reviews and the pull request's
-  # comments, and what of them is still to do (TodoSelection). Where 2a
-  # stops, this raises ThreadsStop rather than guess: a list longer than its
-  # one page, or a sign that the filters no longer recognise Copilot.
-  # GraphQL errors raise too, even beside data.
+  # comments, what of them is still to do, and which threads an answer of
+  # ours has left to resolve (TodoSelection). Where 2a stops, this raises
+  # Stop rather than guess: a list longer than its one page, or a sign that
+  # the filters no longer recognise Copilot. GraphQL errors raise too, even
+  # beside data.
   class Threads
     QUERY = File.read(File.join(__dir__, 'threads.graphql'))
     PAGED_LISTS = %w[reviews comments reviewThreads].freeze
@@ -30,8 +21,9 @@ module CopilotCheck
     # the commit it reviewed.
     LatestReview = Struct.new(:submitted_at, :comments, :commit, keyword_init: true)
     # +latest_review+ is nil when Copilot hasn't reviewed the pull request;
-    # +todo_threads+ and +todo_reviews+ are TodoSelection's.
-    Result = Struct.new(:latest_review, :todo_threads, :todo_reviews, keyword_init: true)
+    # +todo_threads+, +todo_reviews+ and +resolvable_threads+ are
+    # TodoSelection's.
+    Result = Struct.new(:latest_review, :todo_threads, :todo_reviews, :resolvable_threads, keyword_init: true)
 
     def self.variables(repository, number)
       owner, name = SkillSupport::Identifiers.repository!(repository).split('/')
@@ -53,7 +45,8 @@ module CopilotCheck
       copilot_ids!(reviews, threads)
       guard!(latest, threads)
       Result.new(latest_review: latest, todo_threads: TodoSelection.threads(threads),
-                 todo_reviews: TodoSelection.reviews(reviews, nodes(pull_request, 'comments')))
+                 todo_reviews: TodoSelection.reviews(reviews, nodes(pull_request, 'comments')),
+                 resolvable_threads: TodoSelection.resolvable(threads))
     end
 
     private
@@ -65,7 +58,7 @@ module CopilotCheck
       PAGED_LISTS.each { |list| SkillSupport::Pagination.ensure_complete!(node, list) }
       node
     rescue SkillSupport::IncompleteResults
-      raise ThreadsStop, Reasons::THREADS_OVERFLOW
+      raise Stop, Reasons::THREADS_OVERFLOW
     end
 
     def nodes(pull_request, list)
@@ -101,11 +94,11 @@ module CopilotCheck
     def guard!(latest, threads)
       return unless latest&.comments&.positive? && threads.none? { |thread| TodoSelection.copilot_started?(thread) }
 
-      raise ThreadsStop, Reasons::COPILOT_UNRECOGNISED
+      raise Stop, Reasons::COPILOT_UNRECOGNISED
     end
 
     def copilot!(node)
-      raise ThreadsStop, Reasons::COPILOT_ID_CHANGED unless Copilot.authored?(node)
+      raise Stop, Reasons::COPILOT_ID_CHANGED unless Copilot.authored?(node)
     end
   end
 end

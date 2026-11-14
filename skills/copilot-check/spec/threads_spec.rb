@@ -34,12 +34,12 @@ RSpec.describe CopilotCheck::Threads do
 
   def stop_reason
     yield
-  rescue CopilotCheck::ThreadsStop => e
+  rescue CopilotCheck::Stop => e
     e.reason
   end
 
   it 'sends the query and variables the fixtures were recorded with' do
-    { 'threads-14' => 14, 'threads-18' => 18 }.each do |name, number|
+    { 'threads-3' => 3, 'threads-14' => 14, 'threads-18' => 18 }.each do |name, number|
       expect(JSON.parse(fixture("graphql/#{name}.request.json")))
         .to eq('query' => described_class::QUERY, 'variables' => described_class.variables(here, number)), name
     end
@@ -104,6 +104,33 @@ RSpec.describe CopilotCheck::Threads do
       end
 
       expect(fetch(response).todo_threads.length).to eq(1)
+    end
+  end
+
+  describe 'a thread to resolve' do
+    it 'is unresolved, started by Copilot and last answered by us, as #14 was before it was resolved' do
+      ours = changed_threads { |pull_request| thread_of(pull_request)['isResolved'] = false }
+
+      expect(fetch(ours).resolvable_threads).to eq(['PRRT_kwDOQzoXSs6wwd00'])
+    end
+
+    it "is not one resolved, one a stranger answered last, one Copilot didn't start, or one GitHub says little of" do
+      resolved = threads_response('threads-14')
+      strangers = changed_threads do |pull_request|
+        thread_of(pull_request)['isResolved'] = false
+        thread_of(pull_request)['last']['nodes'] = [{ 'viewerDidAuthor' => false }]
+      end
+      not_copilots = changed_threads do |pull_request|
+        thread_of(pull_request)['isResolved'] = false
+        thread_of(pull_request)['first']['nodes'].first['author'] = { '__typename' => 'User', 'login' => 'example' }
+      end
+      unsaid = changed_threads do |pull_request|
+        thread_of(pull_request).delete('isResolved')
+        thread_of(pull_request)['last']['nodes'] = []
+      end
+
+      expect([resolved, strangers, not_copilots, unsaid].map { |response| fetch(response).resolvable_threads })
+        .to eq([[], [], [], []])
     end
   end
 

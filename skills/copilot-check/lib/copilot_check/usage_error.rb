@@ -14,7 +14,35 @@ module CopilotCheck
     ].join("\n").freeze
 
     def initialize
-      super(USAGE)
+      super(self.class::USAGE)
     end
+  end
+
+  # setup was called with arguments it doesn't take.
+  class SetupUsageError < UsageError
+    USAGE = [
+      'usage: setup --argument-file <path> --start-file <path> --rubric-file <path> [--accept-fork <sha>]',
+      "where the argument file holds the skill's argument as the user gave it, a pull request number or",
+      'nothing, and setup writes the start file and the rubric file, at absolute paths'
+    ].join("\n").freeze
+  end
+
+  # threads was called with arguments it doesn't take.
+  class ThreadsUsageError < UsageError
+    USAGE = [
+      'usage: threads fetch --pr <number> --bodies-dir <path>',
+      '       threads resolve --pr <number> [--dry-run]',
+      'where fetch writes each body still to do to a file in the directory at <path>, an absolute path'
+    ].join("\n").freeze
+  end
+
+  # rereview was called with arguments it doesn't take.
+  class RereviewUsageError < UsageError
+    USAGE = [
+      'usage: rereview request --pr <number> [--dry-run]',
+      '       rereview watch --pr <number> --since <timestamp>',
+      "where <timestamp> is the high-water mark, the submittedAt of Copilot's latest review when the",
+      'round began, in ISO 8601 UTC'
+    ].join("\n").freeze
   end
 end

@@ -6,7 +6,10 @@ module CopilotCheck
   # Phase 2a's selection of what is still to do, from the thread fetch's
   # GraphQL nodes: the threads Copilot started that are unresolved and not
   # last answered by us, and Copilot's reviews that no comment of ours marks
-  # answered. Anything GitHub leaves unsaid counts against an answer.
+  # answered. Anything GitHub leaves unsaid counts against an answer. And
+  # Phase 4's: the threads Copilot started that are unresolved and last
+  # answered by us, which it resolves, where anything left unsaid counts
+  # against resolving.
   module TodoSelection
     # Phase 4 ends its answer to review-body findings with one of these for
     # each review it read.
@@ -38,6 +41,19 @@ module CopilotCheck
              .reject { |review| answered.include?(review.review_id) }
     end
 
+    # The ids of the review thread nodes among +threads+ that are resolvable?
+    def resolvable(threads)
+      threads.select { |thread| resolvable?(thread) }.map { |thread| thread['id'] }
+    end
+
+    # Whether review thread node +thread+ is one Phase 4 resolves: Copilot
+    # started it, it is unresolved, and its last comment is ours, so never
+    # one a stranger has replied to since, nor one left unanswered by a
+    # pause.
+    def resolvable?(thread)
+      thread['isResolved'] == false && copilot_started?(thread) && last_ours?(thread)
+    end
+
     # Whether Copilot started review thread node +thread+.
     def copilot_started?(thread)
       Copilot.authored?(first_comment(thread))
@@ -48,8 +64,11 @@ module CopilotCheck
     end
 
     def to_do?(thread)
-      answered = thread.dig('last', 'nodes')&.first&.fetch('viewerDidAuthor', nil) == true
-      thread['isResolved'] != true && copilot_started?(thread) && !answered
+      thread['isResolved'] != true && copilot_started?(thread) && !last_ours?(thread)
+    end
+
+    def last_ours?(thread)
+      thread.dig('last', 'nodes')&.first&.fetch('viewerDidAuthor', nil) == true
     end
 
     def todo_thread(thread)
@@ -71,6 +90,6 @@ module CopilotCheck
       raise SkillSupport::UnexpectedResponse, 'a Copilot review came back without its databaseId'
     end
 
-    private_class_method :to_do?, :todo_thread, :answered_ids, :review_id
+    private_class_method :to_do?, :last_ours?, :todo_thread, :answered_ids, :review_id
   end
 end

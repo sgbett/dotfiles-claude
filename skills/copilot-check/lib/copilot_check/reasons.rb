@@ -1,22 +1,35 @@
 # frozen_string_literal: true
 
 module CopilotCheck
-  # Every reason /copilot-check's scripts can stop for, and every reason
-  # promote-check's verdict can hold a draft for, each with its message. A
-  # message is a constant, so no GitHub text can reach one; whatever the lead
-  # needs travels beside it in validated fields.
+  # Every reason /copilot-check's scripts can stop or ask for, and every
+  # reason promote-check's verdict can hold a draft for, each with its
+  # message. A message is a constant, so no GitHub text can reach one;
+  # whatever the lead needs travels beside it in validated fields.
   module Reasons
+    NOT_A_PULL_REQUEST_NUMBER = :not_a_pull_request_number
+    FORK_PULL_REQUEST = :fork_pull_request
     COPILOT_ID_CHANGED = :copilot_id_changed
     COPILOT_UNRECOGNISED = :copilot_unrecognised
     THREADS_OVERFLOW = :threads_overflow
+    COPILOT_TIMEOUT = :copilot_timeout
     HEAD_CHANGED = :head_changed
     HEAD_UNREADABLE = :head_unreadable
 
     # The thread fetch's stops (Threads), which leave nothing to judge.
     THREAD_STOPS = [COPILOT_ID_CHANGED, COPILOT_UNRECOGNISED, THREADS_OVERFLOW].freeze
+    # setup's whole enum: an argument that names no pull request, the ask on
+    # a fork's, and Copilot's latest review under another id.
+    SETUP = [NOT_A_PULL_REQUEST_NUMBER, FORK_PULL_REQUEST, COPILOT_ID_CHANGED].freeze
+    # threads': `fetch` and `resolve` stop only where the thread fetch does.
+    THREADS = THREAD_STOPS
+    # rereview's: `request` never stops, and `watch` stops on Copilot's
+    # latest review under another id, or on none newer within 15 minutes.
+    REREVIEW = [COPILOT_ID_CHANGED, COPILOT_TIMEOUT].freeze
     # promote-check's whole enum of stops: `check` stops only where the
     # thread fetch does, and `verify` on anything but the head it was given.
     PROMOTE_CHECK = (THREAD_STOPS + [HEAD_CHANGED, HEAD_UNREADABLE]).freeze
+    # Every reason a script can stop or ask for.
+    ALL = (SETUP | THREADS | REREVIEW | PROMOTE_CHECK).freeze
 
     # Why promote-check's verdict holds a draft: Phase 6's conditions, in its
     # order, each named for how it fails.
@@ -28,9 +41,19 @@ module CopilotCheck
     UNDO_READY = 'Run gh pr ready --undo for it and report that instead: jobs the ready event started keep running.'
 
     MESSAGES = {
+      not_a_pull_request_number: "The argument isn't a pull request number. Tell the user that /copilot-check " \
+                                 "takes a bare number, or nothing on the pull request's branch, as the repository " \
+                                 "is always this checkout's.",
+      fork_pull_request: "The pull request comes from a fork: its author isn't trusted, yet controls the code the " \
+                         'verifiers read and the fixes would build on. Ask the user whether to go on; on a yes, ' \
+                         'run setup again with accept_with added, which holds while pull_request.head is the head.',
       copilot_id_changed: "A review or thread under Copilot's login carries an id other than the identity table's " \
                           "BOT_kgDOCnlnWA: Copilot's account id has changed. Stop and tell the user to update the " \
-                          'identity table; never treat this as convergence.',
+                          'identity table and CopilotCheck::Copilot::BOT_ID; never treat this as convergence.',
+      copilot_timeout: 'No new Copilot review came within 15 minutes (failed_polls counts the polls that could not ' \
+                       "read GitHub, and session_only.error holds the last one's error). Copilot occasionally does " \
+                       "not review, and as its review only comments it can't be a required approval, so nothing " \
+                       'else will notice: say so plainly in the report.',
       copilot_unrecognised: "Copilot's latest review has inline comments, but no review thread was started by " \
                             "Copilot's id: the filters no longer recognise Copilot. Stop and flag it; never treat " \
                             'this as convergence.',
@@ -74,6 +97,11 @@ module CopilotCheck
 
     def stop(reason, **fields)
       SkillSupport::Outcome.stop(reason, MESSAGES.fetch(reason), **fields)
+    end
+
+    # One entry of an ask's list; +details+ carries what the answer needs.
+    def ask(reason, **details)
+      { reason: reason, message: MESSAGES.fetch(reason), **details }
     end
 
     # One entry of a HOLD verdict's reasons.

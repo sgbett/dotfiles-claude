@@ -1,0 +1,9 @@
+{
+  "query": "query CopilotCheckLatestReview($owner: String!, $name: String!, $number: Int!, $copilot: String!) {\n  repository(owner: $owner, name: $name) {\n    pullRequest(number: $number) {\n      reviews(last: 1, author: $copilot) {\n        nodes { submittedAt author { ... on Bot { id } } }\n      }\n    }\n  }\n}\n",
+  "variables": {
+    "owner": "sgbett",
+    "name": "dotfiles-claude",
+    "number": 18,
+    "copilot": "copilot-pull-request-reviewer[bot]"
+  }
+}

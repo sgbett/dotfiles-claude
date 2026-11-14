@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'arguments'
 require_relative 'usage_error'
 
 module CopilotCheck
@@ -8,7 +9,7 @@ module CopilotCheck
   module PromoteCheckArguments
     SUBCOMMANDS = {
       'check' => { required: %w[--pr --rules-file --start-file --outcome], optional: %w[--reviews-without-findings] },
-      'verify' => { required: %w[--pr --head], optional: [] }
+      'verify' => { required: %w[--pr --head] }
     }.freeze
     OUTCOMES = %w[converged halted timeout stop push-failed].freeze
     REVIEW_ID = /\A[1-9][0-9]{0,19}\z/
@@ -23,36 +24,15 @@ module CopilotCheck
     # subcommand, or a flag it doesn't take, repeats or lacks, and
     # InvalidIdentifier for a value that isn't valid.
     def parse(arguments)
-      command, *flags = arguments
-      spec = SUBCOMMANDS.fetch(command) { raise UsageError }
-      values = values(flags, spec)
+      command, values, = Arguments.parse(arguments, SUBCOMMANDS, error: UsageError)
       Options.new(command: command, reviews_without_findings: [],
-                  **values.to_h { |flag, value| [option(flag), convert(flag, value)] })
-    end
-
-    def values(flags, spec)
-      raise UsageError if flags.length.odd?
-
-      values = flags.each_slice(2).to_h
-      raise UsageError unless values.length * 2 == flags.length && taken?(values.keys, spec)
-
-      values
-    end
-
-    # Whether +flags+ are all the subcommand's required ones, and only those
-    # it takes.
-    def taken?(flags, spec)
-      (flags - spec[:required] - spec[:optional]).empty? && (spec[:required] - flags).empty?
-    end
-
-    def option(flag)
-      flag.delete_prefix('--').tr('-', '_').to_sym
+                  **values.to_h { |flag, value| [Arguments.option(flag), convert(flag, value)] })
     end
 
     def convert(flag, value)
       case flag
       when '--pr' then SkillSupport::Identifiers.issue_number!(value)
-      when '--rules-file', '--start-file' then SkillSupport::WrittenFile.path!(option(flag), value)
+      when '--rules-file', '--start-file' then SkillSupport::WrittenFile.path!(Arguments.option(flag), value)
       when '--outcome' then outcome!(value)
       when '--reviews-without-findings' then review_ids!(value)
       when '--head' then SkillSupport::Identifiers.commit_sha!(value)
@@ -72,6 +52,6 @@ module CopilotCheck
       ids.map { |id| Integer(id, 10) }.uniq
     end
 
-    private_class_method :values, :taken?, :option, :convert, :outcome!, :review_ids!
+    private_class_method :convert, :outcome!, :review_ids!
   end
 end

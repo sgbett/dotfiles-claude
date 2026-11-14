@@ -1,0 +1,15 @@
+#!/bin/sh
+# skills/_support/templates/bin_stub, copied unchanged to
+# skills/<skill>/bin/<name>: runs that skill's lib/<name>.rb through the shared
+# ruby-launch. It looks for skills/_support itself because, when that is
+# missing, there is no launcher left to report it.
+
+unset CDPATH # a CDPATH match makes cd print the directory it chose
+name=$(basename -- "$0")
+skill=$(cd -P -- "$(dirname -- "$0")/.." && pwd) || exit 1
+launch="$skill/../_support/bin/ruby-launch"
+if [ ! -x "$launch" ]; then
+  echo "$name: tool failure: skills/_support is missing beside $skill; install skills/ as one unit" >&2
+  exit 1
+fi
+exec "$launch" "$skill/lib/$name.rb" "$@"
