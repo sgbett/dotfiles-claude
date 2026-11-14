@@ -1,6 +1,6 @@
 # A blocking security finding
 
-`/do`'s step 6 from the moment the white-hat reports a Critical or High finding until step 7 marks it, and any resume while one is open. Run each `bin/record gate` call as SKILL.md's step 6 writes it, with the values below, and handle its output as SKILL.md says.
+`/do`'s step 6 from the moment the white-hat reports a Critical or High finding until step 7 marks it, and any resume while one is open. Run each `bin/record gate` call as SKILL.md writes it (step 6, and step 7 for `gate mark`), with the values below, and handle its output as SKILL.md's invariants say.
 
 ## Record it at once
 

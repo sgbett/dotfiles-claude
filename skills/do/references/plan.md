@@ -1,6 +1,6 @@
 # The plan
 
-`/do`'s pre-flight finds the plan at step 2 and commits it first at step 6.
+`/do`'s pre-flight finds the plan at step 3 and commits it first at step 6.
 
 ## Which file is the plan
 
