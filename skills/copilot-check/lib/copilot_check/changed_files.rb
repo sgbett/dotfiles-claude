@@ -1,0 +1,59 @@
+# frozen_string_literal: true
+
+require_relative 'rest_list'
+
+module CopilotCheck
+  # The paths a pull request changes, read through REST, which alone gives a
+  # renamed file's previous path; and those that change what GitHub Actions
+  # runs or what Claude Code loads from a checkout.
+  class ChangedFiles
+    # GitHub lists at most 3,000 of a pull request's files.
+    MAX_PAGES = 30
+    WORKFLOW_DIRECTORIES = %w[.github/workflows/ .github/actions/].freeze
+    RULES_FILE = 'CLAUDE.md'
+    RULES_DIRECTORY = '.claude'
+
+    # +paths+ are each file's path and a renamed file's previous one;
+    # +complete+ whether they cover every file the pull request changes.
+    Result = Struct.new(:paths, :complete, keyword_init: true) do
+      def protected_paths
+        paths.select { |path| ChangedFiles.protected?(path) }
+      end
+    end
+
+    # Whether +path+ is under .github/workflows/ or .github/actions/, is a
+    # file named CLAUDE.md, or is under a .claude directory at any depth.
+    # Case is ignored, as a case-insensitive file system ignores it.
+    def self.protected?(path)
+      directories = path.split('/')[0...-1]
+      WORKFLOW_DIRECTORIES.any? { |directory| path.downcase.start_with?(directory) } ||
+        File.basename(path).casecmp?(RULES_FILE) || directories.any? { |name| name.casecmp?(RULES_DIRECTORY) }
+    end
+
+    # +github+ is the SkillSupport::Gh for the repository's host.
+    def initialize(github)
+      @github = github
+    end
+
+    # The Result for pull request +number+ of +repository+ ("owner/repo"),
+    # which GitHub says changes +changed_files+ files.
+    def list(repository, number, changed_files:)
+      path = "repos/#{SkillSupport::Identifiers.repository!(repository)}/pulls/" \
+             "#{SkillSupport::Identifiers.issue_number!(number)}/files"
+      entries, whole = RestList.read(@github, path, max_pages: MAX_PAGES)
+      Result.new(paths: entries.flat_map { |entry| paths(entry) }.uniq,
+                 complete: whole && entries.length == changed_files)
+    end
+
+    private
+
+    def paths(entry)
+      paths = [entry['filename'], *entry['previous_filename']] if entry.is_a?(Hash)
+      unless paths&.all? { |path| path.is_a?(String) && !path.empty? }
+        raise SkillSupport::UnexpectedResponse, "a pull request's file came back without its path"
+      end
+
+      paths
+    end
+  end
+end

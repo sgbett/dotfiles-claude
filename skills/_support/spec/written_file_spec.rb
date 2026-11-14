@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../lib/do/written_file'
-
-RSpec.describe Do::WrittenFile do
+RSpec.describe SkillSupport::WrittenFile do
   let(:path) { sandbox.path('argument.txt') }
 
   describe '.path!' do
@@ -26,7 +24,7 @@ RSpec.describe Do::WrittenFile do
       File.write(sandbox.path('real.txt'), "24\n")
       File.symlink(sandbox.path('real.txt'), sandbox.path('link.txt'))
       File.mkfifo(sandbox.path('fifo'))
-      error = Class.new(Do::UnusableFile)
+      error = Class.new(SkillSupport::UnusableFile)
 
       { path => /doesn't exist/, sandbox.path('link.txt') => /is a symlink/,
         sandbox.path('fifo') => /not a regular file/, sandbox.root => /not a regular file/ }.each do |file, message|

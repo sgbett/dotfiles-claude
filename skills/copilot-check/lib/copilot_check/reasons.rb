@@ -1,0 +1,86 @@
+# frozen_string_literal: true
+
+module CopilotCheck
+  # Every reason /copilot-check's scripts can stop for, and every reason
+  # promote-check's verdict can hold a draft for, each with its message. A
+  # message is a constant, so no GitHub text can reach one; whatever the lead
+  # needs travels beside it in validated fields.
+  module Reasons
+    COPILOT_ID_CHANGED = :copilot_id_changed
+    COPILOT_UNRECOGNISED = :copilot_unrecognised
+    THREADS_OVERFLOW = :threads_overflow
+    HEAD_CHANGED = :head_changed
+    HEAD_UNREADABLE = :head_unreadable
+
+    # The thread fetch's stops (Threads), which leave nothing to judge.
+    THREAD_STOPS = [COPILOT_ID_CHANGED, COPILOT_UNRECOGNISED, THREADS_OVERFLOW].freeze
+    # promote-check's whole enum of stops: `check` stops only where the
+    # thread fetch does, and `verify` on anything but the head it was given.
+    PROMOTE_CHECK = (THREAD_STOPS + [HEAD_CHANGED, HEAD_UNREADABLE]).freeze
+
+    # Why promote-check's verdict holds a draft: Phase 6's conditions, in its
+    # order, each named for how it fails.
+    HOLD = %i[not_open not_a_draft no_draft_flow merge_not_owners_step not_draft_at_start not_converged
+              local_head_differs copilot_not_on_head todo_threads unanswered_reviews not_viewers_own from_fork
+              files_unlisted protected_paths_changed no_checks checks_pending checks_cancelled undocumented_failures
+              not_mergeable auto_merge_on].freeze
+
+    UNDO_READY = 'Run gh pr ready --undo for it and report that instead: jobs the ready event started keep running.'
+
+    MESSAGES = {
+      copilot_id_changed: "A review or thread under Copilot's login carries an id other than the identity table's " \
+                          "BOT_kgDOCnlnWA: Copilot's account id has changed. Stop and tell the user to update the " \
+                          'identity table; never treat this as convergence.',
+      copilot_unrecognised: "Copilot's latest review has inline comments, but no review thread was started by " \
+                            "Copilot's id: the filters no longer recognise Copilot. Stop and flag it; never treat " \
+                            'this as convergence.',
+      threads_overflow: 'The pull request has more than 100 review threads, Copilot reviews or comments, more than ' \
+                        "the thread fetch reads, so it can't show that none is still to do. Stop and tell the user.",
+      head_changed: 'The pull request was marked ready, but its head is no longer the commit promote-check ' \
+                    "checked (pull_request.head is the new one). #{UNDO_READY}",
+      head_unreadable: 'The pull request was marked ready, but its head could not be read back ' \
+                       "(session_only.error). #{UNDO_READY}",
+      not_open: "The pull request isn't open.",
+      not_a_draft: "The pull request isn't a draft now.",
+      no_draft_flow: "The rules don't say pull requests open as drafts.",
+      merge_not_owners_step: "The rules don't list merging as a later step the owner takes.",
+      not_draft_at_start: "The pull request wasn't a draft when the run began, as Phase 0 recorded it.",
+      not_converged: "The run didn't converge: it halted, timed out, stopped or failed to push.",
+      local_head_differs: "The checkout's HEAD (local_head) isn't the pull request's head commit.",
+      copilot_not_on_head: "Copilot's latest review isn't of the pull request's head commit, or there is none.",
+      todo_threads: 'A fresh fetch finds review threads still to do (copilot.todo_threads): unresolved, started ' \
+                    "by Copilot, and with a last comment that isn't ours.",
+      unanswered_reviews: 'A fresh fetch finds Copilot reviews still to do (copilot.todo_reviews) that no comment ' \
+                          'of ours marks answered and that the run did not find free of findings ' \
+                          '(--reviews-without-findings).',
+      not_viewers_own: "The pull request's author isn't the authenticated user.",
+      from_fork: 'The pull request comes from a fork.',
+      files_unlisted: "The pull request's changed files could not all be listed, as GitHub lists at most 3,000, so " \
+                      'changes to workflows or rules files cannot be ruled out.',
+      protected_paths_changed: 'The pull request changes a path under .github/workflows/ or .github/actions/, a ' \
+                               'file named CLAUDE.md, or a path under a .claude directory ' \
+                               "(files.github_text.protected_paths), so the checkout's rules may not be the base's.",
+      no_checks: 'No check has run on the head.',
+      checks_pending: 'A check on the head is pending.',
+      checks_cancelled: 'A check on the head was cancelled.',
+      undocumented_failures: 'A check on the head failed, and the rules do not document that failure by its check ' \
+                             'name and an annotation text read through a GitHub Actions job link in this ' \
+                             'repository.',
+      not_mergeable: "GitHub doesn't report the pull request as MERGEABLE, after one re-read if it was UNKNOWN.",
+      auto_merge_on: 'Auto-merge is on.'
+    }.transform_values(&:freeze).freeze
+
+    module_function
+
+    def stop(reason, **fields)
+      SkillSupport::Outcome.stop(reason, MESSAGES.fetch(reason), **fields)
+    end
+
+    # One entry of a HOLD verdict's reasons.
+    def hold(reason)
+      raise ArgumentError, "#{reason} is not a reason to hold" unless HOLD.include?(reason)
+
+      { reason: reason.to_s, message: MESSAGES.fetch(reason) }
+    end
+  end
+end

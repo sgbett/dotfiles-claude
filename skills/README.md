@@ -56,6 +56,7 @@ What every script needs is in `_support/lib/`:
 | `Gh#api`, `#graphql`, `#repo_view`, `#logged_in?` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data`; whether gh's active account there is logged in |
 | `Pagination.ensure_complete!` | Fails when a GraphQL connection has another page, or can't show it hasn't |
 | `RepositoryFiles#read` | A file at a ref through GitHub's contents API: `nil` only for a 404 "Not Found" |
+| `WrittenFile.read`, `.path!` | A file the lead wrote, read as a regular file, never through a symlink; and the check on the path a flag gives |
 | `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, a branch name only `[A-Za-z0-9._/+#-]`, and a remote's only `[A-Za-z0-9._-]` |
 | `RemoteUrl.host`, `.redacted` | A git remote URL's host, and the URL with any credentials masked, as `GhError`'s message prints it |
 

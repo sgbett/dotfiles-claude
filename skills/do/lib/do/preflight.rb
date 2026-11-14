@@ -3,7 +3,6 @@
 require_relative 'check'
 require_relative 'facts'
 require_relative 'usage_error'
-require_relative 'written_file'
 
 module Do
   # skills/do/bin/preflight: /do's pre-flight in two calls, with the
@@ -33,7 +32,7 @@ module Do
       flag, path = rest
       raise UsageError unless rest.length == 2 && flag == ARGUMENT_FILE
 
-      WrittenFile.read(WrittenFile.path!(:argument_file, path)).delete_suffix(NEWLINE)
+      SkillSupport::WrittenFile.read(SkillSupport::WrittenFile.path!(:argument_file, path)).delete_suffix(NEWLINE)
     end
 
     private_class_method :argument
