@@ -9,6 +9,10 @@ module Do
     TAB_STOP = 4
     MAX_MARKER_INDENT = 3
     QUOTE_MARKER = '>'
+    # cmark-gfm's footnote definition, "[^label]:", which holds blocks as a
+    # block quote does, its later lines indented four columns.
+    FOOTNOTE_DEFINITION = /\A\[\^[^\]\s]+\]: */
+    FOOTNOTE_INDENT = 4
 
     attr_reader :raw, :text, :position
 
@@ -50,6 +54,26 @@ module Do
 
       @position = first_nonspace + 1
       @position += 1 if @text[@position] == ' '
+      self
+    end
+
+    # The scan moved past a footnote definition's label and the spaces after
+    # it, or nil when the line starts none.
+    def enter_footnote_definition
+      label = FOOTNOTE_DEFINITION.match(rest)
+      return unless label
+
+      @position = first_nonspace + label[0].length
+      self
+    end
+
+    # The scan moved past a footnote definition's indentation when the line
+    # continues it, as a blank line does too; or nil.
+    def enter_footnote
+      return self if blank?
+      return if indent < FOOTNOTE_INDENT
+
+      @position += FOOTNOTE_INDENT
       self
     end
 

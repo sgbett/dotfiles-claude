@@ -21,7 +21,7 @@ module Do
     end
 
     def call
-      RecordIssue.locate(@options.reference, runner: @runner) do |issue|
+      RecordIssue.locate(@options.reference, runner: @runner, writes: !@options.dry_run) do |issue|
         @issue = issue
         @path = issue.gate_path
         @file = GateFile.read(@path)

@@ -12,18 +12,24 @@ module Do
     module CheckFinishCalls
       include CheckResponses
 
-      SCRIPTS_DEFAULTS = { status: '', default: 'refs/remotes/origin/master', ancestor: true, head: BASE_SHA,
-                           diff: '' }.freeze
-      # The skill's directories, then every file mise reads for the Ruby they run on.
-      PATHSPECS = ['--', 'skills/do', 'skills/_support', '.ruby-version', 'mise.toml', '.mise.toml', '.tool-versions',
-                   'mise.local.toml', '.config/mise.toml', '.mise/config.toml', 'skills/.ruby-version',
-                   'skills/.tool-versions', 'skills/mise.toml'].freeze
+      SCRIPTS_DEFAULTS = { status: '', ruby_status: '', default: 'refs/remotes/origin/master', ancestor: true,
+                           head: BASE_SHA, diff: '' }.freeze
+      # The skill's directories.
+      DIRECTORIES = %w[skills/do skills/_support].freeze
+      # Every file mise reads for the Ruby the scripts run on, in each
+      # directory from the top level to skills/_support/bin, where it starts.
+      RUBY_FILES = ['', 'skills/', 'skills/_support/', 'skills/_support/bin/'].flat_map do |directory|
+        %w[.ruby-version .tool-versions mise.toml .mise.toml mise.local.toml .mise.local.toml .config/mise.toml
+           .config/mise/config.toml .config/mise/conf.d/*.toml mise/config.toml .mise/config.toml]
+          .map { |name| "#{directory}#{name}" }
+      end.freeze
+      STATUS = %w[-c core.fsmonitor=false --no-optional-locks status --porcelain=v1 -z --untracked-files=all].freeze
 
       # +top+ nil means the scripts aren't in a git checkout. Otherwise
       # +checkout+ can give the porcelain +status+ for the skill's
-      # directories, origin's HEAD as +default+, whether HEAD is its
-      # +ancestor+, and the +head+ and +diff+ an unreviewed checkout's digest
-      # is made from.
+      # directories and +ruby_status+ for the files that pick the Ruby,
+      # origin's HEAD as +default+, whether HEAD is its +ancestor+, and the
+      # +head+ and +diff+ an unreviewed checkout's digest is made from.
       def expect_scripts_step(top: nil, skill_directory: scripts_skill_directory, **checkout)
         fake_runner.expect_call(%w[git rev-parse --show-toplevel], stdout: "#{sandbox.work_directory}\n")
         fake_runner.expect_call(['git', '-C', skill_directory, 'rev-parse', '--show-toplevel'],
@@ -69,27 +75,44 @@ module Do
       private
 
       def expect_scripts_checkout(top, checkout)
-        fake_runner.expect_call(['git', '-C', top, '-c', 'core.fsmonitor=false', '--no-optional-locks', 'status',
-                                 '--porcelain=v1', '-z', '--untracked-files=all', *PATHSPECS],
-                                stdout: checkout[:status])
+        expect_scripts_status(top, checkout)
         expect_line(['git', '-C', top, 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD'], checkout[:default])
         if checkout[:default]
           fake_runner.expect_call(['git', '-C', top, 'merge-base', '--is-ancestor', 'HEAD', checkout[:default]],
                                   exit_status: checkout[:ancestor] ? 0 : 1)
         end
-        reviewed = checkout[:status].empty? && checkout[:default] && checkout[:ancestor]
+        reviewed = changes(checkout).empty? && checkout[:default] && checkout[:ancestor]
         expect_scripts_digest(top, checkout) unless reviewed
+      end
+
+      # The changes under the skill's directories, then to the files that
+      # pick the Ruby, ignored ones included.
+      def expect_scripts_status(top, checkout)
+        fake_runner.expect_call(['git', '-C', top, *STATUS, '--', *DIRECTORIES], stdout: checkout[:status])
+        fake_runner.expect_call(['git', '-C', top, *STATUS, '--ignored', '--', *RUBY_FILES],
+                                stdout: checkout[:ruby_status])
       end
 
       def expect_scripts_digest(top, checkout)
         fake_runner.expect_call(['git', '-C', top, 'rev-parse', '--verify', 'HEAD'], stdout: "#{checkout[:head]}\n")
         fake_runner.expect_call(['git', '-C', top, '-c', 'core.fsmonitor=false', 'diff', '--binary', '--no-ext-diff',
-                                 '--no-textconv', 'HEAD', *PATHSPECS], stdout: checkout[:diff])
-        untracked = Do::Porcelain.entries(checkout[:status]).select(&:untracked?).map(&:path)
-        return if untracked.empty?
+                                 '--no-textconv', 'HEAD', '--', *DIRECTORIES, *RUBY_FILES], stdout: checkout[:diff])
+        unversioned = unversioned(checkout)
+        return if unversioned.empty?
 
-        fake_runner.expect_call(['git', '-C', top, 'hash-object', '--no-filters', '--', *untracked],
-                                stdout: lines(untracked.map { |path| Digest::SHA1.hexdigest(path) }))
+        fake_runner.expect_call(['git', '-C', top, 'hash-object', '--no-filters', '--', *unversioned],
+                                stdout: lines(unversioned.map { |path| Digest::SHA1.hexdigest(path) }))
+      end
+
+      # Both statuses' entries, once each, as a file that picks the Ruby can
+      # be under the skill's directories too.
+      def changes(checkout)
+        Do::Porcelain.entries(checkout[:status] + checkout[:ruby_status]).uniq
+      end
+
+      # The untracked and ignored files whose contents the digest holds.
+      def unversioned(checkout)
+        changes(checkout).select { |change| change.untracked? || change.ignored? }.map(&:path)
       end
     end
   end

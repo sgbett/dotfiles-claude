@@ -12,13 +12,16 @@ RSpec.describe Do::RecordArguments do
   end
 
   it 'reads each subcommand, the issue, then its flags in any order' do
-    expect(options('closes', '24', '--verified-boxes', '2,1,2', '--base', 'feat/24+x', '--verified-items',
-                   'L1,#31,example-owner/upstream#5,P4'))
-      .to eq(command: 'closes', reference: '24', base: 'feat/24+x', verified_boxes: [2, 1],
+    digest = 'e' * 64
+
+    expect(options('closes', '24', '--verified-boxes', '2,1,2', '--base', 'feat/24+x', '--boxes-digest', digest,
+                   '--verified-items', 'L1,#31,example-owner/upstream#5,P4'))
+      .to eq(command: 'closes', reference: '24', base: 'feat/24+x', verified_boxes: [2, 1], boxes_digest: digest,
              verified_items: %w[L1 #31 example-owner/upstream#5 P4], dry_run: false)
-    expect([options('tick', '24', '--dry-run', '--ledger', 'L2'), options('tick', '24', '--issue-boxes', '3')])
+    expect([options('tick', '24', '--dry-run', '--ledger', 'L2'),
+            options('tick', '24', '--boxes-digest', digest, '--issue-boxes', '3')])
       .to eq([{ command: 'tick', reference: '24', ledger: ['L2'], dry_run: true },
-              { command: 'tick', reference: '24', issue_boxes: [3], dry_run: false }])
+              { command: 'tick', reference: '24', issue_boxes: [3], boxes_digest: digest, dry_run: false }])
   end
 
   it 'reads the gate actions, with answers and states as the gate file and the ledger write them' do
@@ -47,14 +50,16 @@ RSpec.describe Do::RecordArguments do
       .to eq([digest, digest])
   end
 
-  it 'refuses an unknown subcommand, a missing issue, and a flag that is missing, unknown, repeated or unpaired' do
+  it 'refuses an unknown subcommand, a missing issue, a flag missing, unknown, repeated or unpaired, and box ' \
+     'positions without the digest of the body they were counted in, or a digest without them' do
     twice = %W[--accept-scripts #{'c' * 64} --accept-scripts #{'d' * 64}]
     [[], %w[close 24 --base master], %w[gate 24], %w[gate open 24 --k G1], %w[closes --base master],
      %w[closes 24], %w[closes 24 --base master --base main], %w[closes 24 --base master --dry-run],
      %w[closes 24 --base], %w[tick 24], %w[tick 24 --ledger L1 --issue-boxes 1],
      %w[tick 24 --ledger L1 --dry-run --dry-run], %w[gate add 24 --k G1],
      %w[gate answer 24 --k G1 --dry-run --answer advisory], %w[sub-issue 24 --item L1],
-     %w[closes 24 --base=master], %w[tick 24 --ledger L1] + twice].each do |arguments|
+     %w[closes 24 --base=master], %w[tick 24 --ledger L1] + twice, %w[closes 24 --base master --verified-boxes 1],
+     %w[tick 24 --issue-boxes 1], %W[tick 24 --ledger L1 --boxes-digest #{'e' * 64}]].each do |arguments|
       expect { parse(*arguments) }.to raise_error(Do::RecordUsageError, /usage: record closes/), arguments.inspect
     end
   end
@@ -62,7 +67,8 @@ RSpec.describe Do::RecordArguments do
   it 'refuses any value that is not valid, or could be read as an option' do
     { %w[closes --base] => ['-master', 'a..b'],
       %w[closes --base master --verified-items] => ['', 'L1,', 'L0', 'X1', '#0', 'a b#1', '-L1', 'Gate G1'],
-      %w[closes --base master --verified-boxes] => ['0', '1,,2', 'one', '-1'],
+      %W[closes --base master --boxes-digest #{'e' * 64} --verified-boxes] => ['0', '1,,2', 'one', '-1'],
+      %w[closes --base master --verified-boxes 1 --boxes-digest] => ['E' * 64, 'e' * 63, 'yes', '-x'],
       %w[gate-answer --k G1 --answer] => ['fix here', 'yes'],
       %w[gate-mark --k G1 --state] => ['user decided', 'open'],
       %w[gate-publish --k] => %w[1 G0 g1 G1x],

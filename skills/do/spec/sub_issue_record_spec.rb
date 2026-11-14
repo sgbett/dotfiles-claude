@@ -61,9 +61,10 @@ RSpec.describe Do::SubIssueRecord do
     end
   end
 
-  it 'reports the rewrite on a dry run, writing nothing' do
+  it 'reports the rewrite on a dry run, writing nothing, not even a lock file' do
     expect(sub_issue('L2', '31', dry_run: true).last.values_at('updated', 'dry_run')).to eq([['ledger'], true])
     expect(fake_runner.calls.length).to eq(4)
+    expect(File).not_to exist(lock_directory)
   end
 
   it 'fails as a tool on a title that would break the line' do

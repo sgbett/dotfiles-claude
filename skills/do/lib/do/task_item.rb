@@ -3,11 +3,13 @@
 require_relative 'block_starts'
 
 module Do
-  # How a list item's line reads as a task: GitHub renders a top-level item
-  # whose content starts with a box as a task-list item. What merely reads
-  # like a box is for Checklist to weigh.
+  # How a list item's line reads as a task: GitHub renders an item, at any
+  # depth, whose content starts with a box as a task-list item. What merely
+  # reads like a box is for Checklist to weigh.
   module TaskItem
-    BOX = /\A\[(?<mark>[ xX])\](?: |\z)/
+    # A box, then text on its line: GitHub renders a box with nothing after
+    # it as a task only when a nested block follows it in a tight list.
+    BOX = /\A\[(?<mark>[ xX])\] +\S/
     BOX_WIDTH = 3
     # What a reader may take for a box: brackets around nothing, spaces or
     # an x.
@@ -21,9 +23,9 @@ module Do
     module_function
 
     # The Task of the item whose +marker+ starts at column +start+ of
-    # +scan+'s line, or nil. Its content must start with a box, and no tab
-    # may come before the box's closing bracket, as GitHub counts tabs in
-    # ways a column can't settle.
+    # +scan+'s line, or nil. Its content must start with a box and text,
+    # and no tab may come before the box's closing bracket, as GitHub counts
+    # tabs in ways a column can't settle.
     def task(scan, start, marker)
       return if marker.blank || marker.spaces >= BlockStarts::CODE_PADDING
 

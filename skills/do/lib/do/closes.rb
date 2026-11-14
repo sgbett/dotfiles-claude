@@ -7,11 +7,13 @@ require_relative 'record_issue'
 
 module Do
   # `record closes <issue> --base B [--verified-items IDS] [--verified-boxes
-  # POSITIONS]`, which writes nothing: the issues /do's PR closes under
-  # the Closing rule, as `Closes #N` lines when B is this repository's
-  # default branch, where GitHub acts on them, or else as the numbers the
-  # lead closes by hand; and every issue left open, with why. One that may
-  # not be named on GitHub is listed only under "session_only".
+  # POSITIONS --boxes-digest D]`, which writes nothing, so takes no lock:
+  # the issues /do's PR closes under the Closing rule, as `Closes #N` lines
+  # when B is this repository's default branch, where GitHub acts on them,
+  # or else as the numbers the lead closes by hand; and every issue left
+  # open, with why. One that may not be named on GitHub is listed only
+  # under "session_only". The positions name boxes in the body facts read,
+  # whose digest is D.
   class Closes
     # +options+ are RecordArguments' Options.
     def initialize(options, runner:)
@@ -20,7 +22,7 @@ module Do
     end
 
     def call
-      RecordIssue.locate(@options.reference, runner: @runner) { |issue| decide(issue) }
+      RecordIssue.locate(@options.reference, runner: @runner, writes: false) { |issue| decide(issue) }
     end
 
     private
@@ -28,7 +30,7 @@ module Do
     def decide(issue)
       return Reasons.stop(Reasons::NO_LEDGER) unless issue.ledger
 
-      boxes = Checklist.boxes(issue.issue_body.read, target: :issue_body) if issue.criteria_in_body?
+      _body, boxes = issue.issue_boxes(@options.boxes_digest) if issue.criteria_in_body?
       items, verified_boxes, missing = verified(issue.ledger, boxes)
       return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
 

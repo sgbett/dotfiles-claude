@@ -19,7 +19,9 @@ module Do
   # The remote's copy is read from the push URLs the remote check passed,
   # never through the remote's name, whose fetch URL can name another
   # repository; its tip is fetched from them too, so the lead can check out
-  # that commit.
+  # that commit. Nor are the commits the user is asked to accept ever
+  # measured against remote-tracking refs, which any fetch refspec, such as
+  # one for refs/pull/*, can fill.
   class BranchFacts
     MAX_COMMITS = 50
     LOG_FORMAT = '--format=%h %an %s'
@@ -27,10 +29,11 @@ module Do
     # Tips are full object names, nil for no such branch. +remote_tips+ holds
     # each push URL's, in their order, and +remote_tip+ the one they share,
     # nil when they differ. The configuration values are nil when unset.
-    # +lacking+ is the local commits the push remote lacks, newest first, at
-    # most MAX_COMMITS of them (+more_lacking+ when there are more), as `git
-    # log --format='%h %an %s'` prints them; nil when there is no local
-    # branch, or the push URLs differ.
+    # +lacking+ is the local commits the push remote's copy lacks or, with
+    # no copy there, those the base lacks, newest first, at most MAX_COMMITS
+    # of them (+more_lacking+ when there are more), as `git log
+    # --format='%h %an %s'` prints them; nil when there is no local branch,
+    # or the push URLs differ.
     Facts = Struct.new(:remote_tips, :remote_tip, :local_tip, :tracking_remote, :push_remote, :merge, :lacking,
                        :more_lacking, keyword_init: true) do
       def remote_tips_differ?
@@ -38,12 +41,12 @@ module Do
       end
     end
 
-    # +remote+ is the push remote's name and +urls+ the push URLs it passed
-    # the remote check with, as git gave them.
-    def initialize(runner, remote:, urls:)
+    # +urls+ are the push URLs the remote check passed, as git gave them, and
+    # +base_commit+ the commit GitHub gave for the base branch.
+    def initialize(runner, urls:, base_commit:)
       @git = Git.new(runner)
-      @remote = remote
       @urls = urls
+      @base_commit = base_commit
     end
 
     # The Facts about the branch named +branch+.
@@ -81,6 +84,14 @@ module Do
       raise BranchMoved, ref unless present?(tip)
     end
 
+    # The base commit, for log to measure against, fetched by its name
+    # through the first push URL when it isn't here.
+    def fetch_base
+      return if present?(@base_commit)
+
+      @git.run(*Git::NO_HOOKS_OR_FSMONITOR, 'fetch', '--no-tags', '--quiet', @urls.first, @base_commit)
+    end
+
     def present?(sha)
       !@git.line_or_nil('rev-parse', '--verify', '--quiet', "#{sha}^{commit}").nil?
     end
@@ -94,10 +105,13 @@ module Do
       @git.line_or_nil('config', '--get', "branch.#{branch}.#{key}")
     end
 
-    # A branch never pushed lacks every commit no remote-tracking branch of
-    # the push remote has.
+    # A branch the push remote doesn't hold lacks every commit the base,
+    # as GitHub gave it, doesn't hold.
     def lacking(ref, remote_tip)
-      remote_tip ? log("#{remote_tip}..#{ref}") : log(ref, '--not', "--remotes=#{@remote}")
+      return log("#{remote_tip}..#{ref}") if remote_tip
+
+      fetch_base
+      log(ref, '--not', @base_commit)
     end
 
     # log.showSignature would add signature checks to the lines.

@@ -19,8 +19,8 @@ module Do
 
       STEPS = %i[arguments login issue remote base branch pull_requests scripts focus changes].freeze
       CONVENTIONS = { push_remote: 'origin', pr_target: HERE, base: 'master', branch: BRANCH }.freeze
-      BRANCH_DEFAULTS = { branch: BRANCH, remote: 'origin', urls: [ORIGIN_URL], remote_tip: nil, remote_tips: nil,
-                          local_tip: nil, config: {}, lacking: [] }.freeze
+      BRANCH_DEFAULTS = { branch: BRANCH, urls: [ORIGIN_URL], remote_tip: nil, remote_tips: nil, local_tip: nil,
+                          config: {}, base_here: true, lacking: [] }.freeze
       REMOTE_READ = ['git', *Do::Git::NO_HOOKS_OR_FSMONITOR].freeze
 
       # check's arguments for the issue +reference+, with the CONVENTIONS
@@ -84,9 +84,10 @@ module Do
 
       # Tips are nil for no such branch: each push URL in +urls+ answers
       # +remote_tip+, or its own of +remote_tips+. +config+ holds
-      # branch.<name>.remote, pushRemote and merge; +lacking+ is the log
-      # lines. The remote's tip is already here (branch_facts_spec covers
-      # fetching it).
+      # branch.<name>.remote, pushRemote and merge; +base_here+ whether the
+      # base commit is here, without a fetch, to list a branch the push
+      # remote lacks against; +lacking+ is the log lines. The remote's tip is
+      # already here (branch_facts_spec covers fetching it).
       def expect_branch_step(**overrides)
         branch = BRANCH_DEFAULTS.merge(overrides)
         ref = "refs/heads/#{branch[:branch]}"
@@ -127,9 +128,20 @@ module Do
         %w[remote pushRemote merge].each do |key|
           expect_line(['git', 'config', '--get', "branch.#{branch[:branch]}.#{key}"], branch[:config][key.to_sym])
         end
-        revisions = remote_tip ? ["#{remote_tip}..#{ref}"] : [ref, '--not', "--remotes=#{branch[:remote]}"]
+        expect_base(branch) unless remote_tip
+        revisions = remote_tip ? ["#{remote_tip}..#{ref}"] : [ref, '--not', BASE_SHA]
         fake_runner.expect_call(['git', 'log', '--no-show-signature', '--format=%h %an %s', '--max-count=51',
                                  *revisions, '--'], stdout: lines(branch[:lacking]))
+      end
+
+      # The base commit GitHub gave, here or fetched through the first push
+      # URL.
+      def expect_base(branch)
+        present = ['git', 'rev-parse', '--verify', '--quiet', "#{BASE_SHA}^{commit}"]
+        return expect_line(present, BASE_SHA) if branch[:base_here]
+
+        expect_line(present, nil)
+        fake_runner.expect_call([*REMOTE_READ, 'fetch', '--no-tags', '--quiet', branch[:urls].first, BASE_SHA])
       end
     end
   end

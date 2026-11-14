@@ -15,15 +15,15 @@ module Do
     def_delegators :@view, :query, :trust, :ledger, :ignored_markers, :nameable?, :here?, :reference,
                    :untrusted_authors
 
-    attr_reader :gate, :boxes
+    attr_reader :gate, :issue_boxes
 
-    # +view+ is the issue's IssueView, +gate_file+ its GateFile, and +boxes+
-    # its body's Checklist boxes, nil when its acceptance criteria live in
-    # the ledger instead.
-    def initialize(view, gate_file, boxes:)
+    # +view+ is the issue's IssueView, +gate_file+ its GateFile, and
+    # +issue_boxes+ its body's Checklist::Reading, nil when its acceptance
+    # criteria live in the ledger instead.
+    def initialize(view, gate_file, issue_boxes:)
       @view = view
       @gate = gate_file.status(ledger ? ledger.gates : [])
-      @boxes = boxes
+      @issue_boxes = issue_boxes
     end
 
     def stop_reason

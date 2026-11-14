@@ -3,12 +3,14 @@
 module Do
   # `preflight facts`' summary, the facts the lead's one-line summary needs
   # as short strings: the issue, any untrusted author (the issue's or its
-  # parent's), the parent, the resume point, open gate findings, and
-  # ignored marker comments and skipped sub-issues with their authors. It
-  # names no repository that may not be named on GitHub.
+  # parent's), the parent, the resume point, open gate findings, lines that
+  # read like boxes /do can't place, and ignored marker comments and skipped
+  # sub-issues with their authors. It names no repository that may not be
+  # named on GitHub.
   class Summary
     DELETED_ACCOUNT = 'a deleted account'
     NOT_NAMEABLE = "an issue in a repository that isn't public"
+    AMBIGUOUS_BOXES = '%<body>s, lines %<lines>s: boxes /do cannot place, which record closes and tick stop on'
 
     def initialize(assessment)
       @assessment = assessment
@@ -19,10 +21,16 @@ module Do
       { issue: "#{@query.repository.name_with_owner}##{@query.issue.number}",
         untrusted_authors: untrusted_authors, parent: @query.parent && named(@query.parent),
         resume_point: @assessment.ledger&.first_unbuilt&.id, open_gate_findings: @assessment.gate.open,
-        ignored_markers: ignored_markers, skipped_sub_issues: skipped_sub_issues }
+        ambiguous_boxes: ambiguous_boxes, ignored_markers: ignored_markers, skipped_sub_issues: skipped_sub_issues }
     end
 
     private
+
+    def ambiguous_boxes
+      { 'issue body' => @assessment.issue_boxes&.ambiguous, 'ledger' => @assessment.ledger&.ambiguous }
+        .reject { |_body, lines| lines.to_a.empty? }
+        .map { |body, lines| format(AMBIGUOUS_BOXES, lines: lines.join(', '), body: body) }
+    end
 
     def untrusted_authors
       @assessment.untrusted_authors.map do |who|

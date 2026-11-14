@@ -1,74 +1,96 @@
 # frozen_string_literal: true
 
+require 'digest'
 require_relative '../lib/do/checklist'
 
-# The top-level boxes of a body as GitHub renders them, which positions and
-# ledger ids name, and the lines that read like boxes Checklist can't place.
+# The boxes of a body as GitHub renders them, which positions and ledger ids
+# name, and the lines that read like boxes Checklist can't place: every box
+# of the issue body, nested or quoted, but only the ledger's top-level ones.
+# checklist_renders_spec.rb holds the cases recorded from GitHub itself.
 RSpec.describe Do::Checklist do
   # Each box of +body+ as [position, line, mark, checked, text].
-  def boxes(body)
-    described_class.boxes(body, target: :issue_body).map do |box|
+  def boxes(body, target: :issue_body)
+    described_class.scan(body, target: target).boxes.map do |box|
       box.to_h.values_at(:position, :line, :mark, :checked, :text)
     end
   end
 
-  # The lines (from 1) that make +body+ ambiguous, none when it isn't.
-  def ambiguous(body)
-    described_class.boxes(body, target: :ledger)
-    []
-  rescue Do::AmbiguousCheckbox => e
-    expect(e.target).to eq(:ledger)
-    e.lines
+  def texts(body, target: :issue_body)
+    boxes(body, target: target).map(&:last)
   end
 
-  describe 'the boxes GitHub renders at the top level' do
-    it 'reads a list item of any marker, indented up to three spaces, then a box, then a space or the end' do
-      body = "- [ ] One\n* [x] Two\n+ [X] Three\n1. [ ] Four\n1) [ ] Five\n - [ ] Six\n  * [ ]\n   +  [ ]\tSeven\n"
+  # The lines (from 1) that make +body+ ambiguous, none when it isn't.
+  def ambiguous(body, target: :ledger)
+    described_class.scan(body, target: target).ambiguous
+  end
+
+  describe 'the boxes GitHub renders' do
+    it 'reads a list item of any marker, indented up to three spaces, then a box, then a space and text' do
+      body = "- [ ] One\n* [x] Two\n+ [X] Three\n1. [ ] Four\n1) [ ] Five\n - [ ] Six\n   +  [ ]\tSeven\n"
 
       expect(boxes(body)).to eq([[1, 0, 3, false, 'One'], [2, 1, 3, true, 'Two'], [3, 2, 3, true, 'Three'],
                                  [4, 3, 4, false, 'Four'], [5, 4, 4, false, 'Five'], [6, 5, 4, false, 'Six'],
-                                 [7, 6, 5, false, ''], [8, 7, 7, false, 'Seven']])
+                                 [7, 6, 7, false, 'Seven']])
     end
 
-    it 'leaves out a box nested in another item, however indented, and takes one less indented than its content' do
+    it 'counts, in the issue body, a box nested in another item, however indented, in document order' do
       body = "- [ ] One\n  - [ ] detail\n\n  - [ ] detail after a blank\n   * [ ] still inside\n - [ ] Two\n\n" \
              "10. [ ] Ten\n   - [ ] beside Ten, less indented than its content\n     - [ ] inside that\n"
 
-      expect(boxes(body).map { |box| box.values_at(0, 4) })
-        .to eq([[1, 'One'], [2, 'Two'], [3, 'Ten'], [4, 'beside Ten, less indented than its content']])
+      expect(texts(body)).to eq(['One', 'detail', 'detail after a blank', 'still inside', 'Two', 'Ten',
+                                 'beside Ten, less indented than its content', 'inside that'])
+    end
+
+    it 'counts, in the issue body, a box in a block quote, or in an item on the line of an item or quote' do
+      body = "> - [ ] quoted\n>   - [x] quoted, nested\n> > - [ ] quoted twice\n\n- - [ ] in an item\n" \
+             "- > - [ ] in a quote in an item\n- [ ] One\n"
+
+      expect(texts(body)).to eq(['quoted', 'quoted, nested', 'quoted twice', 'in an item',
+                                 'in a quote in an item', 'One'])
+    end
+
+    it "takes, in the ledger, only a top-level box: a nested one is detail, and a quoted one isn't the ledger's" do
+      nested = "- [ ] One\n  - [ ] detail\n\n  - [ ] detail after a blank\n   * [ ] still inside\n - [ ] Two\n\n" \
+               "10. [ ] Ten\n   - [ ] beside Ten, less indented than its content\n     - [ ] inside that\n"
+      quoted = "> - [ ] quoted\n> [ ] quoted too\n- [ ] One\n> - [ ] again\n  - [ ] Two\n"
+
+      expect([texts(nested, target: :ledger), texts(quoted, target: :ledger)])
+        .to eq([['One', 'Two', 'Ten', 'beside Ten, less indented than its content'], %w[One Two]])
     end
 
     it 'leaves out boxes in fenced and indented code, a fence in an item ending with the item' do
       body = "```\n- [ ] backticks\n```\n~~~~\n- [ ] tildes\n~~~~\n- [ ] One\n  ```\n  - [ ] in the item's fence\n" \
              "- [ ] Two\n\nText\n\n    - [ ] indented code\n"
 
-      expect(boxes(body).map(&:last)).to eq(%w[One Two])
+      expect(texts(body)).to eq(%w[One Two])
     end
 
     it 'leaves out boxes in HTML comments and HTML that runs to a closing string, but not after an inline comment' do
       body = "<!--\n- [ ] in a comment\n-->\n<!-- - [ ] one line -->\n- [ ] One\n  <!-- - [ ] in the item\n  -->\n" \
              "<pre>\n\n- [ ] raw\n</pre>\nText <!-- not an HTML block\n- [ ] Two\n-->\n"
 
-      expect(boxes(body).map(&:last)).to eq(%w[One Two])
+      expect(texts(body)).to eq(%w[One Two])
     end
 
-    it 'leaves out boxes in a block quote, and takes an item after one' do
-      expect(boxes("> - [ ] quoted\n> [ ] quoted too\n- [ ] One\n> - [ ] again\n  - [ ] Two\n").map(&:last))
-        .to eq(%w[One Two])
+    it 'reads past "<!" and a lower-case letter, which opens no HTML block, but not into the one "<!X" opens' do
+      body = "<!x\n- [ ] One\n<!X\n- [ ] in the block\n>\n- [ ] Two\n"
+
+      expect(texts(body)).to eq(%w[One Two])
     end
 
     it 'reads an ordered list GitHub starts after a paragraph only from 1, and after a blank line from any number' do
-      expect(boxes("Intro\n1. [ ] One\n2. [ ] Two\n\n3. [ ] Three\n").map(&:last)).to eq(%w[One Two Three])
+      expect(texts("Intro\n1. [ ] One\n2. [ ] Two\n\n3. [ ] Three\n")).to eq(%w[One Two Three])
     end
 
     it 'reads items GitHub closes, after a thematic break, a heading or an empty item and a blank line' do
       body = "- [ ] One\n***\n  - [ ] after a break\n# Heading\n  - [ ] after a heading\n-\n\n  - [ ] after a blank\n"
 
-      expect(boxes(body).map(&:last)).to eq(['One', 'after a break', 'after a heading', 'after a blank'])
+      expect(texts(body)).to eq(['One', 'after a break', 'after a heading', 'after a blank'])
     end
 
-    it 'takes CRLF line endings as one, and is empty for a body with no boxes' do
-      expect([boxes("- [ ] One\r\n- [x] Two\r\n").length, boxes("No boxes.\n")]).to eq([2, []])
+    it 'takes CRLF line endings as one, reads from after a byte order mark, and is empty for a body with no boxes' do
+      expect([boxes("- [ ] One\r\n- [x] Two\r\n").length, boxes("\uFEFF- [ ] One\n").first, boxes("No boxes.\n")])
+        .to eq([2, [1, 0, 3, false, 'One'], []])
     end
   end
 
@@ -78,6 +100,22 @@ RSpec.describe Do::Checklist do
              "- [ ]x no space after\n- [] empty\n- [x](https://example.com) a link\n"
 
       expect(ambiguous(body)).to eq((1..8).to_a)
+    end
+
+    it 'is a box with nothing after it, which GitHub renders as a task only before a nested block in a tight list' do
+      expect(ambiguous("- [ ]\n- [x] \n- [ ] One\n")).to eq([1, 2])
+    end
+
+    it 'is a box whose paragraph a setext underline makes a heading, or a delimiter row a table, but not later on' do
+      body = "- [ ] A heading\n  ---\n- [ ] A | table\n  --- | ---\n- [ ] One\n  then | a table\n  --- | ---\n"
+
+      expect([ambiguous(body, target: :issue_body), texts(body)]).to eq([[1, 3], ['One']])
+    end
+
+    it 'is one in a footnote definition, whose boxes GitHub renders after the body, or not at all' do
+      body = "See[^1].\n\n[^1]: - [ ] in the footnote\n    - [ ] continuing it\n\n- [ ] One\n"
+
+      expect([ambiguous(body, target: :issue_body), texts(body)]).to eq([[3, 4], ['One']])
     end
 
     it 'is one with no marker inside a top-level item, lazily or indented, or on the line after an empty item' do
@@ -96,18 +134,40 @@ RSpec.describe Do::Checklist do
       expect(ambiguous("- [ ] One\rText\n- [ ] Two\n")).to eq([1])
     end
 
-    it 'is none in a nested item, a quote or code, where no top-level box can be' do
+    it 'is one in a nested item or a quote only in the issue body, where boxes there count, and never one in code' do
       body = "- [ ] One\n  - [ ]x nested\n\t- [ ] tab-indented detail\n  - b\n  2. [ ] nested, after a lazy line\n" \
              "> [ ] quoted\n```\n[ ] fenced\n```\n"
 
-      expect(ambiguous(body)).to eq([])
+      expect([ambiguous(body), ambiguous(body, target: :issue_body)]).to eq([[], [2, 3, 5, 6]])
+    end
+  end
+
+  describe '.scan' do
+    it 'gives the SHA-256 digest of the body as it came, a byte order mark included, ambiguous or not' do
+      body = "\uFEFF- [ ] One\n[ ] Two\n"
+      reading = described_class.scan(body, target: :issue_body)
+
+      expect([reading.digest, reading.ambiguous?]).to eq([Digest::SHA256.hexdigest(body), true])
+      expect(described_class.scan(body.sub('One', 'One.'), target: :issue_body).digest).not_to eq(reading.digest)
+    end
+  end
+
+  describe '.digest!' do
+    it 'takes a digest as scan gives it, and nothing else' do
+      digest = described_class.scan('', target: :issue_body).digest
+
+      expect(described_class.digest!(digest)).to eq(digest)
+      [digest.upcase, digest[1..], "#{digest}\n", '-x', nil].each do |value|
+        expect { described_class.digest!(value) }
+          .to raise_error(SkillSupport::InvalidIdentifier, 'invalid boxes_digest'), value.inspect
+      end
     end
   end
 
   describe '.at' do
     it 'finds the box at each position, and lists the positions no box holds' do
-      found, missing = described_class.at(described_class.boxes("- [ ] One\n- [ ] Two\n- [x] Three\n", target: :ledger),
-                                          [3, 1, 4])
+      found, missing = described_class.at(described_class.scan("- [ ] One\n- [ ] Two\n- [x] Three\n",
+                                                               target: :ledger).boxes, [3, 1, 4])
 
       expect([found.map(&:text), missing]).to eq([%w[Three One], [4]])
     end
@@ -116,9 +176,16 @@ RSpec.describe Do::Checklist do
   describe '.tick' do
     it 'turns "[ ]" into "[x]" at each box\'s mark and leaves every other byte as it was' do
       text = "- [ ] One\r\n* [ ] Two\r\n 1. [ ] Three"
-      boxes = described_class.boxes(text, target: :issue_body)
+      boxes = described_class.scan(text, target: :issue_body).boxes
 
       expect(described_class.tick(text, boxes.drop(1))).to eq("- [ ] One\r\n* [x] Two\r\n 1. [x] Three")
+    end
+
+    it 'keeps a byte order mark, and ticks the line after it at its own mark' do
+      text = "\uFEFF- [ ] One\n  - [ ] Nested\n"
+      boxes = described_class.scan(text, target: :issue_body).boxes
+
+      expect(described_class.tick(text, boxes)).to eq("\uFEFF- [x] One\n  - [x] Nested\n")
     end
 
     it 'refuses a box whose line holds no unticked box at its mark' do

@@ -60,7 +60,8 @@ module Do
                               '(branch.pull_requests). /do never adopts it: tell the user, who can choose ' \
                               'another branch or deal with that pull request first.',
       local_branch_unpushed: 'The local branch was never pushed, or has commits the push remote lacks ' \
-                             '(session_only.local_branch_commits). Show them to the user and ask whether to ' \
+                             '(session_only.local_branch_commits: those its copy there lacks or, for a branch ' \
+                             'never pushed, those the base lacks). Show them to the user and ask whether to ' \
                              'resume on this branch; on a yes, run check again with accept_with added.',
       scripts_unreviewed: 'The checkout these scripts run from has changes under skills/do or ' \
                           "skills/_support or to the files that pick their Ruby, or its HEAD isn't in its " \
@@ -69,11 +70,13 @@ module Do
                           'accept_with added.',
       no_ledger: "None of the issue's first 100 comments is a ledger: none by a trusted author begins with " \
                  '<!-- do:breakdown -->. Nothing was written.',
-      box_missing: 'Each box the call names must match exactly one top-level box as GitHub renders it, and ' \
-                   'those under missing match none or several (sub-issue also needs a plain item, with no box ' \
-                   'for the sub-issue yet). Nothing was written.',
-      body_changed: 'The body changed between the read and the write: someone else is editing it. Nothing was ' \
-                    'written; /do can resume once they have finished.',
+      box_missing: 'Each box the call names must match exactly one box as GitHub renders it, at any depth in ' \
+                   'the issue body and at the top level in the ledger, and those under missing match none or ' \
+                   'several (sub-issue also needs a plain item, with no box for the sub-issue yet). Nothing was ' \
+                   'written.',
+      body_changed: 'The body changed after it was read, by preflight facts, whose boxes digest the call was ' \
+                    'given, or by this call before its write: someone else has edited it. Nothing was written; ' \
+                    '/do can resume once they have finished.',
       untrusted_issue_author: "The issue's author isn't trusted, so record never edits its body. Nothing was " \
                               'written.',
       not_a_sub_issue: "That number isn't one of this issue's sub-issues in this repository, as GitHub lists " \
@@ -91,9 +94,10 @@ module Do
                          'it there. Nothing was written.',
       ambiguous_checkbox: 'Lines of the issue body or the ledger (target; lines, counting from 1) read like ' \
                           'checklist boxes that /do cannot place as GitHub renders them: a box with no list ' \
-                          'marker, with a tab or odd spacing, inside HTML, or where GitHub may not start a list, ' \
-                          'or a carriage return GitHub reads as a line break. Nothing was written. Ask the user ' \
-                          'to fix those lines, then run the same call again.'
+                          'marker, with a tab, odd spacing or nothing after it, inside HTML or a footnote, where ' \
+                          'GitHub may not start a list or may make a heading or a table, or a carriage return ' \
+                          'GitHub reads as a line break. Nothing was written. Tell the user, who can fix those ' \
+                          'lines and run /do again.'
     }.transform_values(&:freeze).freeze
   end
 end

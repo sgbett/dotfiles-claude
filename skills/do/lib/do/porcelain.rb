@@ -9,6 +9,11 @@ module Do
         status == '??'
       end
 
+      # As `git status --ignored` lists an ignored file.
+      def ignored?
+        status == '!!'
+      end
+
       # The entry as `git status --porcelain` prints it without -z.
       def to_s
         original ? "#{status} #{original} -> #{path}" : "#{status} #{path}"

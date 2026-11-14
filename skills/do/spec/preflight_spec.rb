@@ -20,6 +20,12 @@ RSpec.describe 'skills/do/bin/preflight' do
     JSON.generate(JSON.parse(fixture("graphql/#{name}.request.json")))
   end
 
+  # The file the lead writes the user's argument to with the Write tool,
+  # which `facts` reads, here with the trailing newline a file often has.
+  def argument_file(text)
+    sandbox.path('argument.txt').tap { |path| File.write(path, "#{text}\n") }
+  end
+
   def preflight_run(*arguments, environment: {}, command: preflight)
     stdout, stderr, status = Open3.capture3(environment, command, *arguments)
     [status.exitstatus, stdout, stderr]
@@ -111,7 +117,8 @@ RSpec.describe 'skills/do/bin/preflight' do
          stdout_file: fixture_path('rest/issue-24.json') }]
     )
 
-    exit_code, stdout, stderr = preflight_run('facts', '24', environment: hostile_environment)
+    exit_code, stdout, stderr = preflight_run('facts', '--argument-file', argument_file('24'),
+                                              environment: hostile_environment)
     output = JSON.parse(stdout)
 
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
@@ -129,7 +136,7 @@ RSpec.describe 'skills/do/bin/preflight' do
     shim = install_gh_shim([login, { args: graphql, stdin: recorded_request('pull-request-25'),
                                      stdout_file: fixture_path('graphql/pull-request-25.json') }])
 
-    exit_code, stdout, _stderr = preflight_run('facts', 'sgbett/dotfiles-claude#25')
+    exit_code, stdout, _stderr = preflight_run('facts', '--argument-file', argument_file('sgbett/dotfiles-claude#25'))
 
     expect([exit_code, shim.unmatched_calls]).to eq([2, []])
     expect(JSON.parse(stdout)).to include('status' => 'stop', 'reason' => 'not_an_issue')
@@ -138,7 +145,7 @@ RSpec.describe 'skills/do/bin/preflight' do
   it 'asks for the repository when a bare number has no origin, calling gh not at all' do
     shim = install_gh_shim([])
 
-    exit_code, stdout, _stderr = preflight_run('facts', '24')
+    exit_code, stdout, _stderr = preflight_run('facts', '--argument-file', argument_file('24'))
 
     expect([exit_code, shim.calls]).to eq([3, []])
     expect(JSON.parse(stdout)).to include('status' => 'ask', 'asks' => [include('reason' => 'no_origin')])
@@ -241,14 +248,36 @@ RSpec.describe 'skills/do/bin/preflight' do
     expect(shim.calls.length).to eq(3)
   end
 
+  it "takes one trailing newline as the argument file's, not the reference's, and stops on more before calling gh" do
+    shim = install_gh_shim([])
+
+    exit_code, stdout, _stderr = preflight_run('facts', '--argument-file', argument_file("24\n"))
+
+    expect([exit_code, JSON.parse(stdout)['reason'], shim.calls]).to eq([2, 'not_an_issue', []])
+  end
+
+  it 'fails as a tool on an argument file that is missing or a symlink, before calling gh' do
+    shim = install_gh_shim([])
+    File.symlink(argument_file('24'), sandbox.path('link.txt'))
+
+    [[sandbox.path('missing.txt'), "doesn't exist"], [sandbox.path('link.txt'), 'is a symlink']].each do |path, problem|
+      exit_code, stdout, stderr = preflight_run('facts', '--argument-file', path)
+
+      expect([exit_code, stdout, stderr]).to match([1, '', include(problem)]), path
+    end
+    expect(shim.calls).to eq([])
+  end
+
   it 'fails as a tool on any arguments it does not take, printing its usage' do
     install_gh_shim([])
 
-    [%w[check 24], [], %w[facts], %w[facts 24 25], %w[--help]].each do |arguments|
+    [%w[check 24], [], %w[facts], %w[facts 24], %w[facts --argument-file], %w[facts --issue x], %w[--help]]
+      .each do |arguments|
       exit_code, stdout, stderr = preflight_run(*arguments)
 
       expect([exit_code, stdout]).to eq([1, '']), arguments.inspect
-      expect(stderr).to start_with('preflight: tool failure: usage: preflight facts <issue>'), arguments.inspect
+      expect(stderr).to start_with('preflight: tool failure: usage: preflight facts --argument-file <path>'),
+                        arguments.inspect
     end
   end
 end

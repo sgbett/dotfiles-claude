@@ -2,6 +2,7 @@
 
 require_relative 'branch_names'
 require_relative 'issue_reference'
+require_relative 'ledger_report'
 require_relative 'slug'
 require_relative 'summary'
 
@@ -51,13 +52,24 @@ module Do
     def issue
       issue = @query.issue
       { id: issue.id, number: issue.number, state: issue.state, author: issue.author.login,
-        **trust(@assessment.trust.here(issue.author)), project_items: @query.project_items, boxes: boxes,
+        **trust(@assessment.trust.here(issue.author)), project_items: @query.project_items, **boxes,
         github_text: { title: issue.title } }
     end
 
-    # The body's boxes, when they hold the acceptance criteria.
+    # The body's boxes, when they hold the acceptance criteria, each by its
+    # position; whether lines it can't place make it ambiguous; and the
+    # digest of the body they were counted in, which `record closes` and
+    # `record tick` check the body against.
     def boxes
-      @assessment.boxes&.map { |box| { **box.to_h.slice(:position, :checked), github_text: { label: box.label } } }
+      reading = @assessment.issue_boxes
+      return { boxes: nil, boxes_ambiguous: nil, boxes_digest: nil } unless reading
+
+      { boxes: reading.boxes.map { |box| box_fields(box) }, boxes_ambiguous: reading.ambiguous?,
+        boxes_digest: reading.digest }
+    end
+
+    def box_fields(box)
+      { **box.to_h.slice(:position, :checked), github_text: { label: box.label } }
     end
 
     def parent
@@ -79,25 +91,7 @@ module Do
     end
 
     def ledger
-      ledger = @assessment.ledger
-      return unless ledger
-
-      ledger_comment(ledger.comment).merge(
-        items: ledger.items.map { |item| ledger_item(item) },
-        gates: ledger.gates.map { |gate| { id: gate.id, state: gate.state } },
-        first_unbuilt: ledger.first_unbuilt&.id, adopted_criteria: ledger.adopted_criteria?
-      )
-    end
-
-    # comment_id is the REST id a later edit of the ledger goes through.
-    def ledger_comment(comment)
-      { comment_id: SkillSupport::Identifiers.comment_id!(comment.database_id), node_id: comment.id,
-        author: comment.author.login }
-    end
-
-    def ledger_item(item)
-      fields = { id: item.id, position: item.position, kind: item.kind, checked: item.checked }
-      item.sub_issue ? fields.merge(sub_issue: item.sub_issue.id, state: item.sub_issue.state) : fields
+      @assessment.ledger&.then { |ledger| LedgerReport.new(ledger).fields }
     end
 
     def ignored_markers

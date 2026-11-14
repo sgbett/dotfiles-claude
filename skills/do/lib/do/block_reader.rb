@@ -1,29 +1,22 @@
 # frozen_string_literal: true
 
+require_relative 'block_line'
 require_relative 'block_starts'
 require_relative 'block_state'
 require_relative 'line_scan'
-require_relative 'task_item'
 
 module Do
   # Reads a Markdown body's block structure line by line as GitHub's
   # renderer, cmark-gfm, does, far enough to tell which lines open a
-  # top-level task-list item: block quotes and list items, which hold other
-  # blocks, then paragraphs, fenced and indented code, HTML blocks, headings
-  # and thematic breaks. A GFM table reads as a paragraph.
+  # task-list item, and inside what: block quotes, footnote definitions and
+  # list items, which hold other blocks, then paragraphs, fenced and
+  # indented code, HTML blocks, headings and thematic breaks. A GFM table
+  # reads as a paragraph, though a task whose paragraph may become one is
+  # doubtful, as one whose paragraph becomes a heading is.
   class BlockReader
     CARRIAGE_RETURN = "\r"
 
-    # A line as read. +hidden+ is :code, :comment, :raw (an HTML block that
-    # runs to a closing string) or :html (one that runs to a blank line)
-    # when GitHub shows the line as code or raw HTML, or nothing. +depth+ is
-    # how many list items hold it, +task+ the TaskItem::Task of a top-level
-    # task item the line starts, and +box_like+ whether its content reads
-    # like a box. +doubtful+: GitHub's renderer may read the line's
-    # structure otherwise, as with a carriage return it reads as a line
-    # break.
-    Line = Struct.new(:index, :text, :hidden, :quoted, :depth, :task, :box_like, :doubtful, keyword_init: true)
-
+    # The BlockLines of +body+.
     def self.read(body)
       reader = new
       body.to_s.each_line(chomp: true).with_index.map { |text, index| reader.read(text, index) }
@@ -33,14 +26,16 @@ module Do
       @state = BlockState.new
     end
 
-    # The Line +raw+, the body's line at +index+, makes, given those before.
+    # The BlockLine +raw+, the body's line at +index+, makes, given those
+    # before.
     def read(raw, index)
       @scan = LineScan.new(raw)
-      @line = Line.new(index: index, text: raw, box_like: false, doubtful: raw.include?(CARRIAGE_RETURN))
+      @line = BlockLine.new(index: index, text: raw, box_like: false, doubtful: raw.include?(CARRIAGE_RETURN))
       @matched = @state.match(@scan)
       hidden = @state.continue_leaf(@scan) if all_matched?
-      hidden ? hide(hidden) : open_blocks
+      hidden ? @line.hide(hidden, @scan) : open_blocks
       @line.quoted = @state.quoted?
+      @line.footnote = @state.footnote?
       @line.depth = @state.depth
       @line
     end
@@ -51,13 +46,8 @@ module Do
       @matched == @state.containers.length
     end
 
-    def hide(kind)
-      @line.hidden = kind
-      @line.box_like = TaskItem.box_like?(@scan.rest)
-    end
-
-    # Opens the block quotes and list items the line starts, then the leaf
-    # block, or adds the line's text to a paragraph.
+    # Opens the block quotes, footnote definitions and list items the line
+    # starts, then the leaf block, or adds the line's text to a paragraph.
     def open_blocks
       @maybe_lazy = @state.paragraph?
       @interrupting = @maybe_lazy && all_matched? && !@scan.blank?
@@ -67,12 +57,15 @@ module Do
       add_text if step == :text
     end
 
-    # :container when the line opens a block quote or list item and may open
-    # more, :leaf once it starts a leaf block, or :text.
+    # :container when the line opens a container and may open more, :leaf
+    # once it starts a leaf block, or :text. No leaf starts as a footnote
+    # definition does, so that opens before them, wherever a list item could
+    # start, as in cmark-gfm.
     def next_block
       return :text if @scan.blank?
       return indented_code if @scan.indent >= BlockState::CODE_INDENT
       return open_container(BlockState::QUOTE) if @scan.enter_quote
+      return open_container(BlockState::FOOTNOTE) if @scan.enter_footnote_definition
 
       leaf_start || item_start || :text
     end
@@ -82,16 +75,20 @@ module Do
       @maybe_lazy ? :text : start_leaf(BlockStarts::Leaf.new(:code, :code))
     end
 
+    # A setext underline makes the open paragraph a heading.
     def leaf_start
       leaf = BlockStarts.leaf(@scan.rest, interrupting: @interrupting)
-      start_leaf(leaf) if leaf
+      return unless leaf
+
+      @state.paragraph_start&.doubt_task if leaf.underline
+      start_leaf(leaf)
     end
 
     def start_leaf(leaf)
       @state.close(@matched)
       @state.fill
       @state.leaf = leaf.block
-      hide(leaf.hidden) if leaf.hidden
+      @line.hide(leaf.hidden, @scan) if leaf.hidden
       :leaf
     end
 
@@ -104,7 +101,7 @@ module Do
     end
 
     def open_item(start, marker)
-      read_task(start, marker) if @matched.zero?
+      @line.open_item(@scan, start, marker)
       @scan.advance_to(start + marker.padding)
       open_container(BlockState::Item.new(kind: marker.kind, column: start + marker.padding, filled: !marker.blank))
     end
@@ -117,13 +114,6 @@ module Do
         !@state.continues_list?(@matched, marker)
     end
 
-    # A top-level item whose content reads like a box but isn't one is
-    # doubtful.
-    def read_task(start, marker)
-      @line.task = TaskItem.task(@scan, start, marker)
-      @line.doubtful ||= @line.task.nil? && TaskItem.box_like_content?(@scan, start, marker)
-    end
-
     def open_container(container)
       @state.close(@matched)
       @state.push(container)
@@ -133,17 +123,26 @@ module Do
       :container
     end
 
-    # A lazy line continues the paragraph open in a container it doesn't
-    # continue, which stays open.
     def add_text
       return close_at_blank_line if @scan.blank?
 
-      @line.box_like = TaskItem.box_like?(@scan.rest)
+      @line.read_content(@scan)
       @state.fill
-      return if @maybe_lazy && !all_matched? && !@opened
+      return continue_paragraph if @maybe_lazy && !@opened
 
       @state.close(@matched)
-      @state.leaf = :paragraph
+      @state.open_paragraph(@line)
+    end
+
+    # A lazy line continues the paragraph open in a container it doesn't
+    # continue, which stays open. A delimiter row, which can't be lazy,
+    # straight after a paragraph's first line makes that line a table's
+    # header.
+    def continue_paragraph
+      @state.continue_paragraph
+      return unless all_matched? && @state.paragraph_lines == 2
+
+      @state.paragraph_start.doubt_task if BlockStarts::DELIMITER_ROW.match?(@scan.rest)
     end
 
     def close_at_blank_line

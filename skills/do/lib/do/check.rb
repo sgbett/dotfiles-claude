@@ -85,8 +85,7 @@ module Do
     end
 
     def branch_stop
-      facts = BranchFacts.new(@runner, remote: @options.push_remote, urls: @remote.checked_urls)
-                         .collect(@options.branch)
+      facts = BranchFacts.new(@runner, urls: @remote.checked_urls, base_commit: @base_commit).collect(@options.branch)
       @branch = BranchAssessment.new(facts, branch: @options.branch, remote: @options.push_remote,
                                             accepted_tip: @options.accept_local_branch)
       @report.branch = @branch

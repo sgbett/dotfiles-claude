@@ -13,9 +13,11 @@ require_relative 'reasons'
 require_relative 'slug'
 
 module Do
-  # `preflight facts <issue>`, the read-only first half of /do's pre-flight:
-  # gathers the issue's facts from GitHub and the checkout, and stops, asks
-  # or proceeds with them.
+  # `preflight facts --argument-file <path>`, the read-only first half of
+  # /do's pre-flight: gathers the issue's facts from GitHub and the
+  # checkout, and stops, asks or proceeds with them. Lines that read like
+  # boxes Checklist can't place are reported, never a stop: only the record
+  # calls that act on boxes stop on them.
   class Facts
     # +argument+ names the issue as the user gave it. Every gh and git call
     # goes through +runner+, in the working directory.
@@ -38,8 +40,6 @@ module Do
       return Reasons.not_an_issue(result.kind) unless result.kind == :issue
 
       report(result, github, host: reference.host, parent_branches: parent_branches(query, result))
-    rescue AmbiguousCheckbox => e
-      Reasons.stop(Reasons::AMBIGUOUS_CHECKBOX, target: e.target, lines: e.lines)
     end
 
     # The default base is the branch of a parent in this repository.
@@ -54,20 +54,20 @@ module Do
       gate_path = GateFile.path(@checkout.common_directory, result.issue.id)
       default_branch = Slug.default_branch(result.issue.number, result.issue.title, runner: @runner)
       view = IssueView.new(result)
-      assessment = Assessment.new(view, GateFile.read(gate_path), boxes: boxes(github, view))
+      assessment = Assessment.new(view, GateFile.read(gate_path), issue_boxes: issue_boxes(github, view))
       fields = FactsReport.new(assessment, host: host, gate_path: gate_path, parent_branches: parent_branches,
                                            default_branch: default_branch).fields
       outcome(assessment, fields)
     end
 
-    # The issue body's boxes, which the lead maps QA's verified boxes to,
-    # where they hold the acceptance criteria: when the issue's author and
-    # its parent's are trusted.
-    def boxes(github, view)
+    # The issue body's Checklist::Reading, whose boxes the lead maps QA's
+    # verified boxes to, where they hold the acceptance criteria: when the
+    # issue's author and its parent's are trusted.
+    def issue_boxes(github, view)
       return unless view.untrusted_authors.empty?
 
       body = BodyEdit.issue(github, view.query.repository.name_with_owner, view.query.issue.number).read
-      Checklist.boxes(body, target: :issue_body)
+      Checklist.scan(body, target: :issue_body)
     end
 
     def outcome(assessment, fields)

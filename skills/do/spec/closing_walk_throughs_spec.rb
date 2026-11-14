@@ -14,12 +14,13 @@ RSpec.describe "/do closing, #21's walk-throughs" do
   # closes for #24 with one sub-issue, +node+, every acceptance box verified
   # and the ledger's own items too.
   def closes(node, base: 'master')
+    body = "- [ ] One\n- [ ] Two\n"
     expect_base(base)
     response = record_response(ledger: "- [ ] **L1 One.**\n") { |issue| issue['subIssues'] = connection([node]) }
     expect_located(response)
-    expect_read(Do::Testing::RecordCalls::ISSUE_PATH, "- [ ] One\n- [ ] Two\n")
-    record('closes', 'sgbett/dotfiles-claude#24', '--base', base, '--verified-items', 'L1', '--verified-boxes', '1,2')
-      .last
+    expect_read(Do::Testing::RecordCalls::ISSUE_PATH, body)
+    record('closes', 'sgbett/dotfiles-claude#24', '--base', base, '--verified-items', 'L1', '--verified-boxes', '1,2',
+           '--boxes-digest', boxes_digest(body)).last
   end
 
   it 'an open sub-issue in another repository: no Closes line for the issue, which stays open naming it' do

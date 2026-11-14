@@ -196,6 +196,14 @@ RSpec.describe Do::GateRecord do
       expect([output['already'], gh_writes]).to eq([['ledger'], []])
     end
 
+    it 'reports the line it would add on a dry run, writing nothing and taking no lock' do
+      write_gate_file("## G1: open\nAnswer: fix here\n")
+      _exit_code, output = gate('publish', '--k', 'G1', '--dry-run')
+
+      expect([output.values_at('updated', 'dry_run'), gh_writes]).to eq([[['ledger'], true], []])
+      expect(File).not_to exist(lock_path)
+    end
+
     it 'fails as a tool when the ledger ends inside a code fence, which would swallow the line' do
       write_gate_file("## G1: open\nAnswer: fix here\n")
 

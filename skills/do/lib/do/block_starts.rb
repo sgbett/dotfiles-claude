@@ -16,6 +16,9 @@ module Do
     # Past five spaces after its marker, an item's content is indented code
     # that starts one space after it.
     CODE_PADDING = 5
+    # What may be a GFM table's delimiter row, which makes the line before it
+    # a table's header when that line alone is a paragraph.
+    DELIMITER_ROW = /\A\|? *:?-+:? *(?:\| *:?-+:? *)*\|? *\z/
     BLOCK_TAGS = %w[
       address article aside base basefont blockquote body caption center col colgroup dd details dialog dir div dl dt
       fieldset figcaption figure footer form frame frameset h1 h2 h3 h4 h5 h6 head header hr html iframe legend li link
@@ -44,7 +47,7 @@ module Do
       [/\A<(?:script|pre|style|textarea)(?:[ >]|\z)/i, %r{</(?:script|pre|style|textarea)>}i, :raw],
       [/\A<!--/, /-->/, :comment],
       [/\A<\?/, /\?>/, :raw],
-      [/\A<![A-Za-z]/, />/, :raw],
+      [/\A<![A-Z]/, />/, :raw],
       [/\A<!\[CDATA\[/, /\]\]>/, :raw],
       [%r{\A</?(?:#{BLOCK_TAGS})(?: |/?>|\z)}i, nil, :html]
     ].freeze
@@ -59,10 +62,12 @@ module Do
     end
 
     # A leaf block a line starts: +block+ is the leaf left open over later
-    # lines, nil for one that ends with its line, and +hidden+ how GitHub
-    # shows the line, as BlockReader::Line has it.
-    Leaf = Struct.new(:block, :hidden)
-    LINE_LEAF = Leaf.new(nil, nil).freeze
+    # lines, nil for one that ends with its line, +hidden+ how GitHub shows
+    # the line, as a BlockLine has it, and +underline+ whether it is a
+    # setext underline, which makes the paragraph before it a heading.
+    Leaf = Struct.new(:block, :hidden, :underline)
+    LINE_LEAF = Leaf.new(nil, nil, false).freeze
+    UNDERLINE = Leaf.new(nil, nil, true).freeze
 
     # A list item's marker: +kind+ its bullet or an ordered item's
     # delimiter, which items of one list share, +width+ its characters,
@@ -91,13 +96,16 @@ module Do
       html = html(rest, interrupting: interrupting)
       return Leaf.new(html.ended_by?(rest) ? nil : html, html.kind) if html
 
-      LINE_LEAF if line_leaf?(rest, interrupting)
+      line_leaf(rest, interrupting)
     end
 
-    # A heading or a thematic break, which win over a list item, or a setext
-    # underline, which only follows a paragraph, making it a heading.
-    def line_leaf?(rest, interrupting)
-      ATX_HEADING.match?(rest) || THEMATIC_BREAK.match?(rest) || (interrupting && SETEXT_UNDERLINE.match?(rest))
+    # A setext underline, which only follows a paragraph, making it a
+    # heading, and wins over a thematic break, as "---" is both; or a heading
+    # or a thematic break, which win over a list item.
+    def line_leaf(rest, interrupting)
+      return UNDERLINE if interrupting && SETEXT_UNDERLINE.match?(rest)
+
+      LINE_LEAF if ATX_HEADING.match?(rest) || THEMATIC_BREAK.match?(rest)
     end
 
     def fence(rest)

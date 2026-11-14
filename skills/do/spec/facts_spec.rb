@@ -70,7 +70,7 @@ RSpec.describe Do::Facts do
       expect(output['reference']).to eq('sgbett/dotfiles-claude#24')
       expect(output['summary']).to eq('issue' => 'sgbett/dotfiles-claude#24', 'untrusted_authors' => [],
                                       'parent' => nil, 'resume_point' => 'L1', 'open_gate_findings' => [],
-                                      'ignored_markers' => [], 'skipped_sub_issues' => [])
+                                      'ambiguous_boxes' => [], 'ignored_markers' => [], 'skipped_sub_issues' => [])
       expect(output['issue']).to include('number' => 24, 'author' => 'sgbett', 'trusted' => true,
                                          'trust_reason' => 'viewer', 'github_text' => { 'title' => title })
       expect(output.values_at('slug', 'default_branch', 'read'))
@@ -134,12 +134,20 @@ RSpec.describe Do::Facts do
       expect(boxes.map { |box| box['github_text']['label'].length }.max).to eq(60)
     end
 
-    it 'counts them as GitHub renders them: any marker, nested ones and those in comments left out' do
-      body = "Intro\n1. [ ] One\n   - [x] a detail\n2. [X] Two\n\n<!--\n- [ ] Not rendered\n-->\n * [ ] Three\n"
+    it 'gives the digest of the body it counted them in, which closes and tick check' do
+      body = JSON.parse(fixture('rest/issue-24.json'))['body']
+      _exit_code, output = facts
+
+      expect(output['issue'].values_at('boxes_ambiguous', 'boxes_digest'))
+        .to eq([false, Digest::SHA256.hexdigest(body)])
+    end
+
+    it 'counts them as GitHub renders them: any marker, nested ones included, those in comments left out' do
+      body = "Intro\n1. [ ] One\n   - [x] a detail\n2. [X] Two\n\n<!--\n- [ ] Not rendered\n-->\n> * [ ] Three\n"
       _exit_code, output = facts(body: body)
 
       expect(output['issue']['boxes'].map { |box| [box['position'], box['checked'], box['github_text']['label']] })
-        .to eq([[1, false, 'One'], [2, true, 'Two'], [3, false, 'Three']])
+        .to eq([[1, false, 'One'], [2, true, 'a detail'], [3, true, 'Two'], [4, false, 'Three']])
     end
 
     it 'lists none, reading no body, when the acceptance criteria live in the ledger' do
@@ -148,17 +156,22 @@ RSpec.describe Do::Facts do
         issue['comments']['nodes'][0]['body'] += "\n### Adopted acceptance criteria\n- the confirmed criteria\n"
       end
 
-      expect(facts(response, body: false).last['issue']['boxes']).to be_nil
+      expect(facts(response, body: false).last['issue'].values_at('boxes', 'boxes_ambiguous', 'boxes_digest'))
+        .to eq([nil, nil, nil])
     end
 
-    it 'stops, naming the lines, when a line of the body or the ledger reads like a box it cannot place' do
-      body_stop = facts(body: "- [ ] One\n[ ] Two, with no list marker\n").last
-      ledger_stop = facts(issue_response do |issue|
+    it 'goes on when a line of the body or the ledger reads like a box it cannot place, saying where' do
+      body_output = facts(body: "- [ ] One\n[ ] Two, with no list marker\n").last
+      ledger_output = facts(issue_response do |issue|
         issue['comments']['nodes'][0]['body'] = "<!-- do:breakdown -->\n- [ ] **L1 One.**\n-  [ ]x **L2**\n"
       end).last
 
-      expect([body_stop, ledger_stop].map { |output| output.values_at('status', 'reason', 'target', 'lines') })
-        .to eq([['stop', 'ambiguous_checkbox', 'issue_body', [2]], ['stop', 'ambiguous_checkbox', 'ledger', [3]]])
+      expect([body_output, ledger_output].map { |output| output['status'] }).to eq(%w[proceed proceed])
+      expect(body_output['issue'].values_at('boxes_ambiguous', 'boxes')).to match([true, [include('position' => 1)]])
+      expect(ledger_output['ledger'].values_at('boxes_ambiguous', 'first_unbuilt')).to eq([true, 'L1'])
+      expect([body_output, ledger_output].map { |output| output['summary']['ambiguous_boxes'] })
+        .to eq([['issue body, lines 2: boxes /do cannot place, which record closes and tick stop on'],
+                ['ledger, lines 3: boxes /do cannot place, which record closes and tick stop on']])
     end
   end
 
@@ -457,10 +470,10 @@ RSpec.describe Do::Facts do
     end
   end
 
-  # The walk-throughs QA ran by hand for #24, which `facts` now decides:
+  # The walk-throughs QA ran by hand for #21, which `facts` now decides:
   # whatever names or quotes a repository that isn't public stays under
   # session_only, while a public one is named as usual.
-  describe "#24's walk-throughs" do
+  describe "#21's walk-throughs" do
     def related(parent:, sub_issue:)
       facts(issue_response do |issue|
         issue['parent'] = parent

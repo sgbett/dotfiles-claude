@@ -20,7 +20,7 @@ module Do
     end
 
     def call
-      RecordIssue.locate(@options.reference, runner: @runner) { |issue| rewrite(issue) }
+      RecordIssue.locate(@options.reference, runner: @runner, writes: !@options.dry_run) { |issue| rewrite(issue) }
     end
 
     private

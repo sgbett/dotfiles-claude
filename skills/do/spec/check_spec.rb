@@ -251,6 +251,16 @@ RSpec.describe Do::Check do
       expect([output['branch']['state'], output['read']]).to eq(['local_branch_unpushed', ['references/resume.md']])
     end
 
+    it "lists a branch never pushed against the base GitHub gave, fetched through the push URL when it isn't here" do
+      expect_check(branch: { local_tip: local_tip, base_here: false, lacking: ['1234567 Example Author Work'] })
+
+      base = Do::Testing::CheckCalls::BASE_SHA
+
+      expect(run_check.last['session_only']['local_branch_commits']).to eq(['1234567 Example Author Work'])
+      fetch, log = git_calls.select { |argv| argv.intersect?(%w[fetch log]) }
+      expect([fetch.last(2), log.last(4)]).to eq([[origin_url, base], ["refs/heads/#{branch}", '--not', base, '--']])
+    end
+
     it 'asks about a local branch ahead of its copy on the push remote' do
       expect_check(branch: { remote_tip: remote_tip, local_tip: local_tip, config: tracking,
                              lacking: ['1234567 Example Author Ahead'] })
@@ -326,6 +336,15 @@ RSpec.describe Do::Check do
       expect(output['asks'].first['accept_with']).to match(['--accept-scripts', match(/\A\h{64}\z/)])
       expect(output['session_only']['scripts_changes'])
         .to eq([' M skills/do/lib/do/check.rb', '?? skills/_support/x.rb'])
+    end
+
+    it 'asks when git ignores a file that picks their Ruby, as it does mise.local.toml, naming it once' do
+      ruby_status = "!! mise.local.toml\0?? skills/_support/mise.toml\0"
+      expect_check(scripts: { top: scripts_top, status: "?? skills/_support/mise.toml\0", ruby_status: ruby_status })
+      exit_code, output = run_check
+
+      expect([exit_code, output['asks'].map { |ask| ask['reason'] }]).to eq([3, ['scripts_unreviewed']])
+      expect(output['session_only']['scripts_changes']).to eq(['?? skills/_support/mise.toml', '!! mise.local.toml'])
     end
 
     it "asks when its HEAD isn't in origin's default branch, or nothing says which that is" do

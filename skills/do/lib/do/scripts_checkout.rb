@@ -11,18 +11,22 @@ module Do
   # it is also the working directory's checkout, switching its branch would
   # swap the scripts mid-run, so the lead builds in a worktree. When it has
   # changes under the skill's own directories or to the files that pick
-  # their Ruby, or its HEAD isn't in its default branch, the scripts may not
-  # be the reviewed ones, so `check` and `record` ask first; the yes names a
-  # digest of what was there when it was given.
+  # their Ruby, ignored ones included, or its HEAD isn't in its default
+  # branch, the scripts may not be the reviewed ones, so `check` and
+  # `record` ask first; the yes names a digest of what was there when it was
+  # given.
   class ScriptsCheckout
     SKILL_DIRECTORY = File.expand_path('../..', __dir__)
     SUPPORT_DIRECTORY = '_support'
-    # What mise reads, at the checkout's root and in skills/, for the Ruby
-    # ruby-launch runs; what it reads in skills/_support/ is under review
-    # with the rest of that directory.
-    ROOT_RUBY_FILES = %w[.ruby-version mise.toml .mise.toml .tool-versions mise.local.toml .config/mise.toml
-                         .mise/config.toml].freeze
-    SKILLS_RUBY_FILES = %w[.ruby-version .tool-versions mise.toml].freeze
+    # The directory of skills/_support/ that ruby-launch lives and asks mise
+    # for the Ruby in.
+    LAUNCH_DIRECTORY = 'bin'
+    # What mise reads for that Ruby in each directory from there up to the
+    # checkout's root. Git often ignores them, as mise.local.toml is meant to
+    # be, so ignored ones count as changes too.
+    RUBY_FILES = %w[.ruby-version .tool-versions mise.toml .mise.toml mise.local.toml .mise.local.toml
+                    .config/mise.toml .config/mise/config.toml .config/mise/conf.d/*.toml mise/config.toml
+                    .mise/config.toml].freeze
     DEFAULT_BRANCH = 'refs/remotes/origin/HEAD'
     ACCEPT_FLAG = '--accept-scripts'
     TOKEN = /\A[0-9a-f]{64}\z/
@@ -67,7 +71,7 @@ module Do
       return Inspection.new(in_work_tree: false, on_default_branch: true, accepted: false) unless top
 
       status = status(top)
-      changes = Porcelain.entries(status)
+      changes = Porcelain.entries(status).uniq
       on_default_branch = on_default_branch?(top)
       token = token(top, status, changes) unless changes.empty? && on_default_branch
       Inspection.new(top_level: top, in_work_tree: top == work_tree, changes: changes,
@@ -82,21 +86,35 @@ module Do
     end
 
     # The skill's directory and skills/_support beside it, as the top level
-    # sees them, then the files that pick the Ruby; a symlinked _support is
-    # checked as the link.
-    def pathspecs(top)
-      skills = File.dirname(@skill_directory)
-      directories = [@skill_directory, File.join(skills, SUPPORT_DIRECTORY)].map { |path| relative(path, top) }
-      directories + ROOT_RUBY_FILES + SKILLS_RUBY_FILES.map { |name| File.join(relative(skills, top), name) }
+    # sees them; a symlinked _support is checked as the link.
+    def directories(top)
+      [@skill_directory, support_directory].map { |path| relative(path, top) }
+    end
+
+    # The files that pick the Ruby, at the top level, in skills/,
+    # skills/_support/ and skills/_support/bin/, where mise starts.
+    def ruby_files(top)
+      [top, File.dirname(@skill_directory), support_directory, File.join(support_directory, LAUNCH_DIRECTORY)]
+        .flat_map { |directory| RUBY_FILES.map { |name| relative(File.join(directory, name), top) } }
+    end
+
+    def support_directory
+      File.join(File.dirname(@skill_directory), SUPPORT_DIRECTORY)
     end
 
     def relative(path, top)
       Pathname(path).relative_path_from(Pathname(top)).to_s
     end
 
+    # The changes under the skill's directories, then to the files that pick
+    # the Ruby, ignored ones included.
     def status(top)
+      porcelain(top, directories(top)) + porcelain(top, ruby_files(top), '--ignored')
+    end
+
+    def porcelain(top, pathspecs, *options)
       @git.output('-C', top, *Git::NO_FSMONITOR, '--no-optional-locks', 'status', '--porcelain=v1', '-z',
-                  '--untracked-files=all', '--', *pathspecs(top))
+                  '--untracked-files=all', *options, '--', *pathspecs)
     end
 
     # Whether HEAD's commit is in the default branch origin names: a commit
@@ -107,14 +125,14 @@ module Do
       !default.nil? && @git.run('-C', top, 'merge-base', '--is-ancestor', 'HEAD', default, allowed: [0, 1]).success?
     end
 
-    # A digest of HEAD and every change pathspecs covers, untracked files'
-    # contents included.
+    # A digest of HEAD and every change status covers, untracked and ignored
+    # files' contents included.
     def token(top, status, changes)
-      untracked = changes.select(&:untracked?).map(&:path)
+      unversioned = changes.select { |change| change.untracked? || change.ignored? }.map(&:path)
       parts = [@git.output('-C', top, 'rev-parse', '--verify', 'HEAD'), status,
                @git.output('-C', top, *Git::NO_FSMONITOR, 'diff', '--binary', '--no-ext-diff', '--no-textconv',
-                           'HEAD', '--', *pathspecs(top))]
-      parts << @git.output('-C', top, 'hash-object', '--no-filters', '--', *untracked) unless untracked.empty?
+                           'HEAD', '--', *directories(top), *ruby_files(top))]
+      parts << @git.output('-C', top, 'hash-object', '--no-filters', '--', *unversioned) unless unversioned.empty?
       Digest::SHA256.hexdigest(parts.join("\0"))
     end
   end

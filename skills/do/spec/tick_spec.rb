@@ -21,19 +21,20 @@ RSpec.describe Do::Tick do
   end
 
   # Expects the issue query, answered with +response+, then the calls the
-  # block expects, and ticks +flag+'s +value+.
-  def tick(flag, value, response = record_response(ledger: ledger), dry_run: false)
+  # block expects, and ticks +flags+.
+  def tick(flags, response = record_response(ledger: ledger), dry_run: false)
     expect_located(response)
     yield if block_given?
-    record('tick', 'sgbett/dotfiles-claude#24', flag, value, *('--dry-run' if dry_run))
+    record('tick', 'sgbett/dotfiles-claude#24', *flags, *('--dry-run' if dry_run))
   end
 
   def tick_ledger(ids, response = record_response(ledger: ledger), dry_run: false, &)
-    tick('--ledger', ids, response, dry_run: dry_run, &)
+    tick(['--ledger', ids], response, dry_run: dry_run, &)
   end
 
-  def tick_issue(positions, response = record_response, dry_run: false, &)
-    tick('--issue-boxes', positions, response, dry_run: dry_run, &)
+  # Ticks +positions+ in an issue body whose digest facts gave as +digest+.
+  def tick_issue(positions, response = record_response, digest: boxes_digest(body), dry_run: false, &)
+    tick(['--issue-boxes', positions, '--boxes-digest', digest], response, dry_run: dry_run, &)
   end
 
   describe 'the ledger' do
@@ -108,7 +109,7 @@ RSpec.describe Do::Tick do
       expect(output.values_at('target', 'flipped', 'already')).to eq(['issue_body', [1, 3], [2]])
     end
 
-    it 'stops on a position no top-level box outside a fence holds' do
+    it 'stops on a position no box outside a fence holds' do
       output = tick_issue('4') { expect_read(issue_path, body) }.last
 
       expect(output.values_at('reason', 'missing')).to eq(['box_missing', [4]])
@@ -122,23 +123,45 @@ RSpec.describe Do::Tick do
       expect([exit_code, output['reason'], fake_runner.calls.length]).to eq([2, 'untrusted_issue_author', 4])
     end
 
-    it 'counts the top-level boxes GitHub renders, and ticks each at its own mark' do
+    it 'counts the boxes GitHub renders, nested ones included, and ticks each at its own mark' do
       body = "1. [ ] One\n2. [ ] Two\n   - [ ] a detail\n\n <!-- - [ ] hidden -->\n - [ ] Three\n"
-      after = body.sub('1. [ ] One', '1. [x] One').sub(' - [ ] Three', ' - [x] Three')
-      output = tick_issue('3,1') do
+      after = body.sub('1. [ ] One', '1. [x] One').sub('- [ ] a detail', '- [x] a detail')
+                  .sub(' - [ ] Three', ' - [x] Three')
+      output = tick_issue('4,3,1', digest: boxes_digest(body)) do
         expect_read(issue_path, body)
         expect_edit(issue_path, body, after)
       end.last
 
-      expect(output.values_at('flipped', 'already')).to eq([[3, 1], []])
+      expect(output.values_at('flipped', 'already')).to eq([[4, 3, 1], []])
+    end
+
+    it "stops, writing nothing, when the body isn't the one facts counted the positions in" do
+      edited = body.sub('- [ ] One', "- [ ] Inserted\r\n- [ ] One")
+      exit_code, output = tick_issue('1') { expect_read(issue_path, edited) }
+
+      expect([exit_code, output['reason'], gh_writes]).to eq([2, 'body_changed', []])
     end
 
     it 'stops, naming the lines, when the body holds a line that reads like a box it cannot place' do
       body = "- [ ] One\n[ ] Two\n-\t[ ] Three\n"
-      exit_code, output = tick_issue('1') { expect_read(issue_path, body) }
+      exit_code, output = tick_issue('1', digest: boxes_digest(body)) { expect_read(issue_path, body) }
 
       expect([exit_code, output.values_at('reason', 'target', 'lines'), gh_writes])
         .to eq([2, ['ambiguous_checkbox', 'issue_body', [2, 3]], []])
+    end
+  end
+
+  describe 'the lock' do
+    it 'is taken to write, its file left in the common git directory' do
+      before = "#{Do::Testing::RecordCalls::MARKER}#{ledger}"
+      tick_ledger('L1') { expect_edit(ledger_path, before, before.sub('- [ ] **L1 One.**', '- [x] **L1 One.**')) }
+
+      expect(Dir.children(lock_directory)).to eq([File.basename(lock_path)])
+    end
+
+    it 'is never taken on a dry run, which creates no lock file' do
+      expect(tick_ledger('L1', dry_run: true).last['dry_run']).to be(true)
+      expect(File).not_to exist(lock_directory)
     end
   end
 end

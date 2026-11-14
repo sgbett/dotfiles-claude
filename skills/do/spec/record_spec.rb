@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'digest'
 require_relative 'support/scripts_clone'
 
 # record runs from a copy of the scripts in a checkout of their own, which
@@ -55,8 +56,10 @@ RSpec.describe 'skills/do/bin/record' do
          stdout_file: fixture_path('rest/issue-24.json') }]
     )
 
+    digest = Digest::SHA256.hexdigest(JSON.parse(fixture('rest/issue-24.json'))['body'])
     exit_code, stdout, stderr = run_record('closes', '24', '--base', 'master', '--verified-items', 'L1',
-                                           '--verified-boxes', '1', environment: hostile_environment)
+                                           '--verified-boxes', '1', '--boxes-digest', digest,
+                                           environment: hostile_environment)
     output = JSON.parse(stdout)
 
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])

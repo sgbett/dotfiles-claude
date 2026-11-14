@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'body_edit'
+require_relative 'checklist'
 require_relative 'checkout'
 require_relative 'gate_file'
 require_relative 'issue_locator'
@@ -12,8 +13,9 @@ require_relative 'record_lock'
 module Do
   # The issue a `record` subcommand acts on: located and fetched as
   # pre-flight's facts are, read under the same rules, with the bodies and
-  # the gate file record edits. Each call holds the issue's RecordLock from
-  # the moment the issue's node id, which names the lock, is known.
+  # the gate file record edits. A call that writes holds the issue's
+  # RecordLock from the moment the issue's node id, which names the lock, is
+  # known; one that only reads takes none, so creates no lock file.
   class RecordIssue
     # Visibilities where what is pushed isn't public, so the owner needn't
     # choose between a fix in the open and a private security advisory.
@@ -22,27 +24,29 @@ module Do
     attr_reader :view
 
     # Yields the RecordIssue for +argument+, the issue as the user gave it,
-    # with its lock held, and returns what the block returns; or returns the
-    # stop or ask that comes first, as pre-flight would.
-    def self.locate(argument, runner:, &block)
+    # with its lock held if the call +writes+, and returns what the block
+    # returns; or returns the stop or ask that comes first, as pre-flight
+    # would.
+    def self.locate(argument, runner:, writes:, &block)
       IssueLocator.new(runner).locate(argument) do |reference|
         github = SkillSupport::Gh.new(host: reference.host, runner: runner)
         result = IssueQuery.new(github).fetch(reference.repository, reference.number)
         next Reasons.not_an_issue(result.kind) unless result.kind == :issue
 
-        locked(result, github, Checkout.new(runner).common_directory, &block)
+        open_issue(result, github, Checkout.new(runner).common_directory, writes: writes, &block)
       end
     end
 
     # Yields the RecordIssue for +result+, IssueQuery's Result for an issue,
-    # with the issue's lock held.
-    def self.locked(result, github, common_directory)
-      RecordLock.hold(RecordLock.path(common_directory, result.issue.id)) do
-        yield new(IssueView.new(result), github: github, common_directory: common_directory)
-      end
+    # with the issue's lock held if the call +writes+.
+    def self.open_issue(result, github, common_directory, writes:)
+      issue = new(IssueView.new(result), github: github, common_directory: common_directory)
+      return yield issue unless writes
+
+      RecordLock.hold(RecordLock.path(common_directory, result.issue.id)) { yield issue }
     end
 
-    private_class_method :locked
+    private_class_method :open_issue
 
     def initialize(view, github:, common_directory:)
       @view = view
@@ -83,6 +87,20 @@ module Do
 
     def issue_body
       BodyEdit.issue(@github, repository, issue.number)
+    end
+
+    # The issue body as it reads now, and its Checklist boxes. Raises
+    # BodyChanged when +digest+, facts' issue.boxes_digest, is given and the
+    # body no longer has it, as positions facts gave could then name other
+    # boxes; and AmbiguousCheckbox when a line reads like a box Checklist
+    # can't place.
+    def issue_boxes(digest)
+      text = issue_body.read
+      reading = Checklist.scan(text, target: :issue_body)
+      raise BodyChanged unless digest.nil? || reading.digest == digest
+      raise AmbiguousCheckbox.new(:issue_body, reading.ambiguous) if reading.ambiguous?
+
+      [text, reading.boxes]
     end
 
     def ledger_body

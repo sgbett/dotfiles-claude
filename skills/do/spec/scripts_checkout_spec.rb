@@ -74,18 +74,35 @@ RSpec.describe Do::ScriptsCheckout do
       .to eq([['?? skills/_support/new.rb'], :scripts_unreviewed])
   end
 
-  it 'asks about a change to any file mise reads for the Ruby the scripts run on, at the root or in skills/' do
-    ['.ruby-version', 'mise.toml', '.mise.toml', '.tool-versions', 'mise.local.toml', '.config/mise.toml',
-     '.mise/config.toml', 'skills/.ruby-version', 'skills/.tool-versions', 'skills/mise.toml'].each do |name|
+  it "asks about a change to any file mise reads for the scripts' Ruby, from the root to skills/_support/bin" do
+    names = %w[.ruby-version .tool-versions mise.toml .mise.toml mise.local.toml .mise.local.toml .config/mise.toml
+               .config/mise/config.toml .config/mise/conf.d/ruby.toml mise/config.toml .mise/config.toml]
+    ['', 'skills/', 'skills/_support/', 'skills/_support/bin/'].product(names).each do |directory, name|
       reviewed_checkout
-      FileUtils.mkdir_p(File.dirname(File.join(top, name)))
-      File.write(File.join(top, name), "ruby 2.7.0\n")
+      path = "#{directory}#{name}"
+      FileUtils.mkdir_p(File.dirname(File.join(top, path)))
+      File.write(File.join(top, path), "ruby 2.7.0\n")
       inspection = examine
 
       expect([inspection.changes.map(&:to_s), inspection.ask&.fetch(:reason)])
-        .to eq([["?? #{name}"], :scripts_unreviewed]), name
+        .to eq([["?? #{path}"], :scripts_unreviewed]), path
       FileUtils.rm_rf(top)
     end
+  end
+
+  it 'asks about such a file git ignores, as mise.local.toml often is, holding its contents in the digest' do
+    files['.gitignore'] = "mise.local.toml\n.config/\n*.log\n"
+    reviewed_checkout
+    FileUtils.mkdir_p(File.join(top, '.config', 'mise', 'conf.d'))
+    File.write(File.join(top, '.config', 'mise', 'conf.d', 'ruby.toml'), "[tools]\nruby = '3.4.2'\n")
+    File.write(File.join(skill_directory, 'debug.log'), "ignored, and no file mise reads\n")
+    File.write(File.join(top, 'mise.local.toml'), "[tools]\nruby = '2.7.0'\n")
+    inspection = examine
+    File.write(File.join(top, 'mise.local.toml'), "[tools]\nruby = '2.6.0'\n")
+
+    expect([inspection.changes.map(&:to_s), inspection.ask&.fetch(:reason)])
+      .to eq([['!! .config/mise/conf.d/ruby.toml', '!! mise.local.toml'], :scripts_unreviewed])
+    expect(examine(accepted: inspection.token).accepted).to be(false)
   end
 
   it "notices an edit to the root's .ruby-version in the digest a yes was given for" do

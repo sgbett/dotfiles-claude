@@ -4,18 +4,20 @@ require_relative 'block_starts'
 
 module Do
   # The blocks open in a Markdown body as BlockReader reads it: the block
-  # quotes and list items that hold the current line, outermost first, and
-  # the leaf open in the innermost of them: :paragraph, :code (indented),
-  # a BlockStarts::Fence or a BlockStarts::Html, or nil.
+  # quotes, footnote definitions and list items that hold the current line,
+  # outermost first, and the leaf open in the innermost of them: :paragraph,
+  # :code (indented), a BlockStarts::Fence or a BlockStarts::Html, or nil.
+  # Of a paragraph, it keeps the line that opened it and how many it has.
   class BlockState
     QUOTE = :quote
+    FOOTNOTE = :footnote
     CODE_INDENT = 4
 
     # A list item: +kind+ its marker's, +column+ where its content starts,
     # and +filled+ whether it holds anything yet.
     Item = Struct.new(:kind, :column, :filled, keyword_init: true)
 
-    attr_reader :containers
+    attr_reader :containers, :paragraph_start, :paragraph_lines
     attr_accessor :leaf
 
     def initialize
@@ -23,11 +25,21 @@ module Do
       @leaf = nil
     end
 
+    # Opens a paragraph at +line+, a BlockLine.
+    def open_paragraph(line)
+      @leaf = :paragraph
+      @paragraph_start = line
+      @paragraph_lines = 1
+    end
+
+    def continue_paragraph
+      @paragraph_lines += 1
+    end
+
     # How many containers, outermost first, +scan+'s line continues, the
     # scan moved past their markers.
     def match(scan)
-      @containers.take_while { |container| container == QUOTE ? scan.enter_quote : scan.enter_item(container) }
-                 .length
+      @containers.take_while { |container| enter(scan, container) }.length
     end
 
     def paragraph?
@@ -76,7 +88,19 @@ module Do
       @containers.include?(QUOTE)
     end
 
+    def footnote?
+      @containers.include?(FOOTNOTE)
+    end
+
     private
+
+    def enter(scan, container)
+      case container
+      when QUOTE then scan.enter_quote
+      when FOOTNOTE then scan.enter_footnote
+      else scan.enter_item(container)
+      end
+    end
 
     def continue_fence(scan)
       @leaf = nil if @leaf.closed_by?(scan)

@@ -27,8 +27,9 @@ module SkillSupport
     # The lead single-quotes every one, so "#" can't start a comment, as
     # hierarchical names such as project/#12_title/master need.
     BRANCH_CHARACTERS = %r{\A[A-Za-z0-9._/+#-]+\z}
-    # A remote's name reaches git as an argument and in --remotes=<name>,
-    # which reads a glob, so it takes no "/" or glob character.
+    # A remote's name reaches git as an argument and the lead's command
+    # lines, so it takes only the characters remote names commonly use: no
+    # "/", with which git can read it as a path instead.
     REMOTE_NAME = /\A[A-Za-z0-9._-]+\z/
     DOT_SEGMENTS = %w[. ..].freeze
     CONTROL_CHARACTER = /[[:cntrl:]]/

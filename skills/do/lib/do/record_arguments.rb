@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require_relative 'checklist'
 require_relative 'ledger'
 require_relative 'scripts_checkout'
 require_relative 'usage_error'
+require_relative 'written_file'
 
 module Do
   # The arguments of `record`, every one validated before anything else
@@ -10,11 +12,14 @@ module Do
   # judge), then the subcommand's flags, each with its value, in any order.
   module RecordArguments
     # Each subcommand's flags that take a value, beside the yes every one
-    # takes, those it needs (all of +required+, exactly one of +one_of+), and
-    # whether it takes --dry-run.
+    # takes, those it needs (all of +required+, exactly one of +one_of+, and
+    # with each key of +needs+ its value), and whether it takes --dry-run.
+    # Box positions come with the digest of the body facts counted them in.
     SUBCOMMANDS = {
-      'closes' => { values: %w[--base --verified-items --verified-boxes], required: %w[--base] },
-      'tick' => { values: %w[--ledger --issue-boxes], one_of: %w[--ledger --issue-boxes], dry_run: true },
+      'closes' => { values: %w[--base --verified-items --verified-boxes --boxes-digest], required: %w[--base],
+                    needs: { '--verified-boxes' => '--boxes-digest' } },
+      'tick' => { values: %w[--ledger --issue-boxes --boxes-digest], one_of: %w[--ledger --issue-boxes],
+                  needs: { '--issue-boxes' => '--boxes-digest', '--boxes-digest' => '--issue-boxes' }, dry_run: true },
       'gate add' => { values: %w[--finding-file], required: %w[--finding-file] },
       'gate answer' => { values: %w[--k --answer], required: %w[--k --answer] },
       'gate publish' => { values: %w[--k], required: %w[--k], dry_run: true },
@@ -31,18 +36,18 @@ module Do
     # and the ledger write them.
     ANSWERS = { 'fix-here' => 'fix here', 'advisory' => 'advisory' }.freeze
     STATES = { 'fixed' => 'fixed', 'user-decided' => 'user decided' }.freeze
-    CONTROL_CHARACTER = /[[:cntrl:]]/
     # How each flag's value is checked, and turned into its option's value;
-    # convert hands --base, --number and --accept-scripts to the checks
-    # other modules own.
+    # convert hands --base, --number, --finding-file, --boxes-digest and
+    # --accept-scripts to the checks other modules own.
     CONVERTERS = {
       '--verified-items' => :ledger_ids!, '--ledger' => :ledger_ids!, '--verified-boxes' => :positions!,
-      '--issue-boxes' => :positions!, '--finding-file' => :file_path!, '--k' => :gate_id!, '--answer' => :answer!,
-      '--state' => :state!, '--item' => :item!
+      '--issue-boxes' => :positions!, '--k' => :gate_id!, '--answer' => :answer!, '--state' => :state!,
+      '--item' => :item!
     }.freeze
 
-    Options = Struct.new(:command, :reference, :base, :verified_items, :verified_boxes, :ledger, :issue_boxes, :k,
-                         :finding_file, :answer, :state, :item, :number, :accept_scripts, :dry_run, keyword_init: true)
+    Options = Struct.new(:command, :reference, :base, :verified_items, :verified_boxes, :ledger, :issue_boxes,
+                         :boxes_digest, :k, :finding_file, :answer, :state, :item, :number, :accept_scripts, :dry_run,
+                         keyword_init: true)
 
     module_function
 
@@ -88,6 +93,9 @@ module Do
     def check_presence(flags, spec)
       raise RecordUsageError unless (spec.fetch(:required, []) - flags).empty?
       raise RecordUsageError if spec[:one_of] && (spec[:one_of] & flags).length != 1
+
+      needs = spec.fetch(:needs, {})
+      raise RecordUsageError if needs.any? { |flag, needed| flags.include?(flag) && !flags.include?(needed) }
     end
 
     def option(flag)
@@ -98,6 +106,8 @@ module Do
       case flag
       when '--base' then SkillSupport::Identifiers.branch!(value, runner: runner)
       when '--number' then SkillSupport::Identifiers.issue_number!(value)
+      when '--finding-file' then WrittenFile.path!(:finding_file, value)
+      when '--boxes-digest' then Checklist.digest!(value)
       when ScriptsCheckout::ACCEPT_FLAG then ScriptsCheckout.token!(value)
       else send(CONVERTERS.fetch(flag), value)
       end
@@ -140,16 +150,7 @@ module Do
       STATES.fetch(value) { raise SkillSupport::InvalidIdentifier.new(:state, value) }
     end
 
-    # A path the lead wrote with the Write tool; FindingFile reads it.
-    def file_path!(value)
-      if value.empty? || value.start_with?('-') || CONTROL_CHARACTER.match?(value)
-        raise SkillSupport::InvalidIdentifier.new(:finding_file, value)
-      end
-
-      value
-    end
-
     private_class_method :command, :flags, :values, :check_presence, :option, :convert, :ledger_ids!, :positions!,
-                         :list, :gate_id!, :item!, :answer!, :state!, :file_path!
+                         :list, :gate_id!, :item!, :answer!, :state!
   end
 end

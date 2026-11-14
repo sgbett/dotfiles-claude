@@ -72,12 +72,17 @@ RSpec.describe Do::Ledger do
       expect { shown.items }.to raise_error(Do::AmbiguousCheckbox) { |error| expect(error.lines).to eq([6]) }
     end
 
-    it 'raises on its items when a line reads like a box it cannot place, while its gate lines stand' do
+    it 'raises on its items when a line reads like a box it cannot place, which pre-flight reads as placed' do
       ambiguous = ledger("- [ ] **L1 One.**\n[ ] **L2 No marker.**\n\nGate G1: open\n")
 
       expect { ambiguous.items }.to raise_error(Do::AmbiguousCheckbox) { |error| expect(error.lines).to eq([3]) }
-      expect { ambiguous.first_unbuilt }.to raise_error(Do::AmbiguousCheckbox)
-      expect(ambiguous.gates.map(&:id)).to eq(['G1'])
+      expect([ambiguous.ambiguous, ambiguous.placed_items.map(&:id), ambiguous.first_unbuilt.id,
+              ambiguous.gates.map(&:id)]).to eq([[3], ['L1'], 'L1', ['G1']])
+    end
+
+    it 'takes only its top-level boxes as items, a nested or quoted one being detail' do
+      expect(items("- [ ] **L1 One.**\n  - [ ] **L2 detail**\n> - [ ] **L3 quoted**\n\n- [ ] **L4 Four.**\n"))
+        .to eq([['L1', :item, false], ['L4', :item, false]])
     end
 
     it 'ignores checklists inside code fences' do

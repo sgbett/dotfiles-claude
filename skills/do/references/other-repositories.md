@@ -6,7 +6,7 @@
 
 - The conventions may push the branch to a fork you can write to and open the PR from it; the PR still targets this repository.
 - A fork you push to counts as this repository under the Visibility invariant.
-- From a fork, `gh pr create` also needs `--head <owner>:<branch>`, beside the repository every `gh` call names.
+- From a fork, `gh pr create` also needs `--head '<owner>:<branch>'`, beside the repository every `gh` call names.
 - Never check out, build or test another fork's branch.
 
 ## A parent or sub-issue in another repository

@@ -6,7 +6,7 @@ require_relative 'visibility'
 
 module Do
   # The breakdown comment (the Ledger of /do's SKILL.md): the issue's work as
-  # the top-level boxes of its checklist, as Checklist reads them, plain
+  # the top-level boxes of its checklist, as Checklist reads a ledger, plain
   # "Gate G<k>: <state>" lines, and the acceptance criteria adopted for an
   # untrusted author under a fixed heading. A line in code or an HTML
   # comment, which GitHub shows quoted or not at all, is neither of those.
@@ -29,7 +29,9 @@ module Do
     Item = Struct.new(:id, :position, :line, :mark, :kind, :checked, :sub_issue, keyword_init: true)
     Gate = Struct.new(:id, :state, :line, keyword_init: true)
 
-    attr_reader :comment, :gates
+    # +ambiguous+ is the numbers (from 1) of the lines that read like boxes
+    # Checklist can't place.
+    attr_reader :comment, :gates, :ambiguous
 
     # Returns the ledger comment, the earliest beginning with MARKER whose
     # author +trusted+ accepts (or nil), and the marker comments whose
@@ -49,7 +51,7 @@ module Do
       @gates = []
       @adopted_criteria = false
       lines = BlockReader.read(comment.body)
-      boxes, @ambiguous = Checklist.read(lines)
+      boxes, @ambiguous = Checklist.read(lines, target: :ledger)
       @items = boxes.map { |box| item(box) }
       lines.each { |line| read(line.text, line.index) unless line.task || QUOTED_OR_HIDDEN.include?(line.hidden) }
     end
@@ -67,10 +69,17 @@ module Do
       @items
     end
 
-    # The first unticked item this run builds: a line item or a sub-issue in
-    # this repository. A sub-issue elsewhere is tracked, never built.
+    # The items as Checklist placed them, which an ambiguous line can throw
+    # out: for pre-flight to report beside +ambiguous+, never to act on.
+    def placed_items
+      @items
+    end
+
+    # The first unticked item this run builds, as placed: a line item or a
+    # sub-issue in this repository. A sub-issue elsewhere is tracked, never
+    # built.
     def first_unbuilt
-      items.find { |item| !item.checked && item.kind != :sub_issue_elsewhere }
+      placed_items.find { |item| !item.checked && item.kind != :sub_issue_elsewhere }
     end
 
     # The items each of +ids+ names, and the ids that name no box, or more

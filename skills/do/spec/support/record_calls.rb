@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'digest'
 require_relative '../../lib/do/record'
 require_relative 'issue_responses'
 
@@ -102,6 +103,21 @@ module Do
 
       def gh_writes
         fake_runner.calls.map { |call| call[:argv] }.select { |argv| argv.include?('PATCH') }
+      end
+
+      # The boxes digest preflight facts gives for an issue body of +body+.
+      def boxes_digest(body)
+        Digest::SHA256.hexdigest(body.to_s)
+      end
+
+      # The directory a record call's lock file goes in, which a call that
+      # only reads never creates, and the lock file itself.
+      def lock_directory
+        File.join(sandbox.work_directory, '.git', 'do')
+      end
+
+      def lock_path
+        File.join(lock_directory, 'I_kwDOQzoXSs8AAAABfBUanQ.lock')
       end
 
       # A sub-issue node of state +state+; +by+ as for issue_node.

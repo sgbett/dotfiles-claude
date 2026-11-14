@@ -5,14 +5,16 @@ require_relative 'reasons'
 require_relative 'record_issue'
 
 module Do
-  # `record tick <issue> (--ledger IDS | --issue-boxes POSITIONS)
-  # [--dry-run]`: ticks the boxes QA verified, in the ledger comment or, when
-  # its author is trusted, the issue body. Each box named must be exactly
-  # one of the body's boxes as Checklist reads them, and the body must hold
-  # no line that reads like a box Checklist can't place, or nothing is
-  # written. Only "[ ]" becomes "[x]", through BodyEdit's one-writer
-  # discipline; nothing is written when every box is ticked already. The
-  # output names boxes by id or position, never quoting the body.
+  # `record tick <issue> (--ledger IDS | --issue-boxes POSITIONS
+  # --boxes-digest D) [--dry-run]`: ticks the boxes QA verified, in the
+  # ledger comment or, when its author is trusted, the issue body, which
+  # must still be the one facts read, whose digest is D. Each box named must
+  # be exactly one of the body's boxes as Checklist reads them, and the body
+  # must hold no line that reads like a box Checklist can't place, or
+  # nothing is written. Only "[ ]" becomes "[x]", through BodyEdit's
+  # one-writer discipline; nothing is written when every box is ticked
+  # already, and a dry run takes no lock. The output names boxes by id or
+  # position, never quoting the body.
   class Tick
     # +options+ are RecordArguments' Options.
     def initialize(options, runner:)
@@ -21,7 +23,7 @@ module Do
     end
 
     def call
-      RecordIssue.locate(@options.reference, runner: @runner) do |issue|
+      RecordIssue.locate(@options.reference, runner: @runner, writes: !@options.dry_run) do |issue|
         @options.ledger ? tick_ledger(issue) : tick_issue_body(issue)
       end
     end
@@ -40,12 +42,11 @@ module Do
     def tick_issue_body(issue)
       return Reasons.stop(Reasons::UNTRUSTED_ISSUE_AUTHOR) unless issue.issue_author_trusted?
 
-      body = issue.issue_body
-      before = body.read
-      boxes, missing = Checklist.at(Checklist.boxes(before, target: :issue_body), @options.issue_boxes)
+      before, all = issue.issue_boxes(@options.boxes_digest)
+      boxes, missing = Checklist.at(all, @options.issue_boxes)
       return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
 
-      tick(body, before, @options.issue_boxes.zip(boxes), target: :issue_body)
+      tick(issue.issue_body, before, @options.issue_boxes.zip(boxes), target: :issue_body)
     end
 
     # +named+ pairs each id or position the call gave with its box, a ledger
