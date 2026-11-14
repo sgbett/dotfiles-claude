@@ -29,6 +29,44 @@ gh repo view https://github.com/sgbett/dotfiles-claude.git --json nameWithOwner,
 
 `issue-24.json` holds #24 as it stood with its breakdown comment and no branches pushed, `pull-request-25.json` what GitHub answers for a pull request's number, and `missing-issue.json` its `NOT_FOUND` for a number that names nothing.
 
+`preflight check`'s fixtures were recorded the same way, after also checking that `gh repo view bettison-org/ai-software-architect --json visibility` prints `PUBLIC`. Its three queries' requests come from `Do::CheckQuery`, and `check_query_spec.rb` checks them against the code in the same way. The contents call reads at the base commit `base-master.json` records.
+
+```sh
+F=skills/do/spec/fixtures
+check_request() {
+  ruby -I skills/_support/lib -r skill_support -r ./skills/do/lib/do/check_query -r json -e '
+    value = ARGV[1] == "issue_variables" ? Integer(ARGV[3]) : ARGV[3]
+    puts JSON.pretty_generate("query" => Do::CheckQuery.const_get(ARGV[0]),
+                              "variables" => Do::CheckQuery.public_send(ARGV[1], ARGV[2], value))' "$@"
+}
+
+check_request ISSUE_QUERY issue_variables sgbett/dotfiles-claude 24 > $F/graphql/check-issue-24.request.json
+gh api graphql --hostname github.com --input $F/graphql/check-issue-24.request.json > $F/graphql/check-issue-24.json
+
+check_request BASE_QUERY base_variables sgbett/dotfiles-claude master > $F/graphql/base-master.request.json
+gh api graphql --hostname github.com --input $F/graphql/base-master.request.json > $F/graphql/base-master.json
+
+check_request BASE_QUERY base_variables sgbett/dotfiles-claude 'feat/#24+no-such-branch' \
+  > $F/graphql/base-missing.request.json
+gh api graphql --hostname github.com --input $F/graphql/base-missing.request.json > $F/graphql/base-missing.json
+
+check_request PULL_REQUESTS_QUERY pull_request_variables sgbett/dotfiles-claude feat/24-hlr-do-and-copilot-check-move \
+  > $F/graphql/pull-requests-24.request.json
+gh api graphql --hostname github.com --input $F/graphql/pull-requests-24.request.json > $F/graphql/pull-requests-24.json
+
+gh repo view https://github.com/sgbett/dotfiles-claude.git --json nameWithOwner,parent > $F/repo-view/push-origin.json
+gh repo view https://github.com/bettison-org/ai-software-architect.git --json nameWithOwner,parent \
+  > $F/repo-view/fork.json
+
+gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/contents/.claude/rules \
+  -f ref=6b9895d961416bbb7561778aff4e651822796e9e \
+  > $F/contents/rules-not-found.json 2> $F/contents/rules-not-found.stderr
+```
+
+`check-issue-24.json` is #24 as GitHub names its repository, `base-master.json` and `base-missing.json` a base branch that exists and one that doesn't, `pull-requests-24.json` the branch with no pull request open, `push-origin.json` this repository through its push URL, `fork.json` a fork and its parent, and `rules-not-found.json` the 404 for an absent `.claude/rules/`.
+
 ## Synthesised
 
 The specs build every other case in Ruby (`spec/support/issue_responses.rb`) by changing the recorded #24 answer: untrusted authors, parents and sub-issues, other branches and pull requests, cut-off pages and gate lines. Any repository they add is an `example-` one, as no public repository has the sub-issue links they need.
+
+`check`'s other cases are built in `spec/support/check_responses.rb` and the specs themselves: other remotes and forks, pull requests open on the branch, files with a security focus, and the git answers its unit specs expect. Its git layer is tested against real repositories made in each example's sandbox instead.

@@ -66,6 +66,20 @@ RSpec.describe SkillSupport::Identifiers do
     end
   end
 
+  describe '.commit_sha!' do
+    it 'accepts a whole SHA-1 or SHA-256 object name, lower-cased' do
+      sha1 = '5c766e2986ce31d0f4fd8a1391da1098c217dcac'
+      sha256 = 'a' * 64
+
+      expect([sha1, sha1.upcase, sha256].map { |value| described_class.commit_sha!(value) }).to eq([sha1, sha1, sha256])
+    end
+
+    it 'rejects an abbreviation, a ref, other lengths and anything not hexadecimal' do
+      values = ['', '5c766e2', 'HEAD', 'master', "#{'a' * 40}\n", 'g' * 40, 'a' * 41, 'a' * 63, "-#{'a' * 39}", nil]
+      expect_rejected(:commit_sha, values) { |value| described_class.commit_sha!(value) }
+    end
+  end
+
   describe '.host!' do
     it 'accepts a host name and lower-cases it' do
       expect(%w[github.com GitHub.COM octocorp.ghe.com].map { |value| described_class.host!(value) })

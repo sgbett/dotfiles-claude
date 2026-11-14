@@ -4,8 +4,8 @@ require_relative 'assessment'
 require_relative 'checkout'
 require_relative 'facts_report'
 require_relative 'gate_file'
+require_relative 'issue_locator'
 require_relative 'issue_query'
-require_relative 'issue_reference'
 require_relative 'reasons'
 require_relative 'slug'
 
@@ -14,9 +14,6 @@ module Do
   # gathers the issue's facts from GitHub and the checkout, and stops, asks
   # or proceeds with them.
   class Facts
-    ORIGIN_FIELDS = %w[nameWithOwner url].freeze
-    URL_HOST = %r{\Ahttps?://(?<host>[^/]+)/}
-
     # +argument+ names the issue as the user gave it. Every gh and git call
     # goes through +runner+, in the working directory.
     def initialize(argument, runner: SkillSupport::CommandRunner.new)
@@ -26,43 +23,10 @@ module Do
     end
 
     def call
-      reference = IssueReference.parse(@argument)
-      return Reasons.not_an_issue(:not_a_reference) unless reference
-
-      reference = through_origin(reference.number) if reference.bare?
-      return SkillSupport::Outcome.ask([Reasons.ask(Reasons::NO_ORIGIN)]) unless reference
-
-      facts(reference)
+      IssueLocator.new(@runner).locate(@argument) { |reference| facts(reference) }
     end
 
     private
-
-    # A bare number names an issue in the repository origin resolves to,
-    # as gh resolves it: never parsed from the URL, which can be an alias.
-    def through_origin(number)
-      url = @checkout.origin_url
-      origin = url && view(url)
-      return unless origin
-
-      IssueReference::Reference.new(host: host(origin['url']), number: number,
-                                    repository: SkillSupport::Identifiers.repository!(origin['nameWithOwner']))
-    end
-
-    # nil when origin's URL is a local path, which gh would resolve against
-    # github.com. repo_view takes its host from the URL, so the Gh's own goes
-    # unused.
-    def view(url)
-      SkillSupport::Gh.new(host: IssueReference::DEFAULT_HOST, runner: @runner).repo_view(url, ORIGIN_FIELDS)
-    rescue SkillSupport::InvalidIdentifier => e
-      raise unless e.kind == :repository_url
-    end
-
-    def host(url)
-      match = URL_HOST.match(url.to_s)
-      raise SkillSupport::UnexpectedResponse, 'gh repo view returned no repository URL' unless match
-
-      SkillSupport::Identifiers.host!(match[:host])
-    end
 
     def facts(reference)
       query = IssueQuery.new(SkillSupport::Gh.new(host: reference.host, runner: @runner))

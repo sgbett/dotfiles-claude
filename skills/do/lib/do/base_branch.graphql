@@ -1,0 +1,5 @@
+query PreflightBaseBranch($owner: String!, $name: String!, $qualifiedName: String!) {
+  repository(owner: $owner, name: $name) {
+    ref(qualifiedName: $qualifiedName) { name target { oid } }
+  }
+}

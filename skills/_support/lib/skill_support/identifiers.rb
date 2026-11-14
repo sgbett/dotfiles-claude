@@ -16,6 +16,9 @@ module SkillSupport
     # "/" of GitHub's legacy base64 ids are refused rather than escaped.
     NODE_ID = /\A[A-Za-z0-9_=][A-Za-z0-9_=-]{0,99}\z/
     COMMENT_ID = /\A[1-9][0-9]{0,19}\z/
+    # Whole object names only, SHA-1 or SHA-256: an abbreviation can match
+    # another commit later.
+    COMMIT_SHA = /\A(?:[0-9a-f]{40}|[0-9a-f]{64})\z/i
     HOST_LABEL = /[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?/
     HOST = /\A#{HOST_LABEL}(?:\.#{HOST_LABEL})+\z/
     HOST_MAX_LENGTH = 253
@@ -45,6 +48,11 @@ module SkillSupport
     # A REST comment id (GraphQL's databaseId), as an Integer.
     def comment_id!(value)
       Integer(matching!(:comment_id, COMMENT_ID, value.is_a?(Integer) ? value.to_s : value), 10)
+    end
+
+    # A commit's full object name, lower-cased.
+    def commit_sha!(value)
+      matching!(:commit_sha, COMMIT_SHA, value).downcase
     end
 
     # A host name such as "github.com", lower-cased. No scheme, port or path.

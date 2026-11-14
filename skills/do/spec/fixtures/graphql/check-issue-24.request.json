@@ -1,0 +1,8 @@
+{
+  "query": "query PreflightCheckIssue($owner: String!, $name: String!, $number: Int!) {\n  viewer { login }\n  repository(owner: $owner, name: $name) {\n    nameWithOwner\n    issueOrPullRequest(number: $number) {\n      __typename\n      ... on Issue { repository { nameWithOwner } }\n    }\n  }\n}\n",
+  "variables": {
+    "owner": "sgbett",
+    "name": "dotfiles-claude",
+    "number": 24
+  }
+}

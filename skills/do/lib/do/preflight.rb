@@ -1,21 +1,14 @@
 # frozen_string_literal: true
 
+require_relative 'check'
 require_relative 'facts'
+require_relative 'usage_error'
 
 module Do
-  # preflight was called with arguments it doesn't take.
-  class UsageError < SkillSupport::Error
-    USAGE = 'usage: preflight facts <issue number | owner/repo#N | https://<host>/<owner>/<repo>/issues/<N>>'
-
-    def initialize
-      super(USAGE)
-    end
-  end
-
   # skills/do/bin/preflight: /do's pre-flight in two calls, with the
   # conventions, which are judgement, resolved by the lead between them.
-  # `facts <issue>` reads the issue's facts; `check` validates the resolved
-  # conventions and is still to be built.
+  # `facts <issue>` reads the issue's facts; `check <issue> ...` checks the
+  # conventions the lead resolved against GitHub and the checkout.
   module Preflight
     module_function
 
@@ -26,7 +19,7 @@ module Do
         raise UsageError unless rest.length == 1
 
         Facts.new(rest.first, runner: runner).call
-      when 'check' then raise SkillSupport::Error, 'preflight check is not built yet'
+      when 'check' then Check.new(rest, runner: runner).call
       else raise UsageError
       end
     end

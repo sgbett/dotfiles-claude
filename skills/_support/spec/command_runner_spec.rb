@@ -43,14 +43,15 @@ RSpec.describe SkillSupport::CommandRunner do
       .to raise_error(SkillSupport::CommandNotFound, 'skill-support-no-such-command is not installed or not on PATH')
   end
 
-  it 'removes the variables that retarget, page or colour gh, and pins its quiet settings' do
+  it "removes the variables that retarget, page or colour gh, and pins its and git's quiet settings" do
     described_class::REMOVED_VARIABLES.each { |name| ENV[name] = 'set-by-spec' }
-    ENV.update('GH_PROMPT_DISABLED' => '0', 'NO_COLOR' => '')
+    ENV.update('GH_PROMPT_DISABLED' => '0', 'NO_COLOR' => '', 'GIT_TERMINAL_PROMPT' => '1')
 
     environment = child_environment
 
     expect(environment.keys & described_class::REMOVED_VARIABLES).to be_empty
-    expect(environment).to include('GH_PROMPT_DISABLED' => '1', 'GH_NO_UPDATE_NOTIFIER' => '1', 'NO_COLOR' => '1')
+    expect(environment).to include('GH_PROMPT_DISABLED' => '1', 'GH_NO_UPDATE_NOTIFIER' => '1', 'NO_COLOR' => '1',
+                                   'GIT_TERMINAL_PROMPT' => '0')
   end
 
   it 'passes the rest of the environment through' do

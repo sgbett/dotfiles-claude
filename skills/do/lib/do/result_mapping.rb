@@ -97,8 +97,7 @@ module Do
     end
 
     def author(node)
-      Author.new(login: node.dig('author', 'login'), association: node['authorAssociation'],
-                 viewer_did_author: node['viewerDidAuthor'])
+      Author.from_node(node)
     end
 
     def edits(node)

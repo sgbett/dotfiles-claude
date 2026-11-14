@@ -1,0 +1,8 @@
+query PreflightPullRequests($owner: String!, $name: String!, $branch: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(headRefName: $branch, states: [OPEN], first: 100) {
+      pageInfo { hasNextPage hasPreviousPage }
+      nodes { number author { login } authorAssociation viewerDidAuthor headRepository { nameWithOwner } }
+    }
+  }
+}

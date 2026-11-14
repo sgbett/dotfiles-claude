@@ -10,9 +10,10 @@ module Do
 
     module_function
 
-    # +resuming+: a ledger, or trusted work already in flight, to resume
-    # from; +other_repositories+: the parent or a sub-issue lives in another
-    # repository; +open_gate+: the gate file or the ledger has an open finding.
+    # +resuming+: a ledger, trusted work already in flight, or an existing
+    # branch to resume from; +other_repositories+: the parent or a sub-issue
+    # lives in another repository, or the push remote is a fork; +open_gate+:
+    # the gate file or the ledger has an open finding.
     def applicable(resuming:, other_repositories:, open_gate:)
       [(RESUME if resuming), (OTHER_REPOSITORIES if other_repositories), (GATE_BLOCK if open_gate)].compact
     end

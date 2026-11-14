@@ -1,0 +1,8 @@
+{
+  "query": "query PreflightBaseBranch($owner: String!, $name: String!, $qualifiedName: String!) {\n  repository(owner: $owner, name: $name) {\n    ref(qualifiedName: $qualifiedName) { name target { oid } }\n  }\n}\n",
+  "variables": {
+    "owner": "sgbett",
+    "name": "dotfiles-claude",
+    "qualifiedName": "refs/heads/feat/#24+no-such-branch"
+  }
+}

@@ -1,0 +1,118 @@
+# frozen_string_literal: true
+
+require_relative '../lib/do/scripts_checkout'
+require_relative 'support/git_repositories'
+
+RSpec.describe Do::ScriptsCheckout do
+  include Do::Testing::GitRepositories
+
+  let(:top) { sandbox.path('scripts') }
+  let(:skill_directory) { File.join(top, 'skills', 'do') }
+  let(:check_file) { File.join(skill_directory, 'lib', 'check.rb') }
+
+  def examine(work_tree: sandbox.work_directory, accepted: nil)
+    described_class.new(SkillSupport::CommandRunner.new, skill_directory: skill_directory)
+                   .examine(work_tree: work_tree, accepted: accepted)
+  end
+
+  let(:files) do
+    { 'skills/do/lib/check.rb' => "# check\n", 'skills/_support/lib/support.rb' => "# support\n",
+      'README.md' => "# Scripts\n" }
+  end
+  let(:setup) do
+    [%w[add .], %w[commit --quiet -m Scripts], %w[update-ref refs/remotes/origin/master HEAD],
+     %w[symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master]]
+  end
+
+  # A checkout holding skills/do and skills/_support, committed, with HEAD
+  # the default branch origin names.
+  def reviewed_checkout
+    files.each do |path, text|
+      FileUtils.mkdir_p(File.dirname(File.join(top, path)))
+      File.write(File.join(top, path), text)
+    end
+    git('init', '--quiet', '--initial-branch=master', top)
+    setup.each { |arguments| git(*arguments, chdir: top) }
+  end
+
+  it 'looks no further at a copy in no git checkout, such as an installed one' do
+    FileUtils.mkdir_p(skill_directory)
+    ENV['GIT_CEILING_DIRECTORIES'] = sandbox.root
+    inspection = examine
+
+    expect([inspection.top_level, inspection.in_work_tree, inspection.changes, inspection.unreviewed?, inspection.ask])
+      .to eq([nil, false, nil, false, nil])
+  end
+
+  it "passes a clean checkout whose HEAD is origin's default branch, not the working directory's" do
+    reviewed_checkout
+    inspection = examine
+
+    expect([inspection.top_level, inspection.in_work_tree, inspection.changes, inspection.unreviewed?,
+            inspection.token])
+      .to eq([top, false, [], false, nil])
+  end
+
+  it "says when it is the working directory's checkout, whose branch the lead must not switch" do
+    reviewed_checkout
+
+    expect(examine(work_tree: top).in_work_tree).to be(true)
+  end
+
+  it 'asks about a change under skills/do or skills/_support, tracked or not, and not about one elsewhere' do
+    reviewed_checkout
+    File.write(File.join(top, 'README.md'), "# Changed\n")
+    expect(examine.unreviewed?).to be(false)
+
+    File.write(check_file, "# changed\n")
+    expect(examine.changes.map(&:to_s)).to eq([' M skills/do/lib/check.rb'])
+
+    git('checkout', '--quiet', '--', 'skills/do', chdir: top)
+    File.write(File.join(top, 'skills', '_support', 'new.rb'), "# new\n")
+    inspection = examine
+    expect([inspection.changes.map(&:to_s), inspection.ask[:reason]])
+      .to eq([['?? skills/_support/new.rb'], :scripts_unreviewed])
+  end
+
+  it "asks when HEAD has commits origin's default branch lacks, and not once they are in it" do
+    reviewed_checkout
+    git('switch', '--quiet', '-c', 'feature', chdir: top)
+    commit('Unreviewed', chdir: top)
+    expect(examine.unreviewed?).to be(true)
+
+    git('update-ref', 'refs/remotes/origin/master', 'HEAD', chdir: top)
+    expect(examine.unreviewed?).to be(false)
+  end
+
+  it 'asks when no origin/HEAD says which branch is the default' do
+    reviewed_checkout
+    git('symbolic-ref', '--delete', 'refs/remotes/origin/HEAD', chdir: top)
+
+    expect(examine.unreviewed?).to be(true)
+  end
+
+  it 'ties a yes to a digest of what is there, which any change replaces' do
+    reviewed_checkout
+    File.write(check_file, "# changed\n")
+    token = examine.token
+    accepted = examine(accepted: token)
+    expect([token, accepted.accepted, accepted.ask]).to match([match(/\A\h{64}\z/), true, nil])
+
+    File.write(check_file, "# changed again\n")
+    moved = examine(accepted: token)
+    expect([moved.token == token, moved.accepted, moved.ask[:accept_with]])
+      .to eq([false, false, ['--accept-scripts', moved.token]])
+  end
+
+  it "reads untracked files' contents into the digest, and HEAD" do
+    reviewed_checkout
+    path = File.join(skill_directory, 'lib', 'new.rb')
+    File.write(path, "one\n")
+    first = examine.token
+    File.write(path, "two\n")
+    second = examine.token
+    commit('Moved on', chdir: top)
+
+    expect([first, second, examine.token].uniq.length).to eq(3)
+  end
+end

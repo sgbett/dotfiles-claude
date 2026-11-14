@@ -4,7 +4,14 @@ module Do
   # Who wrote something on GitHub: the login (nil for a deleted account), the
   # authorAssociation, which is relative to the repository it was written in,
   # and viewerDidAuthor.
-  Author = Struct.new(:login, :association, :viewer_did_author, keyword_init: true)
+  Author = Struct.new(:login, :association, :viewer_did_author, keyword_init: true) do
+    # From a GraphQL node carrying author { login }, authorAssociation and
+    # viewerDidAuthor.
+    def self.from_node(node)
+      new(login: node.dig('author', 'login'), association: node['authorAssociation'],
+          viewer_did_author: node['viewerDidAuthor'])
+    end
+  end
 
   Repository = Struct.new(:name_with_owner, :owner, :visibility, keyword_init: true) do
     # GitHub compares owner and repository names ignoring case.
@@ -29,6 +36,8 @@ module Do
   Comment = Struct.new(:id, :database_id, :author, :body, keyword_init: true)
 
   Label = Struct.new(:id, :name, keyword_init: true)
-  PullRequest = Struct.new(:number, :author, keyword_init: true)
+  # +head_repository+ is the nameWithOwner of the repository its branch
+  # lives in, nil when GitHub gives none (a deleted fork) or wasn't asked.
+  PullRequest = Struct.new(:number, :author, :head_repository, keyword_init: true)
   Branch = Struct.new(:name, :pull_requests, keyword_init: true)
 end

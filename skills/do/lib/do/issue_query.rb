@@ -32,6 +32,14 @@ module Do
       variables(repository, number).except('number')
     end
 
+    # :missing_repository or :missing_issue when +errors+ are GitHub's
+    # NOT_FOUND for the repository, or for the number within it, and nothing
+    # else; nil for any other errors.
+    def self.missing_kind(errors)
+      kinds = Array(errors).map { |error| error.is_a?(Hash) && error['type'] == NOT_FOUND && MISSING[error['path']] }
+      kinds.first if kinds.uniq.length == 1
+    end
+
     # +github+ is the SkillSupport::Gh for the issue's host.
     def initialize(github)
       @github = github
@@ -44,7 +52,7 @@ module Do
       data = @github.graphql(QUERY, self.class.variables(repository, number))
       ResultMapping.new(data).result
     rescue SkillSupport::GraphqlError => e
-      kind = missing(e.errors)
+      kind = self.class.missing_kind(e.errors)
       raise unless kind
 
       Result.new(kind: kind)
@@ -55,13 +63,6 @@ module Do
       data = @github.graphql(BRANCHES_QUERY, self.class.branches_variables(repository, number))
       refs = SkillSupport::Pagination.ensure_complete!(data, 'repository', 'refs')
       refs['nodes'].map { |ref| ref['name'] }.select { |name| name.start_with?(Slug.branch_prefix(number)) }
-    end
-
-    private
-
-    def missing(errors)
-      kinds = Array(errors).map { |error| error['type'] == NOT_FOUND && MISSING[error['path']] }
-      kinds.first if kinds.uniq.length == 1
     end
   end
 end

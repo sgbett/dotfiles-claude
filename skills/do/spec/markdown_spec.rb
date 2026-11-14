@@ -35,4 +35,9 @@ RSpec.describe Do::Markdown do
   it 'lets a fence left open run to the end' do
     expect(unfenced("text\n```\n- [ ] never closed\n")).to eq(['text'])
   end
+
+  it 'pairs every line with whether a fenced code block holds it, its fences included' do
+    expect(described_class.lines_with_fences("a\n```\nb\n```\nc\n~~~\nd"))
+      .to eq([['a', false], ['```', true], ['b', true], ['```', true], ['c', false], ['~~~', true], ['d', true]])
+  end
 end

@@ -15,12 +15,15 @@ module SkillSupport
 
     # GH_REPO and GH_HOST would retarget a call silently; the others page,
     # colour or fake a terminal. gh lets CLICOLOR_FORCE override NO_COLOR, which
-    # would put escape codes into JSON.
+    # would put escape codes into JSON. git asks for credentials on the
+    # terminal itself, not on stdin, so a fetch from a private remote would
+    # otherwise wait there.
     REMOVED_VARIABLES = %w[GH_REPO GH_HOST GH_FORCE_TTY GH_PAGER PAGER CLICOLOR_FORCE].freeze
     PINNED_VARIABLES = {
       'GH_PROMPT_DISABLED' => '1',
       'GH_NO_UPDATE_NOTIFIER' => '1',
-      'NO_COLOR' => '1'
+      'NO_COLOR' => '1',
+      'GIT_TERMINAL_PROMPT' => '0'
     }.freeze
     CHILD_ENVIRONMENT = REMOVED_VARIABLES.to_h { |name| [name, nil] }.merge(PINNED_VARIABLES).freeze
     SIGNAL_EXIT_BASE = 128
