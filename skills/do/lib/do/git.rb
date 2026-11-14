@@ -1,16 +1,25 @@
 # frozen_string_literal: true
 
 module Do
-  # git answered in a way its caller doesn't handle.
+  # git answered in a way its caller doesn't handle. The message names the
+  # arguments with any URL's credentials masked, as a push URL can carry a
+  # token and a tool failure prints the message.
   class GitError < SkillSupport::Error
     def initialize(arguments, result)
-      super("git #{arguments.join(' ')} exited #{result.exit_status}: #{result.stderr.strip}")
+      printed = arguments.map { |argument| SkillSupport::RemoteUrl.redacted(argument) }.join(' ')
+      super("git #{printed} exited #{result.exit_status}: #{result.stderr.strip}")
     end
   end
 
   # Runs git through a CommandRunner, in the working directory unless the
   # arguments start with -C.
   class Git
+    # A checkout's configuration can name a command for git to run: an
+    # fsmonitor, which reading the working tree starts, or hooks. Pre-flight
+    # only reads, so the calls that could start one put these first.
+    NO_FSMONITOR = %w[-c core.fsmonitor=false].freeze
+    NO_HOOKS_OR_FSMONITOR = ['-c', 'core.hooksPath=/dev/null', *NO_FSMONITOR].freeze
+
     def initialize(runner)
       @runner = runner
     end

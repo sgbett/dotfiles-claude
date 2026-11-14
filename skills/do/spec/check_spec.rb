@@ -15,7 +15,7 @@ RSpec.describe Do::Check do
   # Calls that read a branch of the checkout or the push remote.
   def branch_lookups
     git_calls.select do |argv|
-      %w[ls-remote fetch config log].include?(argv[1]) || argv.any? { |argument| argument.include?('refs/heads/') }
+      argv.intersect?(%w[ls-remote fetch config log]) || argv.any? { |argument| argument.include?('refs/heads/') }
     end
   end
 
@@ -35,7 +35,7 @@ RSpec.describe Do::Check do
                                       'base' => 'master', 'branch' => branch,
                                       'resume_point' => 'none: the branch is new', 'security_focus' => 'none')
       expect(output['branch']).to eq('name' => branch, 'state' => 'new', 'accepted' => false,
-                                     'resume_from_push_remote' => false, 'pull_requests' => [])
+                                     'fresh_worktree' => false, 'pull_requests' => [])
       expect(output.values_at('repository', 'push_remote_is_fork', 'scripts_in_work_tree', 'working_tree_clean',
                               'read'))
         .to eq([{ 'name_with_owner' => here, 'host' => 'github.com' }, false, false, true, []])
@@ -52,12 +52,22 @@ RSpec.describe Do::Check do
       expect(output['session_only']['local_branch_commits']).to eq([])
     end
 
-    it "resumes from the push remote's copy when there is no local branch" do
+    it "resumes from the push remote's copy when there is no local branch, at the tip it read" do
       expect_check(branch: { remote_tip: remote_tip })
       exit_code, output = run_check
 
       expect([exit_code, output['branch']['state'], output['branch']['remote_tip'], output['summary']['resume_point']])
         .to eq([0, 'resume_push_remote', remote_tip, "the push remote's copy"])
+    end
+
+    it 'reads the branch through the push URLs the remote passed with, never through the remote by name' do
+      mirror = 'git@github.com:sgbett/dotfiles-claude.git'
+      expect_check(remote: { urls: [origin_url, mirror] }, branch: { remote_tip: remote_tip })
+      exit_code, output = run_check
+
+      expect([exit_code, output['branch']['remote_tip']]).to eq([0, remote_tip])
+      expect(git_calls.select { |argv| argv.include?('ls-remote') }.map { |argv| argv.last(2) })
+        .to eq([[origin_url, "refs/heads/#{branch}"], [mirror, "refs/heads/#{branch}"]])
     end
 
     it 'lists a trusted pull request open on the branch, for the lead to update' do
@@ -139,6 +149,21 @@ RSpec.describe Do::Check do
       expect(branch_lookups).to be_empty
     end
 
+    it "stops on a fork the user can't write to, naming it only in session_only, before any branch is looked up" do
+      fork = 'example-fork-owner/dotfiles-claude'
+      fork_url = "https://github.com/#{fork}.git"
+      view = { 'nameWithOwner' => fork, 'parent' => { 'name' => 'dotfiles-claude', 'owner' => { 'login' => 'sgbett' } },
+               'viewerPermission' => 'READ' }
+      expect_check(through: :remote, remote: { urls: [fork_url], views: { fork_url => JSON.generate(view) } })
+      exit_code, output = run_check
+
+      expect([exit_code, output['reason'], output['message']])
+        .to eq([2, 'fork_not_writable', message(:fork_not_writable)])
+      expect(output['session_only']['push_remote_forks']).to eq([fork])
+      expect(JSON.generate(output.except('session_only'))).not_to include('example-fork-owner')
+      expect(branch_lookups).to be_empty
+    end
+
     it 'masks credentials in the push URLs it reports' do
       url = 'https://x-access-token:example-secret@github.com/sgbett/dotfiles-claude.git'
       expect_check(through: :base, remote: { urls: [url] }, base: { response: fixture('graphql/base-missing.json') })
@@ -151,7 +176,7 @@ RSpec.describe Do::Check do
 
   describe 'the base branch' do
     it "stops when the base doesn't exist on this repository, before any branch is looked up" do
-      base = 'feat/#24+no-such-branch'
+      base = 'feat/24+no-such-branch'
       expect_check(through: :base, arguments: { base: base },
                    base: { base: base, response: fixture('graphql/base-missing.json') })
       exit_code, output = run_check(check_arguments(base: base))
@@ -163,25 +188,53 @@ RSpec.describe Do::Check do
   end
 
   describe 'the branch' do
-    it 'stops on a checked-out pull request, whatever the user accepted, and looks no further' do
+    it 'stops when it is the base or the default branch, in any case, before the remotes are listed' do
+      [{ base: 'release', branch: 'release' }, { base: 'release', branch: 'Master' }].each do |names|
+        expect_check(through: :issue, arguments: names)
+        exit_code, output = run_check(check_arguments(**names))
+
+        expect([exit_code, output['reason'], output['message']])
+          .to eq([2, 'branch_is_base_or_default', message(:branch_is_base_or_default)]), names.inspect
+      end
+      expect(git_calls.map { |argv| argv[1] }.uniq).to eq(['check-ref-format'])
+    end
+
+    it 'stops on a checked-out pull request the push remote has no copy of, whatever the user accepted' do
       [{ remote: 'https://github.com/example-owner/dotfiles-claude.git', merge: "refs/heads/#{branch}" },
        { remote: 'upstream', merge: "refs/heads/#{branch}" }, { remote: 'origin', pushRemote: 'upstream' },
        { remote: 'origin', merge: 'refs/pull/31/head' }].each do |config|
         expect_check(through: :branch, branch: { local_tip: local_tip, config: config })
         exit_code, output = run_check(check_arguments(extra: ['--accept-local-branch', local_tip]))
 
-        expect([exit_code, output['reason'], output['branch']['resume_from_push_remote']])
-          .to eq([2, 'checked_out_pr', false]), config.inspect
+        expect([exit_code, output['reason'], output['message'], output['branch']['fresh_worktree']])
+          .to eq([2, 'checked_out_pr', message(:checked_out_pr), false]), config.inspect
         expect(output['branch']).not_to include('pull_requests')
       end
     end
 
-    it "points to the push remote's copy of a checked-out pull request's branch" do
-      expect_check(through: :branch,
-                   branch: { remote_tip: remote_tip, local_tip: local_tip, config: { merge: 'refs/pull/31/head' } })
-      output = run_check.last
+    it "resumes beside a checked-out pull request from the push remote's copy, in a fresh worktree" do
+      expect_check(branch: { remote_tip: remote_tip, local_tip: local_tip, config: { merge: 'refs/pull/31/head' },
+                             lacking: ['1234567 Example Author Theirs'] })
+      exit_code, output = run_check(check_arguments(extra: ['--accept-local-branch', local_tip]))
 
-      expect([output['reason'], output['branch']['resume_from_push_remote']]).to eq(['checked_out_pr', true])
+      expect([exit_code, output['branch'].values_at('state', 'remote_tip', 'fresh_worktree', 'accepted')])
+        .to eq([0, ['resume_push_remote', remote_tip, true, false]])
+      expect([output['summary']['resume_point'], output['read']])
+        .to eq([Do::CheckReport::FRESH_WORKTREE, ['references/resume.md']])
+    end
+
+    it 'stops when the push URLs hold the branch at different commits, or only some of them hold it' do
+      mirror = 'git@github.com:sgbett/dotfiles-claude.git'
+      [[remote_tip, local_tip], [nil, remote_tip]].each do |tips|
+        expect_check(through: :branch, remote: { urls: [origin_url, mirror] }, branch: { remote_tips: tips })
+        exit_code, output = run_check
+
+        expect([exit_code, output['reason'], output['message']])
+          .to eq([2, 'remote_tips_differ', message(:remote_tips_differ)]), tips.inspect
+        expect([output['branch']['remote_tips'], output['session_only']['push_urls']])
+          .to eq([tips, [origin_url, mirror]])
+      end
+      expect(git_calls.select { |argv| argv.intersect?(%w[fetch config log]) }).to be_empty
     end
 
     it 'asks before resuming on a local branch never pushed, its commits only in session_only' do
@@ -297,6 +350,17 @@ RSpec.describe Do::Check do
       expect_check(branch: { local_tip: local_tip }, scripts: { top: scripts_top, ancestor: false })
 
       expect(run_check.last['asks'].map { |ask| ask['reason'] }).to eq(%w[local_branch_unpushed scripts_unreviewed])
+    end
+  end
+
+  describe 'the host' do
+    it 'stops when gh has no account logged in to the issue host, sending it nothing' do
+      expect_check(through: :login, login: { host: 'ghe.example.com', logged_in: false })
+      exit_code, output = run_check(check_arguments('https://ghe.example.com/example-owner/example-repo/issues/7'))
+
+      expect([exit_code, output]).to eq([2, { 'status' => 'stop', 'reason' => 'host_not_logged_in',
+                                              'message' => message(:host_not_logged_in),
+                                              'host' => 'ghe.example.com' }])
     end
   end
 

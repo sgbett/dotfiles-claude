@@ -6,17 +6,19 @@ require_relative 'records'
 module Do
   # The GraphQL behind `preflight check`, one query to a step so that each
   # runs only once the steps before it have passed: the issue's repository
-  # as GitHub names it now, whether the base branch exists, and the pull
-  # requests open on the branch. Values travel as variables.
+  # as GitHub names it now, with its default branch, whether the base branch
+  # exists, and the pull requests open on the branch. Values travel as
+  # variables.
   class CheckQuery
     ISSUE_QUERY = File.read(File.join(__dir__, 'issue_repository.graphql'))
     BASE_QUERY = File.read(File.join(__dir__, 'base_branch.graphql'))
     PULL_REQUESTS_QUERY = File.read(File.join(__dir__, 'pull_requests.graphql'))
 
     # +kind+ is :issue, :pull_request, :missing_issue, :missing_repository or
-    # :moved; only an :issue carries the viewer's login and +repository+, the
-    # repository's nameWithOwner as GitHub gives it, after any rename.
-    Issue = Struct.new(:kind, :viewer, :repository, keyword_init: true)
+    # :moved; only an :issue carries the viewer's login, +repository+, the
+    # repository's nameWithOwner as GitHub gives it, after any rename, and
+    # +default_branch+, nil for a repository with no commits.
+    Issue = Struct.new(:kind, :viewer, :repository, :default_branch, keyword_init: true)
 
     def self.issue_variables(repository, number)
       repository_variables(repository).merge('number' => number)
@@ -45,7 +47,7 @@ module Do
       data = @github.graphql(ISSUE_QUERY, self.class.issue_variables(repository, number))
       home = canonical_name(data['repository'])
       Issue.new(kind: kind(data.dig('repository', 'issueOrPullRequest'), home), viewer: data.dig('viewer', 'login'),
-                repository: home)
+                repository: home, default_branch: data.dig('repository', 'defaultBranchRef', 'name'))
     rescue SkillSupport::GraphqlError => e
       kind = IssueQuery.missing_kind(e.errors)
       raise unless kind

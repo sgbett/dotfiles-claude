@@ -1,20 +1,26 @@
 # frozen_string_literal: true
 
-require_relative 'remote_url'
-
 module Do
   # `preflight check` on the push remote: every URL it pushes to must be on
   # the issue's host and resolve, through GitHub, to this repository or a
-  # fork of it. The hosts are all checked before gh is asked about any URL.
+  # fork of it the user can write to. The hosts are all checked before gh is
+  # asked about any URL.
   class PushRemote
-    VIEW_FIELDS = %w[nameWithOwner parent].freeze
+    VIEW_FIELDS = %w[nameWithOwner parent viewerPermission].freeze
+    # A fork /do resumes from and pushes to is one the user controls, not
+    # merely one they can read.
+    WRITE_PERMISSIONS = %w[WRITE MAINTAIN ADMIN].freeze
     NOT_A_GH_URL = 'gh reads this URL as a local path, not a repository URL'
 
-    # +stop_reason+ is nil when every URL passed. +urls+ are redacted;
-    # +repositories+ are the nameWithOwner each URL resolved to, and +forks+
-    # those that are forks of this repository; +stderr+ is gh's answer for a
-    # URL that didn't resolve.
-    Verdict = Struct.new(:remote, :stop_reason, :urls, :repositories, :forks, :stderr, keyword_init: true) do
+    # +stop_reason+ is nil when every URL passed. +urls+ are redacted, for
+    # reporting; +checked_urls+ are the same URLs as git gave them, for git
+    # to reach exactly what passed, and never reported, as a URL can carry a
+    # token. +repositories+ are the nameWithOwner each URL resolved to, and
+    # +forks+ those that are forks of this repository (on fork_not_writable,
+    # the forks the user can't write to); +stderr+ is gh's answer for a URL
+    # that didn't resolve.
+    Verdict = Struct.new(:remote, :stop_reason, :urls, :checked_urls, :repositories, :forks, :stderr,
+                         keyword_init: true) do
       def fork?
         !forks.to_a.empty?
       end
@@ -47,7 +53,7 @@ module Do
 
       urls = @checkout.push_urls(remote)
       return verdict(remote, :remote_missing) if urls.empty?
-      return verdict(remote, :host_mismatch, urls) unless urls.all? { |url| RemoteUrl.host(url) == @host }
+      return verdict(remote, :host_mismatch, urls) unless urls.all? { |url| SkillSupport::RemoteUrl.host(url) == @host }
 
       resolve(remote, urls)
     end
@@ -68,9 +74,16 @@ module Do
       kinds = views.map { |view| self.class.classify(view, @repository) }
       return verdict(remote, :push_remote_not_this_repository, urls) if kinds.include?(:other)
 
-      names = views.map { |view| view['nameWithOwner'] }
-      forks = names.zip(kinds).filter_map { |name, kind| name if kind == :fork }
-      Verdict.new(remote: remote, urls: redacted(urls), repositories: names.uniq, forks: forks.uniq)
+      writable(remote, urls, views, views.zip(kinds).filter_map { |view, kind| view if kind == :fork })
+    end
+
+    # Passes once the user can write to each of +forks+, the views of forks.
+    def writable(remote, urls, views, forks)
+      unwritable = forks.reject { |view| WRITE_PERMISSIONS.include?(view['viewerPermission']) }
+      return verdict(remote, :fork_not_writable, urls, forks: names(unwritable)) unless unwritable.empty?
+
+      Verdict.new(remote: remote, urls: redacted(urls), checked_urls: urls, repositories: names(views),
+                  forks: names(forks))
     end
 
     # gh's view of +url+, or nil and why it didn't resolve.
@@ -84,13 +97,17 @@ module Do
       [nil, NOT_A_GH_URL]
     end
 
-    def verdict(remote, stop_reason, urls = [], stderr: nil)
-      Verdict.new(remote: remote, stop_reason: stop_reason, urls: redacted(urls), repositories: [], forks: [],
-                  stderr: stderr)
+    def verdict(remote, stop_reason, urls = [], stderr: nil, forks: [])
+      Verdict.new(remote: remote, stop_reason: stop_reason, urls: redacted(urls), checked_urls: [], repositories: [],
+                  forks: forks, stderr: stderr)
+    end
+
+    def names(views)
+      views.map { |view| view['nameWithOwner'] }.uniq
     end
 
     def redacted(urls)
-      urls.map { |url| RemoteUrl.redacted(url) }
+      urls.map { |url| SkillSupport::RemoteUrl.redacted(url) }
     end
   end
 end

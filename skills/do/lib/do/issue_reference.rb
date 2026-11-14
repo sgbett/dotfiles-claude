@@ -3,7 +3,8 @@
 module Do
   # Parses the issue /do was given: a number, which names an issue in the
   # repository origin resolves to; owner/repo#N, on github.com; or an issue
-  # URL, https://<host>/<owner>/<repo>/issues/<N>.
+  # URL, https://<host>/<owner>/<repo>/issues/<N>. Writes the canonical form
+  # every call after `preflight facts` takes.
   module IssueReference
     DEFAULT_HOST = 'github.com'
     # A bare number may come with its "#", as in /do #42.
@@ -27,6 +28,16 @@ module Do
       bare(text) || short(text) || url(text)
     rescue SkillSupport::InvalidIdentifier
       nil
+    end
+
+    # owner/repo#N on github.com, the issue's URL on any other host: never a
+    # bare number, which origin could later resolve elsewhere. Each part is
+    # validated, as the lead puts the result on its command lines.
+    def canonical(host, repository, number)
+      host = SkillSupport::Identifiers.host!(host)
+      repository = SkillSupport::Identifiers.repository!(repository)
+      number = SkillSupport::Identifiers.issue_number!(number)
+      host == DEFAULT_HOST ? "#{repository}##{number}" : "https://#{host}/#{repository}/issues/#{number}"
     end
 
     def bare(text)

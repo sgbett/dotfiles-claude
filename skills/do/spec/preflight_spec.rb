@@ -8,7 +8,9 @@ RSpec.describe 'skills/do/bin/preflight' do
 
   let(:preflight) { File.join(repository_root, 'skills', 'do', 'bin', 'preflight') }
   let(:graphql) { %w[api graphql --hostname github.com --input -] }
+  let(:login) { { args: %w[auth status --active --hostname github.com] } }
   let(:origin) { 'https://github.com/sgbett/dotfiles-claude.git' }
+  let(:ssh_push_url) { 'git@github.com:sgbett/dotfiles-claude.git' }
   let(:branch) { 'feat/24-hlr-do-and-copilot-check-move' }
   let(:base_sha) { '6b9895d961416bbb7561778aff4e651822796e9e' }
 
@@ -29,17 +31,63 @@ RSpec.describe 'skills/do/bin/preflight' do
     { 'RUBYOPT' => '-rbundler/setup', 'BUNDLE_GEMFILE' => File.expand_path('Gemfile') }
   end
 
-  # origin fetches from a bare repository in the sandbox and pushes to
-  # GitHub, so git reads branches locally while gh is asked about the push
-  # URL. Nothing here pushes through origin.
-  def checkout_with_origin(push_url)
-    remote = sandbox.path('remote.git')
+  # origin fetches from +fetch_from+, a bare repository in the sandbox, and
+  # pushes to +push_url+, about which gh alone is asked. Nothing here pushes
+  # through origin.
+  def checkout_with_origin(push_url, fetch_from: bare_repository('remote.git'))
     system('git', 'commit', '--quiet', '--allow-empty', '-m', 'First', exception: true)
-    system('git', 'init', '--quiet', '--bare', '--initial-branch=master', remote, exception: true)
-    system('git', 'push', '--quiet', remote, 'master', exception: true)
-    system('git', 'remote', 'add', 'origin', remote, exception: true)
+    system('git', 'push', '--quiet', fetch_from, 'master', exception: true)
+    system('git', 'remote', 'add', 'origin', fetch_from, exception: true)
     system('git', 'config', 'remote.origin.pushurl', push_url, exception: true)
     system('git', 'fetch', '--quiet', 'origin', exception: true)
+  end
+
+  def bare_repository(name)
+    sandbox.path(name).tap do |path|
+      system('git', 'init', '--quiet', '--bare', '--initial-branch=master', path, exception: true)
+    end
+  end
+
+  # What git needs to reach ssh_push_url without a network: an ssh that
+  # serves +github+, a bare repository standing for GitHub's copy, whatever
+  # host and path git asks for.
+  def ssh_environment(github)
+    ssh = sandbox.path('ssh')
+    File.write(ssh, "#!/bin/sh\nexec git upload-pack '#{github}'\n")
+    File.chmod(0o755, ssh)
+    { 'GIT_SSH_COMMAND' => "'#{ssh}'", 'GIT_SSH_VARIANT' => 'simple' }
+  end
+
+  # A commit of its own on +branch+ in the bare repository +bare+, which this
+  # checkout doesn't have.
+  def branch_in(bare)
+    clone = "#{bare}-clone"
+    system('git', 'clone', '--quiet', bare, clone, exception: true)
+    system('git', '-C', clone, 'commit', '--quiet', '--allow-empty', '-m', "On #{File.basename(bare)}",
+           exception: true)
+    system('git', '-C', clone, 'push', '--quiet', 'origin', "HEAD:refs/heads/#{branch}", exception: true)
+    Open3.capture2('git', '-C', clone, 'rev-parse', 'HEAD').first.chomp
+  end
+
+  # check's calls to gh up to its proceeding on the recorded issue, the push
+  # remote pushing to +push_url+.
+  def check_shim(push_url)
+    install_gh_shim([login, recorded_graphql('check-issue-24'),
+                     { args: ['repo', 'view', push_url, '--json', 'nameWithOwner,parent,viewerPermission'],
+                       stdout_file: fixture_path('repo-view/push-origin.json') },
+                     recorded_graphql('base-master'), recorded_graphql('pull-requests-24'), *no_security_focus])
+  end
+
+  def recorded_graphql(name)
+    { args: graphql, stdin: recorded_request(name), stdout_file: fixture_path("graphql/#{name}.json") }
+  end
+
+  # A CLAUDE.md with no security focus, and no .claude/rules/.
+  def no_security_focus
+    claude_md = { 'type' => 'file', 'encoding' => 'base64', 'content' => Base64.encode64("# Example\n") }
+    [{ args: contents_call('CLAUDE.md'), stdout: JSON.generate(claude_md) },
+     { args: contents_call('.claude/rules'), exit: 1, stdout_file: fixture_path('contents/rules-not-found.json'),
+       stderr: fixture('contents/rules-not-found.stderr') }]
   end
 
   def contents_call(path)
@@ -55,8 +103,8 @@ RSpec.describe 'skills/do/bin/preflight' do
   it 'proceeds on the recorded issue, a bare number resolved through origin, whatever RUBYOPT says' do
     system('git', 'remote', 'add', 'origin', origin, exception: true)
     shim = install_gh_shim(
-      [{ args: ['repo', 'view', origin, '--json', 'nameWithOwner,url'],
-         stdout_file: fixture_path('repo-view/origin.json') },
+      [login, { args: ['repo', 'view', origin, '--json', 'nameWithOwner,url'],
+                stdout_file: fixture_path('repo-view/origin.json') },
        { args: graphql, stdin: recorded_request('issue-24'), stdout_file: fixture_path('graphql/issue-24.json') }]
     )
 
@@ -65,16 +113,16 @@ RSpec.describe 'skills/do/bin/preflight' do
 
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
     expect(output.keys.first).to eq('status')
-    expect(output.values_at('status', 'default_branch', 'read'))
-      .to eq(['proceed', branch, ['references/resume.md']])
+    expect(output.values_at('status', 'reference', 'default_branch', 'read'))
+      .to eq(['proceed', 'sgbett/dotfiles-claude#24', branch, ['references/resume.md']])
     expect(output['ledger']['items'].map { |item| item['id'] }).to eq((1..11).map { |n| "L#{n}" })
     expect(output['session_only']['gate_file'])
       .to eq(File.join(sandbox.work_directory, '.git', 'do', 'I_kwDOQzoXSs8AAAABfBUanQ-gate.md'))
   end
 
   it 'stops on a pull request number' do
-    shim = install_gh_shim([{ args: graphql, stdin: recorded_request('pull-request-25'),
-                              stdout_file: fixture_path('graphql/pull-request-25.json') }])
+    shim = install_gh_shim([login, { args: graphql, stdin: recorded_request('pull-request-25'),
+                                     stdout_file: fixture_path('graphql/pull-request-25.json') }])
 
     exit_code, stdout, _stderr = preflight_run('facts', 'sgbett/dotfiles-claude#25')
 
@@ -92,47 +140,70 @@ RSpec.describe 'skills/do/bin/preflight' do
   end
 
   it 'checks the conventions for the recorded issue and proceeds on a new branch, whatever RUBYOPT says' do
-    checkout_with_origin(origin)
-    claude_md = { 'type' => 'file', 'encoding' => 'base64', 'content' => Base64.encode64("# Example\n") }
-    shim = install_gh_shim(
-      [{ args: graphql, stdin: recorded_request('check-issue-24'),
-         stdout_file: fixture_path('graphql/check-issue-24.json') },
-       { args: ['repo', 'view', origin, '--json', 'nameWithOwner,parent'],
-         stdout_file: fixture_path('repo-view/push-origin.json') },
-       { args: graphql, stdin: recorded_request('base-master'), stdout_file: fixture_path('graphql/base-master.json') },
-       { args: graphql, stdin: recorded_request('pull-requests-24'),
-         stdout_file: fixture_path('graphql/pull-requests-24.json') },
-       { args: contents_call('CLAUDE.md'), stdout: JSON.generate(claude_md) },
-       { args: contents_call('.claude/rules'), exit: 1, stdout_file: fixture_path('contents/rules-not-found.json'),
-         stderr: fixture('contents/rules-not-found.stderr') }]
-    )
+    github = bare_repository('github.git')
+    checkout_with_origin(ssh_push_url, fetch_from: github)
+    shim = check_shim(ssh_push_url)
 
-    exit_code, stdout, stderr = preflight_run(*check_arguments, environment: hostile_environment,
-                                                                command: scripts_clone)
+    environment = hostile_environment.merge(ssh_environment(github))
+    exit_code, stdout, stderr = preflight_run(*check_arguments, command: scripts_clone, environment: environment)
     output = JSON.parse(stdout)
 
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
     expect(output.values_at('status', 'push_remote_is_fork', 'scripts_in_work_tree', 'working_tree_clean'))
       .to eq(['proceed', false, false, false])
     expect([output['branch']['state'], output['security_focus']['found']]).to eq(['new', false])
-    expect(output['session_only']).to include('push_urls' => [origin], 'changed_paths' => ['?? Gemfile'])
+    expect(output['session_only']).to include('push_urls' => [ssh_push_url], 'changed_paths' => ['?? Gemfile'])
+  end
+
+  it "never resumes from another repository that the push remote's fetch URL names, which holds the branch" do
+    github = bare_repository('github.git')
+    elsewhere = bare_repository('elsewhere.git')
+    checkout_with_origin(ssh_push_url, fetch_from: elsewhere)
+    elsewhere_tip = branch_in(elsewhere)
+    shim = check_shim(ssh_push_url)
+
+    exit_code, stdout, stderr = preflight_run(*check_arguments, command: scripts_clone,
+                                                                environment: ssh_environment(github))
+    output = JSON.parse(stdout)
+
+    expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
+    expect(output['branch']).to include('state' => 'new')
+    expect(stdout).not_to include(elsewhere_tip)
+  end
+
+  it "resumes from the push URL's copy of the branch, fetched for the lead to check out" do
+    github = bare_repository('github.git')
+    elsewhere = bare_repository('elsewhere.git')
+    checkout_with_origin(ssh_push_url, fetch_from: elsewhere)
+    system('git', 'push', '--quiet', github, 'master', exception: true)
+    github_tip = branch_in(github)
+    elsewhere_tip = branch_in(elsewhere)
+    check_shim(ssh_push_url)
+
+    exit_code, stdout, _stderr = preflight_run(*check_arguments, command: scripts_clone,
+                                                                 environment: ssh_environment(github))
+
+    expect([exit_code, JSON.parse(stdout)['branch'].values_at('state', 'remote_tip')])
+      .to eq([0, ['resume_push_remote', github_tip]])
+    expect(stdout).not_to include(elsewhere_tip)
+    expect(system('git', 'cat-file', '-e', "#{github_tip}^{commit}")).to be(true)
   end
 
   it 'stops a checkout of another repository at its push remote, asking gh nothing more' do
     unrelated = 'https://github.com/example-owner/unrelated.git'
     checkout_with_origin(unrelated)
     shim = install_gh_shim(
-      [{ args: graphql, stdin: recorded_request('check-issue-24'),
-         stdout_file: fixture_path('graphql/check-issue-24.json') },
-       { args: ['repo', 'view', unrelated, '--json', 'nameWithOwner,parent'],
-         stdout: '{"nameWithOwner":"example-owner/unrelated","parent":null}' }]
+      [login, { args: graphql, stdin: recorded_request('check-issue-24'),
+                stdout_file: fixture_path('graphql/check-issue-24.json') },
+       { args: ['repo', 'view', unrelated, '--json', 'nameWithOwner,parent,viewerPermission'],
+         stdout: '{"nameWithOwner":"example-owner/unrelated","parent":null,"viewerPermission":"READ"}' }]
     )
 
     exit_code, stdout, _stderr = preflight_run(*check_arguments, command: scripts_clone)
 
     expect([exit_code, JSON.parse(stdout)['reason'], shim.unmatched_calls])
       .to eq([2, 'push_remote_not_this_repository', []])
-    expect(shim.calls.length).to eq(2)
+    expect(shim.calls.length).to eq(3)
   end
 
   it 'fails as a tool on any arguments it does not take, printing its usage' do

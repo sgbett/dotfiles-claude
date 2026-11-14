@@ -20,7 +20,7 @@ RSpec.describe "/do pre-flight, #21's walk-throughs" do
   # Calls that read a branch of the checkout or the push remote.
   def branch_lookups
     git_calls.select do |argv|
-      %w[ls-remote fetch config log].include?(argv[1]) || argv.any? { |argument| argument.include?('refs/heads/') }
+      argv.intersect?(%w[ls-remote fetch config log]) || argv.any? { |argument| argument.include?('refs/heads/') }
     end
   end
 
@@ -30,6 +30,7 @@ RSpec.describe "/do pre-flight, #21's walk-throughs" do
 
   def expect_fork_origin
     fake_runner.expect_call(%w[git remote get-url origin], stdout: "#{fork_url}\n")
+    expect_gh_login
     fake_runner.expect_call(['gh', 'repo', 'view', fork_url, '--json', 'nameWithOwner,url'],
                             stdout: JSON.generate('nameWithOwner' => fork, 'url' => "https://github.com/#{fork}"))
   end

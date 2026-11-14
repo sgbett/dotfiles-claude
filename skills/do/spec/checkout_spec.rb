@@ -69,4 +69,17 @@ RSpec.describe Do::Checkout do
 
     expect(checkout.changes.map(&:to_s)).to eq(['?? README.md', '?? notes/plan.md'])
   end
+
+  it 'runs no fsmonitor the checkout configures when it lists the changes' do
+    marker = sandbox.path('ran')
+    fsmonitor = sandbox.path('fsmonitor')
+    File.write(fsmonitor, "#!/bin/sh\ntouch '#{marker}'\n")
+    File.chmod(0o755, fsmonitor)
+    system('git', 'commit', '--quiet', '--allow-empty', '-m', 'first', exception: true)
+    system('git', 'config', 'core.fsmonitor', fsmonitor, exception: true)
+    File.write('README.md', "readme\n")
+
+    expect(checkout.changes.map(&:to_s)).to eq(['?? README.md'])
+    expect(File).not_to exist(marker)
+  end
 end

@@ -22,6 +22,9 @@ module SkillSupport
     HOST_LABEL = /[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?/
     HOST = /\A#{HOST_LABEL}(?:\.#{HOST_LABEL})+\z/
     HOST_MAX_LENGTH = 253
+    # A branch name reaches the lead's command lines, where quoting alone
+    # can't make every character git allows safe, so it takes only these.
+    BRANCH_CHARACTERS = %r{\A[A-Za-z0-9._/+-]+\z}
     DOT_SEGMENTS = %w[. ..].freeze
     CONTROL_CHARACTER = /[[:cntrl:]]/
 
@@ -63,14 +66,16 @@ module SkillSupport
       host.downcase
     end
 
-    # A branch name git accepts, unchanged. git check-ref-format --branch also
-    # expands "@{-1}" to the previous branch, so anything it rewrites is refused.
+    # A branch name git accepts, of BRANCH_CHARACTERS alone, unchanged. git
+    # check-ref-format --branch also expands "@{-1}" to the previous branch,
+    # so anything it rewrites is refused.
     def branch!(value, runner: CommandRunner.new)
       name = string!(:branch, value)
       raise InvalidIdentifier.new(:branch, value) if CONTROL_CHARACTER.match?(name)
 
       result = runner.run(['git', 'check-ref-format', '--branch', name])
-      raise InvalidIdentifier.new(:branch, value) unless result.success? && result.stdout.chomp == name
+      accepted = result.success? && result.stdout.chomp == name && BRANCH_CHARACTERS.match?(name)
+      raise InvalidIdentifier.new(:branch, value) unless accepted
 
       name
     end

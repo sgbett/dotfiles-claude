@@ -19,6 +19,14 @@ module SkillSupport
         @fake_runner ||= FakeRunner.new
       end
 
+      # Expects Gh#logged_in?'s call for +host+ on the fake runner, answered
+      # as gh answers with an account there or, unless +logged_in+, without.
+      def expect_gh_login(host = 'github.com', logged_in: true)
+        fake_runner.expect_call(['gh', 'auth', 'status', '--active', '--hostname', host],
+                                exit_status: logged_in ? 0 : 1,
+                                stderr: logged_in ? '' : "You are not logged into any accounts on #{host}\n")
+      end
+
       # The path of +name+ under spec/fixtures/ of the skill whose spec is
       # running.
       def fixture_path(name)

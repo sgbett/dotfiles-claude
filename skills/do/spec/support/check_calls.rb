@@ -17,10 +17,11 @@ module Do
       include CheckResponses
       include CheckFinishCalls
 
-      STEPS = %i[arguments issue remote base branch pull_requests scripts focus changes].freeze
+      STEPS = %i[arguments login issue remote base branch pull_requests scripts focus changes].freeze
       CONVENTIONS = { push_remote: 'origin', pr_target: HERE, base: 'master', branch: BRANCH }.freeze
-      BRANCH_DEFAULTS = { branch: BRANCH, remote: 'origin', remote_tip: nil, local_tip: nil, config: {},
-                          lacking: [] }.freeze
+      BRANCH_DEFAULTS = { branch: BRANCH, remote: 'origin', urls: [ORIGIN_URL], remote_tip: nil, remote_tips: nil,
+                          local_tip: nil, config: {}, lacking: [] }.freeze
+      REMOTE_READ = ['git', *Do::Git::NO_HOOKS_OR_FSMONITOR].freeze
 
       # check's arguments for the issue +reference+, with the CONVENTIONS
       # given or their defaults, then +extra+.
@@ -37,8 +38,11 @@ module Do
       end
 
       # Expects every step's calls up to and including +through+; +steps+
-      # holds each step's overrides by name.
+      # holds each step's overrides by name. The branch is read through the
+      # push URLs the remote step gives, unless it says otherwise.
       def expect_check(through: :changes, **steps)
+        urls = steps.dig(:remote, :urls)
+        steps[:branch] = { urls: urls, **steps.fetch(:branch, {}) } if urls
         STEPS.take(STEPS.index(through) + 1).each { |step| send(:"expect_#{step}_step", **steps.fetch(step, {})) }
       end
 
@@ -46,6 +50,10 @@ module Do
         [base, branch].each do |name|
           fake_runner.expect_call(['git', 'check-ref-format', '--branch', name], stdout: "#{name}\n")
         end
+      end
+
+      def expect_login_step(host: 'github.com', logged_in: true)
+        expect_gh_login(host, logged_in: logged_in)
       end
 
       def expect_issue_step(response: fixture('graphql/check-issue-24.json'), repository: HERE, number: 24, **result)
@@ -63,7 +71,7 @@ module Do
         fake_runner.expect_call(['git', 'remote', 'get-url', '--push', '--all', remote],
                                 stdout: lines(urls), exit_status: urls.empty? ? 2 : 0)
         (views || urls.to_h { |url| [url, fixture('repo-view/push-origin.json')] }).each do |url, view|
-          fake_runner.expect_call(['gh', 'repo', 'view', url, '--json', 'nameWithOwner,parent'],
+          fake_runner.expect_call(['gh', 'repo', 'view', url, '--json', 'nameWithOwner,parent,viewerPermission'],
                                   **(view.is_a?(Hash) ? view : { stdout: view }))
         end
       end
@@ -74,16 +82,21 @@ module Do
                                          stdout: as_json(response))
       end
 
-      # Tips are nil for no such branch; +config+ holds branch.<name>.remote,
-      # pushRemote and merge; +lacking+ is the log lines. The remote's tip is
-      # already here (branch_facts_spec covers fetching it).
+      # Tips are nil for no such branch: each push URL in +urls+ answers
+      # +remote_tip+, or its own of +remote_tips+. +config+ holds
+      # branch.<name>.remote, pushRemote and merge; +lacking+ is the log
+      # lines. The remote's tip is already here (branch_facts_spec covers
+      # fetching it).
       def expect_branch_step(**overrides)
         branch = BRANCH_DEFAULTS.merge(overrides)
         ref = "refs/heads/#{branch[:branch]}"
-        fake_runner.expect_call(['git', 'ls-remote', branch[:remote], ref],
-                                stdout: branch[:remote_tip] ? "#{branch[:remote_tip]}\t#{ref}\n" : '')
+        tips = expect_remote_tips(branch, ref)
+        return if tips.uniq.length > 1
+
+        remote_tip = tips.first
+        expect_line(['git', 'rev-parse', '--verify', '--quiet', "#{remote_tip}^{commit}"], remote_tip) if remote_tip
         expect_line(['git', 'rev-parse', '--verify', '--quiet', ref], branch[:local_tip])
-        expect_local_branch(branch, ref) if branch[:local_tip]
+        expect_local_branch(branch, ref, remote_tip) if branch[:local_tip]
       end
 
       # +nodes+ are pull request nodes, which pull_request_node builds, or
@@ -101,12 +114,19 @@ module Do
 
       private
 
-      def expect_local_branch(branch, ref)
+      # Each push URL's ls-remote, answered with its tip; returns the tips.
+      def expect_remote_tips(branch, ref)
+        tips = branch[:remote_tips] || branch[:urls].map { branch[:remote_tip] }
+        branch[:urls].zip(tips).each do |url, tip|
+          fake_runner.expect_call([*REMOTE_READ, 'ls-remote', url, ref], stdout: tip ? "#{tip}\t#{ref}\n" : '')
+        end
+        tips
+      end
+
+      def expect_local_branch(branch, ref, remote_tip)
         %w[remote pushRemote merge].each do |key|
           expect_line(['git', 'config', '--get', "branch.#{branch[:branch]}.#{key}"], branch[:config][key.to_sym])
         end
-        remote_tip = branch[:remote_tip]
-        expect_line(['git', 'rev-parse', '--verify', '--quiet', "#{remote_tip}^{commit}"], remote_tip) if remote_tip
         revisions = remote_tip ? ["#{remote_tip}..#{ref}"] : [ref, '--not', "--remotes=#{branch[:remote]}"]
         fake_runner.expect_call(['git', 'log', '--no-show-signature', '--format=%h %an %s', '--max-count=51',
                                  *revisions, '--'], stdout: lines(branch[:lacking]))

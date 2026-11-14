@@ -10,6 +10,11 @@ RSpec.describe 'skills/do/bin/record' do
         .dig('data', 'repository', 'issueOrPullRequest', 'comments', 'nodes', 0, 'body')
   end
 
+  # gh auth status, which comes before any request to the issue's host.
+  def login
+    { args: %w[auth status --active --hostname github.com] }
+  end
+
   # The request exactly as recorded, which the shim matches byte for byte.
   def issue_query
     { args: graphql, stdin: JSON.generate(JSON.parse(fixture('graphql/issue-24.request.json'))),
@@ -37,8 +42,8 @@ RSpec.describe 'skills/do/bin/record' do
     origin = 'https://github.com/sgbett/dotfiles-claude.git'
     system('git', 'remote', 'add', 'origin', origin, exception: true)
     shim = install_gh_shim(
-      [{ args: ['repo', 'view', origin, '--json', 'nameWithOwner,url'],
-         stdout_file: fixture_path('repo-view/origin.json') },
+      [login, { args: ['repo', 'view', origin, '--json', 'nameWithOwner,url'],
+                stdout_file: fixture_path('repo-view/origin.json') },
        issue_query,
        { args: %w[api --hostname github.com -X GET repos/sgbett/dotfiles-claude/issues/24],
          stdout_file: fixture_path('rest/issue-24.json') }]
@@ -55,19 +60,19 @@ RSpec.describe 'skills/do/bin/record' do
       .to eq([{ 'reference' => '#24', 'reasons' => ['unverified_boxes'], 'unverified' => (2..11).to_a }])
   end
 
-  it 'reports the box a dry run would tick, asking GitHub nothing but the issue query' do
-    shim = install_gh_shim([issue_query])
+  it 'reports the box a dry run would tick, asking gh nothing but its login and the issue query' do
+    shim = install_gh_shim([login, issue_query])
 
     exit_code, stdout, _stderr = run_record('tick', issue, '--ledger', 'L1', '--dry-run')
 
     expect([exit_code, JSON.parse(stdout), shim.calls.length])
       .to eq([0, { 'status' => 'proceed', 'target' => 'ledger', 'flipped' => ['L1'], 'already' => [],
-                   'dry_run' => true }, 1])
+                   'dry_run' => true }, 2])
   end
 
   it 'ticks the ledger in place: a fresh read, the write, then the read back' do
     after = ledger.sub('- [ ] **L1 ', '- [x] **L1 ')
-    shim = install_gh_shim([issue_query, rest('GET', ledger_path, ledger),
+    shim = install_gh_shim([login, issue_query, rest('GET', ledger_path, ledger),
                             rest('PATCH', ledger_path, after, stdin: JSON.generate('body' => after)),
                             rest('GET', ledger_path, after)])
 
@@ -75,11 +80,11 @@ RSpec.describe 'skills/do/bin/record' do
 
     expect([exit_code, JSON.parse(stdout)['flipped'], shim.unmatched_calls]).to eq([0, ['L1'], []])
     expect(shim.calls.map { |call| call['args'][3] == '-X' ? call['args'][4] : call['args'][1] })
-      .to eq(%w[graphql GET PATCH GET])
+      .to eq(%w[status graphql GET PATCH GET])
   end
 
   it 'stops, writing nothing, when the ledger changed since the read' do
-    shim = install_gh_shim([issue_query, rest('GET', ledger_path, "#{ledger}\nEdited meanwhile.\n")])
+    shim = install_gh_shim([login, issue_query, rest('GET', ledger_path, "#{ledger}\nEdited meanwhile.\n")])
 
     exit_code, stdout, _stderr = run_record('tick', issue, '--ledger', 'L1')
 
@@ -89,7 +94,7 @@ RSpec.describe 'skills/do/bin/record' do
   it "files a gate finding in this checkout's common git directory, 0600, printing only its k" do
     finding = sandbox.path('finding.md')
     File.write(finding, "The unfixed flaw in detail.\n")
-    install_gh_shim([issue_query])
+    install_gh_shim([login, issue_query])
 
     exit_code, stdout, _stderr = run_record('gate', 'add', issue, '--finding-file', finding)
     gate_file = File.join(sandbox.work_directory, '.git', 'do', 'I_kwDOQzoXSs8AAAABfBUanQ-gate.md')

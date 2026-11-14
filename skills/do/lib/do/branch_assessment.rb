@@ -8,8 +8,10 @@ module Do
   # or is local, tracks the same-named branch there and isn't ahead of it. A
   # local branch whose remote or pushRemote is a URL or another remote, or
   # whose merge ref is refs/pull/..., is a checked-out pull request, never
-  # resumed on. Any other local branch needs the user's yes, given for the
-  # tip they saw.
+  # resumed on: the run resumes from the push remote's copy instead, in a
+  # fresh worktree, or stops when there is none. Any other local branch
+  # needs the user's yes, given for the tip they saw. Push URLs that differ
+  # on the branch leave no copy to resume from.
   class BranchAssessment
     ACCEPT_FLAG = '--accept-local-branch'
     PULL_REFS = 'refs/pull/'
@@ -17,9 +19,10 @@ module Do
     # `gh pr checkout` never sets up.
     THIS_REPOSITORY = '.'
     RESUMING = %i[resume_local resume_push_remote local_branch_unpushed].freeze
+    STOPS = { checked_out_pr: Reasons::CHECKED_OUT_PR, remote_tips_differ: Reasons::REMOTE_TIPS_DIFFER }.freeze
 
-    # :new, :resume_local, :resume_push_remote, :checked_out_pr or
-    # :local_branch_unpushed.
+    # :new, :resume_local, :resume_push_remote, :local_branch_unpushed, or
+    # one of STOPS' keys.
     attr_reader :state, :facts
 
     # +remote+ is the push remote's name; +accepted_tip+ the tip a yes to
@@ -30,6 +33,7 @@ module Do
       @remote = remote
       @accepted_tip = accepted_tip
       @accepted = false
+      @fresh_worktree = false
       @state = decide
     end
 
@@ -38,15 +42,20 @@ module Do
       @accepted
     end
 
-    # A checked-out pull request's branch can still be resumed from the push
-    # remote's copy, in a fresh worktree.
-    def resume_from_push_remote?
-      state == :checked_out_pr && !facts.remote_tip.nil?
+    # Whether the run resumes from the push remote's copy beside a local
+    # branch of the same name, a checked-out pull request it leaves alone.
+    def fresh_worktree?
+      @fresh_worktree
     end
 
     # Whether the run picks up work already on the branch, or would on a yes.
     def resuming?
       RESUMING.include?(state)
+    end
+
+    # The reason the run stops on the branch, or nil.
+    def stop_reason
+      STOPS[state]
     end
 
     # The ask entry for local_branch_unpushed, or nil.
@@ -59,12 +68,25 @@ module Do
     private
 
     def decide
+      return :remote_tips_differ if facts.remote_tips_differ?
       return facts.remote_tip ? :resume_push_remote : :new unless facts.local_tip
-      return :checked_out_pr if checked_out_pull_request?
+
+      with_local_branch
+    end
+
+    def with_local_branch
+      return beside_checked_out_pull_request if checked_out_pull_request?
       return :resume_local if tracks_push_remote_copy? && !ahead?
       return accept if facts.local_tip == @accepted_tip
 
       :local_branch_unpushed
+    end
+
+    def beside_checked_out_pull_request
+      return :checked_out_pr unless facts.remote_tip
+
+      @fresh_worktree = true
+      :resume_push_remote
     end
 
     def checked_out_pull_request?
@@ -76,7 +98,7 @@ module Do
       !facts.remote_tip.nil? && facts.tracking_remote == @remote && facts.merge == "refs/heads/#{@branch}"
     end
 
-    # Unknown, when the remote's tip couldn't be fetched, counts as ahead.
+    # Unknown counts as ahead.
     def ahead?
       facts.lacking.nil? || !facts.lacking.empty?
     end

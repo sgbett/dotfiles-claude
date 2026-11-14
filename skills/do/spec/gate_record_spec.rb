@@ -14,6 +14,7 @@ RSpec.describe Do::GateRecord do
   # the query and the gate file's directory; the block expects whatever
   # calls follow.
   def gate(action, *flags, response: record_response(ledger: ledger))
+    expect_gh_login
     expect_issue_query(response)
     expect_common_directory
     yield if block_given?

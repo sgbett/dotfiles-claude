@@ -2,6 +2,7 @@ query PreflightCheckIssue($owner: String!, $name: String!, $number: Int!) {
   viewer { login }
   repository(owner: $owner, name: $name) {
     nameWithOwner
+    defaultBranchRef { name }
     issueOrPullRequest(number: $number) {
       __typename
       ... on Issue { repository { nameWithOwner } }

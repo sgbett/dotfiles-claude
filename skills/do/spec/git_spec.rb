@@ -18,6 +18,16 @@ RSpec.describe Do::Git do
       .to raise_error(Do::GitError, 'git ls-remote origin exited 128: fatal: could not read from remote')
   end
 
+  it 'masks the credentials of a URL among the arguments it names when it fails as a tool' do
+    url = 'https://x-access-token:example-secret@github.com/sgbett/dotfiles-claude.git'
+    fake_runner.expect_call(['git', 'ls-remote', url, 'refs/heads/x'], exit_status: 128, stderr: "fatal: denied\n")
+
+    expect { git.output('ls-remote', url, 'refs/heads/x') }
+      .to raise_error(Do::GitError,
+                      'git ls-remote https://***@github.com/sgbett/dotfiles-claude.git refs/heads/x exited 128: ' \
+                      'fatal: denied')
+  end
+
   it 'gives the first line of an answer, or nil when git exits 1 for nothing found' do
     fake_runner.expect_call(%w[git config --get branch.x.remote], stdout: "origin\n")
     fake_runner.expect_call(%w[git config --get branch.x.merge], exit_status: 1)

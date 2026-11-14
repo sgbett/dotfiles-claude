@@ -65,6 +65,13 @@ module SkillSupport
       json(['repo', 'view', url, '--json', fields.join(',')])
     end
 
+    # Whether gh has an active account on the host with a working token; gh
+    # sends nothing to a host it has no account on. --active leaves out the
+    # host's other accounts, which no call uses.
+    def logged_in?
+      @runner.run(['gh', 'auth', 'status', '--active', '--hostname', host]).success?
+    end
+
     private
 
     def api_arguments(path, method, fields, body)

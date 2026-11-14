@@ -10,12 +10,15 @@ module Do
   # The git checkout the running scripts live in, if they live in one. When
   # it is also the working directory's checkout, switching its branch would
   # swap the scripts mid-run, so the lead builds in a worktree. When it has
-  # changes under the skill's own directories, or its HEAD isn't in its
-  # default branch, the scripts may not be the reviewed ones, so the lead
-  # asks first; the yes names a digest of what was there when it was given.
+  # changes under the skill's own directories or to the files that pick
+  # their Ruby, or its HEAD isn't in its default branch, the scripts may not
+  # be the reviewed ones, so the lead asks first; the yes names a digest of
+  # what was there when it was given.
   class ScriptsCheckout
     SKILL_DIRECTORY = File.expand_path('../..', __dir__)
     SUPPORT_DIRECTORY = '_support'
+    # What mise reads, at the checkout's root, for the Ruby ruby-launch runs.
+    RUBY_VERSION_FILES = %w[.ruby-version mise.toml .mise.toml .tool-versions].freeze
     DEFAULT_BRANCH = 'refs/remotes/origin/HEAD'
     ACCEPT_FLAG = '--accept-scripts'
     NOT_A_REPOSITORY = 128
@@ -66,16 +69,18 @@ module Do
     end
 
     # The skill's directory and skills/_support beside it, as the top level
-    # sees them; a symlinked _support is checked as the link.
+    # sees them, then the root's Ruby version files; a symlinked _support is
+    # checked as the link.
     def pathspecs(top)
-      [@skill_directory, File.join(File.dirname(@skill_directory), SUPPORT_DIRECTORY)].map do |path|
+      directories = [@skill_directory, File.join(File.dirname(@skill_directory), SUPPORT_DIRECTORY)].map do |path|
         Pathname(path).relative_path_from(Pathname(top)).to_s
       end
+      directories + RUBY_VERSION_FILES
     end
 
     def status(top)
-      @git.output('-C', top, '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all', '--',
-                  *pathspecs(top))
+      @git.output('-C', top, *Git::NO_FSMONITOR, '--no-optional-locks', 'status', '--porcelain=v1', '-z',
+                  '--untracked-files=all', '--', *pathspecs(top))
     end
 
     # Whether HEAD's commit is in the default branch origin names: a commit
@@ -86,13 +91,13 @@ module Do
       !default.nil? && @git.run('-C', top, 'merge-base', '--is-ancestor', 'HEAD', default, allowed: [0, 1]).success?
     end
 
-    # A digest of HEAD and every change under the skill's directories,
-    # untracked files' contents included.
+    # A digest of HEAD and every change pathspecs covers, untracked files'
+    # contents included.
     def token(top, status, changes)
       untracked = changes.select(&:untracked?).map(&:path)
       parts = [@git.output('-C', top, 'rev-parse', '--verify', 'HEAD'), status,
-               @git.output('-C', top, 'diff', '--binary', '--no-ext-diff', '--no-textconv', 'HEAD', '--',
-                           *pathspecs(top))]
+               @git.output('-C', top, *Git::NO_FSMONITOR, 'diff', '--binary', '--no-ext-diff', '--no-textconv',
+                           'HEAD', '--', *pathspecs(top))]
       parts << @git.output('-C', top, 'hash-object', '--no-filters', '--', *untracked) unless untracked.empty?
       Digest::SHA256.hexdigest(parts.join("\0"))
     end

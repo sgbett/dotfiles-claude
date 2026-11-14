@@ -161,4 +161,14 @@ RSpec.describe SkillSupport::Gh do
       expect { gh.repo_view('https://github.com/o/r', ['name,owner']) }.to raise_error(ArgumentError)
     end
   end
+
+  describe '#logged_in?' do
+    it "asks gh auth status about the host's active account alone, true only when it exits 0" do
+      expect_gh_login('ghe.example.com')
+      expect_gh_login('ghe.example.com', logged_in: false)
+      ghe = described_class.new(host: 'ghe.example.com', runner: fake_runner)
+
+      expect([ghe.logged_in?, ghe.logged_in?]).to eq([true, false])
+    end
+  end
 end

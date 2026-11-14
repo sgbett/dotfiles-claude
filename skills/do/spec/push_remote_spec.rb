@@ -14,9 +14,10 @@ RSpec.describe Do::PushRemote do
   let(:origin_url) { 'https://github.com/sgbett/dotfiles-claude.git' }
   let(:fork_url) { 'https://github.com/bettison-org/ai-software-architect.git' }
 
-  def view(name, parent = nil)
+  def view(name, parent = nil, permission: 'WRITE')
     { 'nameWithOwner' => name, 'parent' => parent && { 'name' => parent.split('/').last,
-                                                       'owner' => { 'login' => parent.split('/').first } } }
+                                                       'owner' => { 'login' => parent.split('/').first } },
+      'viewerPermission' => permission }
   end
 
   def expect_remote(urls, remotes: ['origin'])
@@ -25,7 +26,8 @@ RSpec.describe Do::PushRemote do
   end
 
   def expect_view(url, stdout: nil, **result)
-    fake_runner.expect_call(['gh', 'repo', 'view', url, '--json', 'nameWithOwner,parent'], stdout: stdout, **result)
+    fake_runner.expect_call(['gh', 'repo', 'view', url, '--json', 'nameWithOwner,parent,viewerPermission'],
+                            stdout: stdout, **result)
   end
 
   describe '.classify' do
@@ -61,6 +63,13 @@ RSpec.describe Do::PushRemote do
         .to eq([nil, [here], [], false])
     end
 
+    it 'keeps the URLs that passed as git gave them, judging the permission of forks alone' do
+      expect_remote([origin_url])
+      expect_view(origin_url, stdout: JSON.generate(view(here, permission: 'READ')))
+
+      expect(push_remote.assess('origin').to_h.values_at(:stop_reason, :checked_urls)).to eq([nil, [origin_url]])
+    end
+
     it 'passes a fork of this repository, naming the fork' do
       push_remote = described_class.new(checkout: Do::Checkout.new(fake_runner),
                                         github: SkillSupport::Gh.new(host: 'github.com', runner: fake_runner),
@@ -71,6 +80,20 @@ RSpec.describe Do::PushRemote do
 
       expect([verdict.stop_reason, verdict.forks, verdict.fork?])
         .to eq([nil, ['bettison-org/ai-software-architect'], true])
+    end
+
+    it 'passes a fork only on which the user has WRITE, MAINTAIN or ADMIN, naming any other' do
+      fork = 'example-fork-owner/dotfiles-claude'
+      { 'WRITE' => nil, 'MAINTAIN' => nil, 'ADMIN' => nil, 'TRIAGE' => :fork_not_writable,
+        'READ' => :fork_not_writable, nil => :fork_not_writable }.each do |permission, stop_reason|
+        expect_remote([origin_url, fork_url])
+        expect_view(origin_url, stdout: fixture('repo-view/push-origin.json'))
+        expect_view(fork_url, stdout: JSON.generate(view(fork, here, permission: permission)))
+        verdict = push_remote.assess('origin')
+
+        expect(verdict.to_h.values_at(:stop_reason, :forks)).to eq([stop_reason, [fork]]), permission.inspect
+        expect(verdict.checked_urls).to eq(stop_reason ? [] : [origin_url, fork_url])
+      end
     end
 
     it 'checks every push URL, each of which must pass' do

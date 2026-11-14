@@ -4,7 +4,7 @@
 
 ## A fork
 
-- The conventions may push the branch to a fork and open the PR upstream (fork → upstream); the PR still targets this repository (reason `pr_target_not_this_repository` otherwise).
+- The conventions may push the branch to a fork you can write to (reason `fork_not_writable` otherwise) and open the PR upstream (fork → upstream); the PR still targets this repository (reason `pr_target_not_this_repository` otherwise).
 - A fork you push to counts as this repository under the Visibility rule.
 - `gh`'s own default repository can be the fork, so every `gh` call names this repository, as SKILL.md says; from a fork, `gh pr create` also needs `--head <owner>:<branch>`.
 - Never check out, build or test another fork's branch.

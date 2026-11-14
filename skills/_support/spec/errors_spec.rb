@@ -23,6 +23,16 @@ RSpec.describe SkillSupport::GhError do
     expect([failure(stdout: '<html>', stderr: '').api_message, failure(stdout: '[]', stderr: '').api_message])
       .to eq([nil, nil])
   end
+
+  it 'masks the credentials of a URL among the arguments it prints, keeping them for the caller' do
+    url = 'https://x-access-token:example-secret@github.com/sgbett/dotfiles-claude.git'
+    result = SkillSupport::CommandRunner::Result.new(stdout: '', stderr: "error\n", exit_status: 1)
+    error = described_class.new(['repo', 'view', url, '--json', 'nameWithOwner'], result)
+
+    expect(error.message)
+      .to eq('gh repo view https://***@github.com/sgbett/dotfiles-claude.git --json nameWithOwner exited 1: error')
+    expect(error.arguments).to include(url)
+  end
 end
 
 RSpec.describe SkillSupport::GraphqlError do

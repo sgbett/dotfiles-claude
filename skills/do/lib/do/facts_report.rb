@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'branch_names'
+require_relative 'issue_reference'
 require_relative 'slug'
 require_relative 'summary'
 
@@ -22,19 +24,27 @@ module Do
     end
 
     def fields
-      { summary: Summary.new(@assessment).fields, repository: repository, issue: issue, parent: parent,
-        sub_issues: sub_issues, ledger: ledger, ignored_markers: ignored_markers, gate: @assessment.gate.to_h,
-        branches: branches, parent_branches: @parent_branches, slug: Slug.from_title(@query.issue.title),
+      { reference: reference, summary: Summary.new(@assessment).fields, repository: repository, issue: issue,
+        parent: parent, sub_issues: sub_issues, ledger: ledger, ignored_markers: ignored_markers,
+        gate: @assessment.gate.to_h, branches: branches, parent_branches: parent_branches, slug: slug,
         default_branch: @default_branch, read: @assessment.read, session_only: session_only }
     end
 
     private
 
+    # What every later call takes in place of the reference the user gave,
+    # in the repository's name as GitHub gives it now.
+    def reference
+      IssueReference.canonical(@host, @query.repository.name_with_owner, @query.issue.number)
+    end
+
+    # Labels are never a trust input, so a cut-off list is said, not fatal.
     def repository
       { id: @query.repository_id, name_with_owner: @query.repository.name_with_owner, host: @host,
         owner: @query.repository.owner, visibility: @query.repository.visibility,
-        default_branch_ref: @query.default_branch_ref,
-        labels: @query.labels.map { |label| { id: label.id, github_text: { name: label.name } } } }
+        default_branch_ref: (@query.default_branch_ref if BranchNames.usable?(@query.default_branch_ref)),
+        labels: @query.labels.map { |label| { id: label.id, github_text: { name: label.name } } },
+        labels_truncated: !@query.labels_complete }
     end
 
     def issue
@@ -92,9 +102,17 @@ module Do
     end
 
     def branches
-      @query.branches.map do |branch|
+      @query.branches.select { |branch| BranchNames.usable?(branch.name) }.map do |branch|
         { name: branch.name, pull_requests: branch.pull_requests.map { |pull_request| pull_request(pull_request) } }
       end
+    end
+
+    def parent_branches
+      BranchNames.usable(@parent_branches)
+    end
+
+    def slug
+      Slug.from_title(@query.issue.title)
     end
 
     def pull_request(pull_request)
@@ -107,7 +125,13 @@ module Do
       { gate_file: @gate_path,
         not_nameable: unnamed.map do |record|
           { id: record.id, reference: @assessment.reference(record), github_text: { title: record.title } }
-        end }
+        end,
+        unusable_branches: unusable_branches }
+    end
+
+    # The default branch's name, this issue's branches' and the parent's.
+    def unusable_branches
+      BranchNames.unusable([@query.default_branch_ref, *@query.branches.map(&:name), *@parent_branches])
     end
 
     def trust(verdict)

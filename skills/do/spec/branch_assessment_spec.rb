@@ -58,13 +58,17 @@ RSpec.describe Do::BranchAssessment do
     it "never resumes on a checked-out pull request, the user's yes notwithstanding" do
       assessment = assess(local_tip: local_tip, lacking: [], accepted_tip: local_tip, tracking_remote: 'upstream')
 
-      expect([assessment.state, assessment.accepted?, assessment.ask]).to eq([:checked_out_pr, false, nil])
+      expect([assessment.state, assessment.accepted?, assessment.ask, assessment.stop_reason])
+        .to eq([:checked_out_pr, false, nil, :checked_out_pr])
     end
 
-    it "points a checked-out pull request's run to the push remote's copy, when there is one" do
-      expect([assess(remote_tip: remote_tip, local_tip: local_tip, lacking: [], merge: 'refs/pull/7/head'),
-              assess(local_tip: local_tip, lacking: [], merge: 'refs/pull/7/head')].map(&:resume_from_push_remote?))
-        .to eq([true, false])
+    it "resumes beside a checked-out pull request from the push remote's copy, in a fresh worktree" do
+      beside = assess(remote_tip: remote_tip, local_tip: local_tip, lacking: [], merge: 'refs/pull/7/head',
+                      accepted_tip: local_tip)
+
+      expect([beside.state, beside.fresh_worktree?, beside.accepted?, beside.stop_reason, beside.resuming?])
+        .to eq([:resume_push_remote, true, false, nil, true])
+      expect(assess(remote_tip: remote_tip).fresh_worktree?).to be(false)
     end
 
     it 'asks about one never pushed, one ahead, and one whose copy could not be fetched to compare' do
@@ -96,6 +100,16 @@ RSpec.describe Do::BranchAssessment do
 
       expect([accepted.state, accepted.accepted?, accepted.ask]).to eq([:resume_local, true, nil])
       expect([moved.state, moved.accepted?]).to eq([:local_branch_unpushed, false])
+    end
+  end
+
+  it 'stops when the push URLs differ on the branch, whatever is local' do
+    [{ remote_tips: [remote_tip, local_tip] }, { remote_tips: [remote_tip, nil] },
+     { remote_tips: [nil, remote_tip], local_tip: local_tip, lacking: [], **tracking }].each do |fields|
+      assessment = assess(**fields)
+
+      expect([assessment.state, assessment.stop_reason, assessment.resuming?])
+        .to eq([:remote_tips_differ, :remote_tips_differ, false]), fields.inspect
     end
   end
 

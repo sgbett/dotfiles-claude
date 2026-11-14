@@ -4,7 +4,7 @@ require_relative '../lib/do/check_arguments'
 
 RSpec.describe Do::CheckArguments do
   let(:required) do
-    ['--push-remote', 'origin', '--pr-target', 'sgbett/dotfiles-claude', '--base', 'master', '--branch', 'feat/#24+x']
+    ['--push-remote', 'origin', '--pr-target', 'sgbett/dotfiles-claude', '--base', 'master', '--branch', 'feat/24+x']
   end
 
   def parse(*arguments)
@@ -15,7 +15,7 @@ RSpec.describe Do::CheckArguments do
     options = parse('24', *required.each_slice(2).to_a.reverse.flatten)
 
     expect(options.to_h).to eq(reference: '24', push_remote: 'origin', pr_target: 'sgbett/dotfiles-claude',
-                               base: 'master', branch: 'feat/#24+x', accept_local_branch: nil, accept_scripts: nil)
+                               base: 'master', branch: 'feat/24+x', accept_local_branch: nil, accept_scripts: nil)
   end
 
   it 'reads each yes, a commit lower-cased' do
@@ -38,8 +38,9 @@ RSpec.describe Do::CheckArguments do
   end
 
   it 'refuses any value that is not valid, or could be read as an option' do
-    { '--push-remote' => ['-x', '', "origin\n"], '--pr-target' => ['sgbett', '-o/r', 'o/r/x'],
-      '--base' => ['-master', 'a..b', ''], '--branch' => ['--help', 'feat x', '@{-1}'] }.each do |flag, values|
+    invalid = { '--push-remote' => ['-x', '', "origin\n"], '--pr-target' => ['sgbett', '-o/r', 'o/r/x'],
+                '--base' => ['-master', 'a..b', '', 'feat/#24'], '--branch' => ['--help', 'feat x', '@{-1}', "x'y"] }
+    invalid.each do |flag, values|
       values.each do |value|
         flags = required.each_slice(2).to_h.merge(flag => value).flatten
 

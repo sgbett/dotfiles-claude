@@ -12,9 +12,9 @@ RSpec.describe Do::RecordArguments do
   end
 
   it 'reads each subcommand, the issue, then its flags in any order' do
-    expect(options('closes', '24', '--verified-boxes', '2,1,2', '--base', 'feat/#24+x', '--verified-items',
+    expect(options('closes', '24', '--verified-boxes', '2,1,2', '--base', 'feat/24+x', '--verified-items',
                    'L1,#31,example-owner/upstream#5,P4'))
-      .to eq(command: 'closes', reference: '24', base: 'feat/#24+x', verified_boxes: [2, 1],
+      .to eq(command: 'closes', reference: '24', base: 'feat/24+x', verified_boxes: [2, 1],
              verified_items: %w[L1 #31 example-owner/upstream#5 P4], dry_run: false)
     expect([options('tick', '24', '--dry-run', '--ledger', 'L2'), options('tick', '24', '--issue-boxes', '3')])
       .to eq([{ command: 'tick', reference: '24', ledger: ['L2'], dry_run: true },

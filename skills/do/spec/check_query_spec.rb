@@ -30,10 +30,19 @@ RSpec.describe Do::CheckQuery do
   end
 
   describe '#issue' do
-    it 'reads the recorded issue, with the viewer and the repository as GitHub names it' do
+    it 'reads the recorded issue, with the viewer, the repository as GitHub names it and its default branch' do
       expect_issue_step
 
-      expect(query.issue(here, 24).to_h).to eq(kind: :issue, viewer: 'sgbett', repository: here)
+      expect(query.issue(here, 24).to_h).to eq(kind: :issue, viewer: 'sgbett', repository: here,
+                                               default_branch: 'master')
+    end
+
+    it 'gives no default branch for a repository with no commits, which has none' do
+      response = issue_response
+      response['data']['repository']['defaultBranchRef'] = nil
+      expect_issue_step(response: response)
+
+      expect(query.issue(here, 24).default_branch).to be_nil
     end
 
     it "gives the repository's current name for an old one, as GitHub resolves a rename" do

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'remote_url'
 
 module SkillSupport
   # Base of every failure the library anticipates. A script reports any of
@@ -37,12 +38,15 @@ module SkillSupport
 
     attr_reader :arguments, :exit_status, :stdout, :stderr
 
+    # The message names the arguments with any URL's credentials masked, as
+    # a remote URL can carry a token and a tool failure prints the message.
     def initialize(arguments, result, message = nil)
       @arguments = arguments
       @exit_status = result.exit_status
       @stdout = result.stdout
       @stderr = result.stderr
-      super(message || "gh #{arguments.join(' ')} exited #{exit_status}: #{stderr.strip}")
+      printed = arguments.map { |argument| RemoteUrl.redacted(argument) }.join(' ')
+      super(message || "gh #{printed} exited #{exit_status}: #{stderr.strip}")
     end
 
     # The HTTP status gh reported on stderr, as in "gh: Not Found (HTTP 404)",

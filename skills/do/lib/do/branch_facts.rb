@@ -3,49 +3,86 @@
 require_relative 'git'
 
 module Do
+  # The push remote's copy of the branch moved between check's ls-remote and
+  # its fetch, as a force-push mid-run would make it.
+  class BranchMoved < SkillSupport::Error
+    def initialize(ref)
+      super("the push remote's #{ref} moved while check read it; run check again")
+    end
+  end
+
   # The git facts `preflight check` judges an existing branch on, from the
   # working directory's repository and the push remote: the remote's copy,
   # the local copy and its branch.<name>.* configuration, and the local
   # commits the push remote lacks. BranchAssessment makes the decision.
+  #
+  # The remote's copy is read from the push URLs the remote check passed,
+  # never through the remote's name, whose fetch URL can name another
+  # repository; its tip is fetched from them too, so the lead can check out
+  # that commit.
   class BranchFacts
     MAX_COMMITS = 50
     LOG_FORMAT = '--format=%h %an %s'
 
-    # Tips are full object names, nil for no such branch. The configuration
-    # values are nil when unset. +lacking+ is the local commits the push
-    # remote lacks, newest first, at most MAX_COMMITS of them (+more_lacking+
-    # when there are more), as `git log --format='%h %an %s'` prints them;
-    # nil when there is no local branch, or the remote's tip couldn't be
-    # fetched to compare with.
-    Facts = Struct.new(:remote_tip, :local_tip, :tracking_remote, :push_remote, :merge, :lacking, :more_lacking,
-                       keyword_init: true)
+    # Tips are full object names, nil for no such branch. +remote_tips+ holds
+    # each push URL's, in their order, and +remote_tip+ the one they share,
+    # nil when they differ. The configuration values are nil when unset.
+    # +lacking+ is the local commits the push remote lacks, newest first, at
+    # most MAX_COMMITS of them (+more_lacking+ when there are more), as `git
+    # log --format='%h %an %s'` prints them; nil when there is no local
+    # branch, or the push URLs differ.
+    Facts = Struct.new(:remote_tips, :remote_tip, :local_tip, :tracking_remote, :push_remote, :merge, :lacking,
+                       :more_lacking, keyword_init: true) do
+      def remote_tips_differ?
+        remote_tips.to_a.uniq.length > 1
+      end
+    end
 
-    # +remote+ is the push remote's name.
-    def initialize(runner, remote:)
+    # +remote+ is the push remote's name and +urls+ the push URLs it passed
+    # the remote check with, as git gave them.
+    def initialize(runner, remote:, urls:)
       @git = Git.new(runner)
       @remote = remote
+      @urls = urls
     end
 
     # The Facts about the branch named +branch+.
     def collect(branch)
       ref = "refs/heads/#{branch}"
-      remote_tip = remote_tip(ref)
-      local_tip = @git.line_or_nil('rev-parse', '--verify', '--quiet', ref)
-      return Facts.new(remote_tip: remote_tip, more_lacking: false) unless local_tip
+      remote_tips = @urls.map { |url| remote_tip(url, ref) }
+      return Facts.new(remote_tips: remote_tips, more_lacking: false) if remote_tips.uniq.length > 1
 
-      Facts.new(remote_tip: remote_tip, local_tip: local_tip, **configuration(branch), **lacking(ref, remote_tip))
+      remote_tip = remote_tips.first
+      fetch(ref, remote_tip) if remote_tip
+      local_tip = @git.line_or_nil('rev-parse', '--verify', '--quiet', ref)
+      facts = { remote_tips: remote_tips, remote_tip: remote_tip, local_tip: local_tip }
+      return Facts.new(**facts, more_lacking: false) unless local_tip
+
+      Facts.new(**facts, **configuration(branch), **lacking(ref, remote_tip))
     end
 
     private
 
     # git ls-remote matches a pattern against the tail of a ref's name, so
     # refs/heads/x/<branch> would match <branch>: only the exact ref counts.
-    def remote_tip(ref)
-      @git.output('ls-remote', @remote, ref).lines(chomp: true).each do |line|
+    def remote_tip(url, ref)
+      @git.output(*Git::NO_HOOKS_OR_FSMONITOR, 'ls-remote', url, ref).lines(chomp: true).each do |line|
         sha, name = line.split("\t", 2)
         return SkillSupport::Identifiers.commit_sha!(sha) if name == ref
       end
       nil
+    end
+
+    # Every push URL holds +tip+, so the first serves.
+    def fetch(ref, tip)
+      return if present?(tip)
+
+      @git.run(*Git::NO_HOOKS_OR_FSMONITOR, 'fetch', '--no-tags', '--quiet', @urls.first, ref)
+      raise BranchMoved, ref unless present?(tip)
+    end
+
+    def present?(sha)
+      !@git.line_or_nil('rev-parse', '--verify', '--quiet', "#{sha}^{commit}").nil?
     end
 
     def configuration(branch)
@@ -60,21 +97,7 @@ module Do
     # A branch never pushed lacks every commit no remote-tracking branch of
     # the push remote has.
     def lacking(ref, remote_tip)
-      return log(ref, '--not', "--remotes=#{@remote}") unless remote_tip
-      return { lacking: nil, more_lacking: false } unless fetched?(ref, remote_tip)
-
-      log("#{remote_tip}..#{ref}")
-    end
-
-    def fetched?(ref, remote_tip)
-      return true if present?(remote_tip)
-
-      @git.run('fetch', '--no-tags', '--quiet', @remote, ref)
-      present?(remote_tip)
-    end
-
-    def present?(sha)
-      !@git.line_or_nil('rev-parse', '--verify', '--quiet', "#{sha}^{commit}").nil?
+      remote_tip ? log("#{remote_tip}..#{ref}") : log(ref, '--not', "--remotes=#{@remote}")
     end
 
     # log.showSignature would add signature checks to the lines.

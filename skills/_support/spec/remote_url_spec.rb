@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../lib/do/remote_url'
-
-RSpec.describe Do::RemoteUrl do
+RSpec.describe SkillSupport::RemoteUrl do
   let(:path) { 'example-owner/example-repo' }
 
   describe '.host' do

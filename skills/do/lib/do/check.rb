@@ -45,8 +45,11 @@ module Do
       @host = reference.host
       @github = SkillSupport::Gh.new(host: @host, runner: @runner)
       @query = CheckQuery.new(@github)
-      issue_stop(reference) || pr_target_stop || push_remote_stop || base_stop || branch_stop || pull_request_stop ||
-        finish
+      issue_stop(reference) || conventions_stop || finish
+    end
+
+    def conventions_stop
+      pr_target_stop || branch_name_stop || push_remote_stop || base_stop || branch_stop || pull_request_stop
     end
 
     # This repository by the name GitHub gives it now, so that a renamed
@@ -59,6 +62,13 @@ module Do
 
     def pr_target_stop
       stop(Reasons::PR_TARGET_NOT_THIS_REPOSITORY) unless @options.pr_target.casecmp?(@issue.repository)
+    end
+
+    # Ignoring case, as a checkout on a case-insensitive file system holds
+    # Master and master as one branch.
+    def branch_name_stop
+      reserved = [@options.base, @issue.default_branch].compact
+      stop(Reasons::BRANCH_IS_BASE_OR_DEFAULT) if reserved.any? { |name| name.casecmp?(@options.branch) }
     end
 
     def push_remote_stop
@@ -75,11 +85,12 @@ module Do
     end
 
     def branch_stop
-      facts = BranchFacts.new(@runner, remote: @options.push_remote).collect(@options.branch)
+      facts = BranchFacts.new(@runner, remote: @options.push_remote, urls: @remote.checked_urls)
+                         .collect(@options.branch)
       @branch = BranchAssessment.new(facts, branch: @options.branch, remote: @options.push_remote,
                                             accepted_tip: @options.accept_local_branch)
       @report.branch = @branch
-      stop(Reasons::CHECKED_OUT_PR) if @branch.state == :checked_out_pr
+      stop(@branch.stop_reason) if @branch.stop_reason
     end
 
     def pull_request_stop

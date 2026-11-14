@@ -39,4 +39,22 @@ RSpec.describe Do::IssueReference do
       expect(parse(text)).to be_nil, "read #{text.inspect}"
     end
   end
+
+  describe '.canonical' do
+    it 'writes owner/repo#N on github.com and the issue URL on any other host, each reading back the same' do
+      { ['github.com', 'sgbett/dotfiles-claude', 24] => 'sgbett/dotfiles-claude#24',
+        ['GHE.example.com', 'example-owner/example-repo', '7'] =>
+          'https://ghe.example.com/example-owner/example-repo/issues/7' }.each do |(host, repository, number), text|
+        expect(described_class.canonical(host, repository, number)).to eq(text)
+        expect(parse(text)).to eq(host: host.downcase, repository: repository, number: Integer(number))
+      end
+    end
+
+    it 'fails as a tool on any part that is not valid, which would reach a command line' do
+      [['github.com', "sgbett/dotfiles-claude'; x", 24], ['github.com', 'sgbett/dotfiles-claude', '24 x'],
+       ['github.com/x', 'sgbett/dotfiles-claude', 24], [nil, 'sgbett/dotfiles-claude', 24]].each do |parts|
+        expect { described_class.canonical(*parts) }.to raise_error(SkillSupport::InvalidIdentifier), parts.inspect
+      end
+    end
+  end
 end

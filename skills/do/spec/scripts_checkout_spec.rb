@@ -74,6 +74,41 @@ RSpec.describe Do::ScriptsCheckout do
       .to eq([['?? skills/_support/new.rb'], :scripts_unreviewed])
   end
 
+  it 'asks about a change to a file at the root that picks the Ruby the scripts run on, and digests it' do
+    Do::ScriptsCheckout::RUBY_VERSION_FILES.each do |name|
+      reviewed_checkout
+      File.write(File.join(top, name), "ruby 2.7.0\n")
+      inspection = examine
+
+      expect([inspection.changes.map(&:to_s), inspection.ask&.fetch(:reason)])
+        .to eq([["?? #{name}"], :scripts_unreviewed]), name
+      FileUtils.rm_rf(top)
+    end
+  end
+
+  it "notices an edit to the root's .ruby-version in the digest a yes was given for" do
+    files['.ruby-version'] = "3.4.2\n"
+    reviewed_checkout
+    File.write(File.join(top, '.ruby-version'), "3.3.0\n")
+    token = examine.token
+    File.write(File.join(top, '.ruby-version'), "2.7.0\n")
+
+    expect([examine.changes.map(&:to_s), examine(accepted: token).accepted]).to eq([[' M .ruby-version'], false])
+  end
+
+  it 'runs no fsmonitor the checkout configures when it reads the changes' do
+    reviewed_checkout
+    marker = sandbox.path('ran')
+    fsmonitor = sandbox.path('fsmonitor')
+    File.write(fsmonitor, "#!/bin/sh\ntouch '#{marker}'\n")
+    File.chmod(0o755, fsmonitor)
+    git('config', 'core.fsmonitor', fsmonitor, chdir: top)
+    File.write(check_file, "# changed\n")
+
+    expect(examine.token).to match(/\A\h{64}\z/)
+    expect(File).not_to exist(marker)
+  end
+
   it "asks when HEAD has commits origin's default branch lacks, and not once they are in it" do
     reviewed_checkout
     git('switch', '--quiet', '-c', 'feature', chdir: top)

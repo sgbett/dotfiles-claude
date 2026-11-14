@@ -3,6 +3,7 @@
 # Shared by the skills' scripts (sgbett/dotfiles-claude#24). An entry file
 # loads this only after its version guard, so the library may use Ruby 3.1
 # syntax; it must not use anything newer, as the guard admits 3.1.
+require_relative 'skill_support/remote_url'
 require_relative 'skill_support/errors'
 require_relative 'skill_support/command_runner'
 require_relative 'skill_support/identifiers'

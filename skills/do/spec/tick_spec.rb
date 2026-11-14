@@ -23,6 +23,7 @@ RSpec.describe Do::Tick do
   # Expects the issue query, answered with +response+, then the calls the
   # block expects, and ticks +flag+'s +value+.
   def tick(flag, value, response = record_response(ledger: ledger), dry_run: false)
+    expect_gh_login
     expect_issue_query(response)
     yield if block_given?
     record('tick', 'sgbett/dotfiles-claude#24', flag, value, *('--dry-run' if dry_run))
@@ -83,7 +84,7 @@ RSpec.describe Do::Tick do
       exit_code, output = tick_ledger('L1,L2', dry_run: true)
 
       expect([exit_code, output.values_at('flipped', 'already', 'dry_run')]).to eq([0, [['L1'], ['L2'], true]])
-      expect(fake_runner.calls.length).to eq(1)
+      expect(fake_runner.calls.length).to eq(2)
     end
   end
 
@@ -111,7 +112,7 @@ RSpec.describe Do::Tick do
 
       exit_code, output = tick_issue('1', response)
 
-      expect([exit_code, output['reason'], fake_runner.calls.length]).to eq([2, 'untrusted_issue_author', 1])
+      expect([exit_code, output['reason'], fake_runner.calls.length]).to eq([2, 'untrusted_issue_author', 2])
     end
   end
 end

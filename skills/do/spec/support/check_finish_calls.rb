@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'digest'
+require_relative '../../lib/do/scripts_checkout'
 require_relative 'check_responses'
 
 module Do
@@ -13,7 +14,7 @@ module Do
 
       SCRIPTS_DEFAULTS = { status: '', default: 'refs/remotes/origin/master', ancestor: true, head: BASE_SHA,
                            diff: '' }.freeze
-      PATHSPECS = ['--', 'skills/do', 'skills/_support'].freeze
+      PATHSPECS = ['--', 'skills/do', 'skills/_support', *Do::ScriptsCheckout::RUBY_VERSION_FILES].freeze
 
       # +top+ nil means the scripts aren't in a git checkout. Otherwise
       # +checkout+ can give the porcelain +status+ for the skill's
@@ -49,8 +50,8 @@ module Do
       end
 
       def expect_changes_step(status: '')
-        fake_runner.expect_call(%w[git --no-optional-locks status --porcelain=v1 -z --untracked-files=all],
-                                stdout: status)
+        fake_runner.expect_call(%w[git -c core.fsmonitor=false --no-optional-locks status --porcelain=v1 -z
+                                   --untracked-files=all], stdout: status)
       end
 
       # A directory to stand for the running skill's, with nothing in it.
@@ -65,8 +66,9 @@ module Do
       private
 
       def expect_scripts_checkout(top, checkout)
-        fake_runner.expect_call(['git', '-C', top, '--no-optional-locks', 'status', '--porcelain=v1', '-z',
-                                 '--untracked-files=all', *PATHSPECS], stdout: checkout[:status])
+        fake_runner.expect_call(['git', '-C', top, '-c', 'core.fsmonitor=false', '--no-optional-locks', 'status',
+                                 '--porcelain=v1', '-z', '--untracked-files=all', *PATHSPECS],
+                                stdout: checkout[:status])
         expect_line(['git', '-C', top, 'symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD'], checkout[:default])
         if checkout[:default]
           fake_runner.expect_call(['git', '-C', top, 'merge-base', '--is-ancestor', 'HEAD', checkout[:default]],
@@ -78,8 +80,8 @@ module Do
 
       def expect_scripts_digest(top, checkout)
         fake_runner.expect_call(['git', '-C', top, 'rev-parse', '--verify', 'HEAD'], stdout: "#{checkout[:head]}\n")
-        fake_runner.expect_call(['git', '-C', top, 'diff', '--binary', '--no-ext-diff', '--no-textconv', 'HEAD',
-                                 *PATHSPECS], stdout: checkout[:diff])
+        fake_runner.expect_call(['git', '-C', top, '-c', 'core.fsmonitor=false', 'diff', '--binary', '--no-ext-diff',
+                                 '--no-textconv', 'HEAD', *PATHSPECS], stdout: checkout[:diff])
         untracked = Do::Porcelain.entries(checkout[:status]).select(&:untracked?).map(&:path)
         return if untracked.empty?
 

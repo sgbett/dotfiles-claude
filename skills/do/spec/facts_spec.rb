@@ -24,6 +24,7 @@ RSpec.describe Do::Facts do
   end
 
   def facts(response = issue_response, reference: 'sgbett/dotfiles-claude#24')
+    expect_gh_login
     expect_issue_query(response)
     expect_local_calls
     run(reference)
@@ -54,8 +55,9 @@ RSpec.describe Do::Facts do
       exit_code, output = facts(fixture('graphql/issue-24.json'))
 
       expect([exit_code, output.keys])
-        .to eq([0, %w[status summary repository issue parent sub_issues ledger ignored_markers gate branches
-                      parent_branches slug default_branch read session_only]])
+        .to eq([0, %w[status reference summary repository issue parent sub_issues ledger ignored_markers gate
+                      branches parent_branches slug default_branch read session_only]])
+      expect(output['reference']).to eq('sgbett/dotfiles-claude#24')
       expect(output['summary']).to eq('issue' => 'sgbett/dotfiles-claude#24', 'untrusted_authors' => [],
                                       'parent' => nil, 'resume_point' => 'L1', 'open_gate_findings' => [],
                                       'ignored_markers' => [], 'skipped_sub_issues' => [])
@@ -63,7 +65,8 @@ RSpec.describe Do::Facts do
                                          'trust_reason' => 'viewer', 'github_text' => { 'title' => title })
       expect(output.values_at('slug', 'default_branch', 'read'))
         .to eq(['hlr-do-and-copilot-check-move', branch, ['references/resume.md']])
-      expect(output['session_only']).to eq('gate_file' => gate_path, 'not_nameable' => [])
+      expect(output['session_only']).to eq('gate_file' => gate_path, 'not_nameable' => [], 'unusable_branches' => [])
+      expect(output['repository'].values_at('default_branch_ref', 'labels_truncated')).to eq(['master', false])
     end
 
     it 'finds the ledger with items L1 to L11 and no gate lines' do
@@ -84,10 +87,56 @@ RSpec.describe Do::Facts do
       expect(texts(output).reject { |path, _text| path.include?('github_text') }.map(&:last)).to all(be_ascii_only)
     end
 
-    it 'reads the issue the same from a URL' do
+    it 'reads the issue the same from a URL, giving owner/repo#N for every later call' do
       _exit_code, output = facts(reference: 'https://github.com/sgbett/dotfiles-claude/issues/24')
 
-      expect(output['summary']['issue']).to eq('sgbett/dotfiles-claude#24')
+      expect(output.values_at('reference', 'summary'))
+        .to match(['sgbett/dotfiles-claude#24', include('issue' => 'sgbett/dotfiles-claude#24')])
+    end
+
+    it 'gives the reference in the name GitHub gives the repository, whatever case the user wrote' do
+      expect_gh_login
+      expect_issue_query(issue_response, repository: 'SGBETT/Dotfiles-Claude')
+      expect_local_calls
+
+      expect(run('SGBETT/Dotfiles-Claude#24').last['reference']).to eq('sgbett/dotfiles-claude#24')
+    end
+
+    it 'goes on with the first 100 labels when there are more, saying so, as labels decide nothing' do
+      _exit_code, output = facts(issue_response do |_issue, data|
+        data['repository']['labels']['pageInfo']['hasNextPage'] = true
+      end)
+
+      expect([output['status'], output['repository']['labels'].length, output['repository']['labels_truncated']])
+        .to eq(['proceed', 10, true])
+    end
+  end
+
+  describe 'another host' do
+    it "gives the issue's URL as the reference every later call takes" do
+      ghe = 'example-owner/example-repo'
+      response = issue_response do |issue, data|
+        [data['repository'], issue['repository']].each do |node|
+          node.merge!('nameWithOwner' => ghe, 'owner' => { 'login' => 'example-owner' })
+        end
+      end
+      expect_gh_login('ghe.example.com')
+      fake_runner.expect_call(%w[gh api graphql --hostname ghe.example.com --input -], stdin: issue_request(ghe, 24),
+                                                                                       stdout: JSON.generate(response))
+      expect_local_calls
+
+      expect(run("https://ghe.example.com/#{ghe}/issues/24").last['reference'])
+        .to eq("https://ghe.example.com/#{ghe}/issues/24")
+    end
+  end
+
+  describe 'a host gh is not logged in to' do
+    it 'stops before any request to it, given in a URL' do
+      expect_gh_login('ghe.example.com', logged_in: false)
+
+      expect(run('https://ghe.example.com/example-owner/example-repo/issues/7'))
+        .to eq([2, { 'status' => 'stop', 'reason' => 'host_not_logged_in',
+                     'message' => Do::Reasons::MESSAGES[:host_not_logged_in], 'host' => 'ghe.example.com' }])
     end
   end
 
@@ -99,17 +148,23 @@ RSpec.describe Do::Facts do
                                                              stderr: url ? '' : "error: No such remote 'origin'\n")
     end
 
-    it 'names an issue in the repository origin resolves to, as gh resolves it' do
+    it 'names an issue in the repository origin resolves to, as gh resolves it, which every later call names' do
       expect_origin(origin)
+      expect_gh_login
       fake_runner.expect_call(['gh', 'repo', 'view', origin, '--json', 'nameWithOwner,url'],
                               stdout: fixture('repo-view/origin.json'))
+      expect_issue_query(issue_response)
+      expect_local_calls
+      output = run('24').last
 
-      expect(facts(reference: '24').last['summary']['issue']).to eq('sgbett/dotfiles-claude#24')
+      expect(output.values_at('reference', 'summary'))
+        .to match(['sgbett/dotfiles-claude#24', include('issue' => 'sgbett/dotfiles-claude#24')])
     end
 
-    it "queries the host gh resolves origin's repository on" do
+    it "queries the host gh resolves origin's repository on, once gh is logged in to it" do
       ghe = 'https://ghe.example.com/example-owner/example-repo.git'
       expect_origin(ghe)
+      expect_gh_login('ghe.example.com')
       fake_runner.expect_call(['gh', 'repo', 'view', ghe, '--json', 'nameWithOwner,url'],
                               stdout: '{"nameWithOwner":"example-owner/example-repo",' \
                                       '"url":"https://ghe.example.com/example-owner/example-repo"}')
@@ -144,9 +199,12 @@ RSpec.describe Do::Facts do
     end
 
     it 'stops on a pull request number, a number that names nothing, and an issue that has moved' do
+      expect_gh_login
       expect_issue_query(fixture('graphql/pull-request-25.json'), number: 25)
+      expect_gh_login
       expect_issue_query(fixture('graphql/missing-issue.json'), number: 99_999, exit_status: 1,
                                                                 stderr: fixture('graphql/missing-issue.stderr'))
+      expect_gh_login
       expect_issue_query(issue_response { |issue| issue['repository']['nameWithOwner'] = 'example-owner/new-home' })
 
       %w[sgbett/dotfiles-claude#25 sgbett/dotfiles-claude#99999 sgbett/dotfiles-claude#24].zip(
@@ -279,6 +337,7 @@ RSpec.describe Do::Facts do
 
   describe 'the parent and sub-issues' do
     it 'lists the branches of a parent in this repository, the default base' do
+      expect_gh_login
       expect_issue_query(issue_response { |issue| issue['parent'] = issue_node(20, recorded_repository) })
       expect_branches_query(20, %w[feat/20-parent old/feat/20-parent])
       expect_local_calls
@@ -314,11 +373,77 @@ RSpec.describe Do::Facts do
       expect(output['summary']['skipped_sub_issues']).to eq(["an issue in a repository that isn't public"])
     end
 
+    it "keeps a branch name holding a character no script takes, the default's, this issue's or the parent's, " \
+       'to session_only' do
+      odd = "feat/24-x';y"
+      expect_gh_login
+      expect_issue_query(issue_response do |issue, data|
+        issue['parent'] = issue_node(20, recorded_repository)
+        data['repository']['defaultBranchRef'] = { 'name' => 'main$(x)' }
+        data['repository']['refs'] = connection([odd, 'feat/24-work'].map do |name|
+          { 'name' => name, 'associatedPullRequests' => connection([]) }
+        end)
+      end)
+      expect_branches_query(20, ['feat/20-parent', 'feat/20-$(y)'])
+      expect_local_calls
+      output = run.last
+
+      expect(output.values_at('branches', 'parent_branches'))
+        .to eq([[{ 'name' => 'feat/24-work', 'pull_requests' => [] }], ['feat/20-parent']])
+      expect(output['repository']['default_branch_ref']).to be_nil
+      expect(output['session_only']['unusable_branches']).to eq(['main$(x)', odd, 'feat/20-$(y)'])
+      expect(JSON.generate(output.except('session_only'))).not_to include("x';y", '$(x)', '$(y)')
+    end
+
     it 'skips, and names, a linked sub-issue by an untrusted author' do
       stranger = issue_node(9, recorded_repository, by: authored_by('example-stranger', association: 'NONE'))
       _exit_code, output = facts(issue_response { |issue| issue['subIssues'] = connection([stranger]) })
 
       expect(output['summary']['skipped_sub_issues']).to eq(['#9 by example-stranger (untrusted_association)'])
+    end
+  end
+
+  # The walk-throughs QA ran by hand for #24, which `facts` now decides:
+  # whatever names or quotes a repository that isn't public stays under
+  # session_only, while a public one is named as usual.
+  describe "#24's walk-throughs" do
+    def related(parent:, sub_issue:)
+      facts(issue_response do |issue|
+        issue['parent'] = parent
+        issue['subIssues'] = connection([sub_issue])
+      end).last
+    end
+
+    def outside_session_only(output)
+      JSON.generate(output.except('session_only'))
+    end
+
+    it 'a private parent with a public sub-issue: the parent only in session_only, the sub-issue named' do
+      output = related(parent: issue_node(3, 'example-owner/private-parent', visibility: 'PRIVATE'),
+                       sub_issue: issue_node(5, 'example-owner/public-sub'))
+
+      expect(outside_session_only(output)).not_to include('private-parent', 'Example issue 3')
+      expect(output['parent']).to include('reference' => nil, 'nameable' => false)
+      expect(output['sub_issues'].first)
+        .to include('reference' => 'example-owner/public-sub#5', 'github_text' => { 'title' => 'Example issue 5' })
+      expect(output['summary'].values_at('parent', 'skipped_sub_issues'))
+        .to eq(["an issue in a repository that isn't public", []])
+      expect(output['session_only']['not_nameable'].map { |record| record['reference'] })
+        .to eq(['example-owner/private-parent#3'])
+    end
+
+    it 'two private repositories, the parent in one and a sub-issue in the other: neither outside session_only' do
+      output = related(parent: issue_node(3, 'example-owner/private-one', visibility: 'PRIVATE'),
+                       sub_issue: issue_node(5, 'example-owner/private-two', visibility: 'INTERNAL'))
+
+      expect(outside_session_only(output)).not_to include('private-one', 'private-two', 'Example issue 3',
+                                                          'Example issue 5')
+      not_nameable = "an issue in a repository that isn't public"
+      expect(output['summary'].values_at('parent', 'skipped_sub_issues')).to eq([not_nameable, [not_nameable]])
+      expect(output['session_only']['not_nameable'].map { |record| record.values_at('reference', 'github_text') })
+        .to eq([['example-owner/private-one#3', { 'title' => 'Example issue 3' }],
+                ['example-owner/private-two#5', { 'title' => 'Example issue 5' }]])
+      expect(output['read']).to eq(%w[references/resume.md references/other-repositories.md])
     end
   end
 end

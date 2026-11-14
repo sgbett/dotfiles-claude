@@ -18,10 +18,12 @@ module Do
 
     # +kind+ is :issue, :pull_request, :missing_issue, :missing_repository,
     # or :moved when the issue now lives in another repository; only an
-    # :issue carries the rest. +comments_complete+ is false when the issue
-    # has more comments than the page that came back.
-    Result = Struct.new(:kind, :viewer, :repository, :repository_id, :default_branch_ref, :labels, :issue, :parent,
-                        :sub_issues, :project_items, :comments, :comments_complete, :branches, keyword_init: true)
+    # :issue carries the rest. +labels_complete+ and +comments_complete+ are
+    # false when the repository has more labels, or the issue more comments,
+    # than the page that came back.
+    Result = Struct.new(:kind, :viewer, :repository, :repository_id, :default_branch_ref, :labels, :labels_complete,
+                        :issue, :parent, :sub_issues, :project_items, :comments, :comments_complete, :branches,
+                        keyword_init: true)
 
     def self.variables(repository, number)
       owner, name = SkillSupport::Identifiers.repository!(repository).split('/')
@@ -46,8 +48,8 @@ module Do
     end
 
     # What issue +number+ of +repository+ ("owner/repo") is, as a Result.
-    # Raises IncompleteResults when the labels, the sub-issues, the branches
-    # or their pull requests overflow a page.
+    # Raises IncompleteResults when the sub-issues, the branches or their pull
+    # requests overflow a page.
     def fetch(repository, number)
       data = @github.graphql(QUERY, self.class.variables(repository, number))
       ResultMapping.new(data).result

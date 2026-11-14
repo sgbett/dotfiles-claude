@@ -12,6 +12,7 @@ RSpec.describe Do::Closes do
   # its criteria live in the ledger, an issue body of +body+.
   def closes(response = record_response, body: self.body, base: 'master', items: nil, boxes: nil)
     expect_base(base)
+    expect_gh_login
     expect_issue_query(response)
     expect_read(Do::Testing::RecordCalls::ISSUE_PATH, body) if body
     record('closes', 'sgbett/dotfiles-claude#24', '--base', base, *(['--verified-items', items] if items),
@@ -143,6 +144,7 @@ RSpec.describe Do::Closes do
     it 'stops when there is no ledger' do
       response = issue_response { |issue| issue['comments'] = connection([]) }
       expect_base
+      expect_gh_login
       expect_issue_query(response)
 
       expect(record('closes', 'sgbett/dotfiles-claude#24', '--base', 'master').last['reason']).to eq('no_ledger')

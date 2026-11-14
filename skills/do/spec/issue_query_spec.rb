@@ -67,16 +67,23 @@ RSpec.describe Do::IssueQuery do
     expect(fetch.kind).to eq(:moved)
   end
 
-  it 'raises IncompleteResults when the labels, sub-issues, branches or their pull requests overflow a page' do
+  it 'raises IncompleteResults when the sub-issues, branches or their pull requests overflow a page' do
     branch = { 'name' => 'feat/24-x', 'associatedPullRequests' => connection([], more: true) }
-    [->(_issue, data) { data['repository']['labels']['pageInfo']['hasNextPage'] = true },
-     ->(issue, _data) { issue['subIssues']['pageInfo']['hasNextPage'] = true },
+    [->(issue, _data) { issue['subIssues']['pageInfo']['hasNextPage'] = true },
      ->(_issue, data) { data['repository']['refs'] = connection([], more: true) },
      ->(_issue, data) { data['repository']['refs'] = connection([branch]) }].each do |change|
       expect_issue_query(issue_response(&change))
 
       expect { fetch }.to raise_error(SkillSupport::IncompleteResults)
     end
+  end
+
+  it 'records labels cut off at a page, keeping the page, as labels decide nothing' do
+    expect_issue_query(fixture('graphql/issue-24.json'))
+    expect_issue_query(issue_response { |_issue, data| data['repository']['labels']['pageInfo']['hasNextPage'] = true })
+
+    expect([fetch, fetch].map { |result| [result.labels.length, result.labels_complete] })
+      .to eq([[10, true], [10, false]])
   end
 
   it 'records cut-off comments, editors and renamers for its caller to fail closed on' do

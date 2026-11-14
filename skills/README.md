@@ -53,10 +53,11 @@ What every script needs is in `_support/lib/`:
 | `Cli.run(name, reasons:) { … }` | Prints the block's `Outcome`, returns its exit code, and turns an exception into a tool failure |
 | `Outcome.proceed`, `.stop`, `.ask` | The JSON object; the only place exit codes are defined |
 | `CommandRunner#run(argv, stdin:)` | An argument array, never a shell, with `GH_REPO` and `GH_HOST` cleared and prompts off |
-| `Gh#api`, `#graphql`, `#repo_view` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data` |
+| `Gh#api`, `#graphql`, `#repo_view`, `#logged_in?` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data`; whether gh's active account there is logged in |
 | `Pagination.ensure_complete!` | Fails when a GraphQL connection has another page, or can't show it hasn't |
 | `RepositoryFiles#read` | A file at a ref through GitHub's contents API: `nil` only for a 404 "Not Found" |
-| `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-` |
+| `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, and a branch name only `[A-Za-z0-9._/+-]` |
+| `RemoteUrl.host`, `.redacted` | A git remote URL's host, and the URL with any credentials masked, as `GhError`'s message prints it |
 
 Code that runs a command takes a `runner:`, so a spec can inject one. Raise a `SkillSupport::Error` for anything a script can't use.
 
@@ -86,13 +87,13 @@ On GitHub, a script only edits an existing body in place: a ticked box, a ledger
 
 ## Calling a script
 
-`SKILL.md` writes each call out in full, quoting `'$ARGUMENTS'` so that a `#24` doesn't start a shell comment:
+`SKILL.md` writes each call out in full, quoting each reference and branch so that a `#24` doesn't start a shell comment:
 
 ```
-"${CLAUDE_SKILL_DIR}/bin/record" tick '$ARGUMENTS' --ledger '<ids>'
+"${CLAUDE_SKILL_DIR}/bin/record" tick '<facts.reference>' --ledger '<ids>'
 ```
 
-Claude Code substitutes `${CLAUDE_SKILL_DIR}` and `$ARGUMENTS` when the skill loads, in `SKILL.md` only, so a reference file never writes out a call. The lead runs each exactly as written, unpiped, and acts on its `status` as the invariants say.
+Claude Code substitutes `${CLAUDE_SKILL_DIR}` and `$ARGUMENTS` when the skill loads, in `SKILL.md` only, so a reference file never writes out a call. `$ARGUMENTS` is the user's text, substituted as it stands, so it goes on one command line alone, `/do`'s first: the lead first checks that it is exactly an issue number (`#` optional), `owner/repo#N` or an issue URL, and stops otherwise. That call, `preflight facts`, gives `reference`, the issue in a canonical form built only from validated parts (`owner/repo#N`, or the issue's URL on a host other than github.com), and every later call takes that, so a bare number can't resolve through a different `origin` later either. The lead runs each call exactly as written, unpiped, and acts on its `status` as the invariants say.
 
 ## References
 

@@ -65,7 +65,8 @@ module Do
     # Porcelain entries. --no-optional-locks keeps status from rewriting the
     # index of a checkout it only reads.
     def changes
-      Porcelain.entries(@git.output('--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all'))
+      Porcelain.entries(@git.output(*Git::NO_FSMONITOR, '--no-optional-locks', 'status', '--porcelain=v1', '-z',
+                                    '--untracked-files=all'))
     end
   end
 end

@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module Do
-  # A git remote URL as git reports it. Pre-flight reads only its host from
-  # it: which repository it is comes from GitHub, as a URL can be an alias
-  # or a repository's old name.
+module SkillSupport
+  # A git remote URL as git reports it. Scripts read only its host from it:
+  # which repository it is comes from GitHub, as a URL can be an alias or a
+  # repository's old name.
   module RemoteUrl
     # scheme://[userinfo@]host[:port]/...; the userinfo runs to the last @
     # before the path, as git reads it.
@@ -23,7 +23,7 @@ module Do
     end
 
     # The URL with any userinfo of a scheme://user:secret@host/ form masked,
-    # as a push URL can carry a token.
+    # as a push URL can carry a token. Anything else comes back unchanged.
     def redacted(url)
       url.sub(USERINFO, '\k<scheme>***@')
     end

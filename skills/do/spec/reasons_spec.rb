@@ -5,14 +5,15 @@ require_relative '../lib/do/reasons'
 RSpec.describe Do::Reasons do
   it "is each script's whole enum of stops and asks, none of them both" do
     expect(described_class::PREFLIGHT)
-      .to eq(%i[not_an_issue gate_advisory remote_missing host_mismatch remote_unresolvable
-                push_remote_not_this_repository pr_target_not_this_repository base_missing checked_out_pr
-                untrusted_pull_request no_origin comments_truncated untrusted_author_criteria gate_record_missing
-                local_branch_unpushed scripts_unreviewed])
+      .to eq(%i[not_an_issue host_not_logged_in gate_advisory remote_missing host_mismatch remote_unresolvable
+                push_remote_not_this_repository fork_not_writable pr_target_not_this_repository
+                branch_is_base_or_default base_missing checked_out_pr remote_tips_differ untrusted_pull_request
+                no_origin comments_truncated untrusted_author_criteria gate_record_missing local_branch_unpushed
+                scripts_unreviewed])
     expect(described_class::RECORD)
-      .to eq(%i[not_an_issue no_ledger box_missing body_changed untrusted_issue_author not_a_sub_issue
-                untrusted_sub_issue no_such_finding gate_advisory gate_answered gate_line_missing no_origin
-                gate_unanswered])
+      .to eq(%i[not_an_issue host_not_logged_in no_ledger box_missing body_changed untrusted_issue_author
+                not_a_sub_issue untrusted_sub_issue no_such_finding gate_advisory gate_answered gate_line_missing
+                no_origin gate_unanswered])
     expect([described_class::PREFLIGHT_STOPS & described_class::PREFLIGHT_ASKS,
             described_class::RECORD_STOPS & described_class::RECORD_ASKS]).to eq([[], []])
     expect(described_class::ALL).to match_array(described_class::PREFLIGHT | described_class::RECORD)
@@ -25,7 +26,7 @@ RSpec.describe Do::Reasons do
   end
 
   it "tells the user, for every stop on the remotes, to run /do from a checkout of the issue's repository or a fork" do
-    %i[remote_missing host_mismatch remote_unresolvable push_remote_not_this_repository
+    %i[remote_missing host_mismatch remote_unresolvable push_remote_not_this_repository fork_not_writable
        pr_target_not_this_repository].each do |reason|
       expect(described_class::MESSAGES.fetch(reason))
         .to end_with("Run /do owner/repo#N from a checkout of the issue's repository or of a fork of it."), reason.to_s
@@ -38,6 +39,10 @@ RSpec.describe Do::Reasons do
     expect(described_class::NOT_AN_ISSUE_MESSAGES.keys)
       .to eq(%i[not_a_reference pull_request missing_issue missing_repository moved])
     expect(described_class::MESSAGES.values + described_class::NOT_AN_ISSUE_MESSAGES.values).to all(be_frozen)
+  end
+
+  it 'has the user run /do owner/repo#N when a bare number has no origin, as a run never changes its issue' do
+    expect(described_class::MESSAGES[:no_origin]).to include('tell the user to run /do owner/repo#N')
   end
 
   it 'builds outcomes the contract accepts' do

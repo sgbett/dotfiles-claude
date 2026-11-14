@@ -101,8 +101,8 @@ RSpec.describe SkillSupport::Identifiers do
       system('git', 'switch', '--quiet', 'master', exception: true)
     end
 
-    it 'accepts a name git accepts, # and + included' do
-      %w[feat/24-hlr-do-and-copilot-check-move feat/#24+x master].each do |value|
+    it 'accepts a name git accepts of letters, digits and . _ / + -' do
+      %w[feat/24-hlr-do-and-copilot-check-move feat/24+x release_1.2 master].each do |value|
         expect(described_class.branch!(value)).to eq(value)
       end
     end
@@ -112,18 +112,24 @@ RSpec.describe SkillSupport::Identifiers do
       expect_rejected(:branch, values) { |value| described_class.branch!(value) }
     end
 
+    it "rejects a name git accepts with any other character, which a shell could read: '#', a quote, '$'" do
+      values = ['feat/#24', "feat/24'x", 'feat/24"x', 'feat/$(x)', 'feat/24;x', 'feat/24`x', 'feat/24&x', 'feat/é']
+      expect_rejected(:branch, values) { |value| described_class.branch!(value) }
+    end
+
     it 'rejects a name git would rewrite, such as @{-1} for the previous branch' do
       switch_away_from_a_second_branch
 
       expect_rejected(:branch, ['@{-1}']) { |value| described_class.branch!(value) }
     end
 
-    it 'asks git through the runner it is given' do
-      fake_runner.expect_call(['git', 'check-ref-format', '--branch', 'feat/#24'], stdout: "feat/#24\n")
+    it 'asks git through the runner it is given, before checking the characters' do
+      fake_runner.expect_call(['git', 'check-ref-format', '--branch', 'feat/24+x'], stdout: "feat/24+x\n")
       fake_runner.expect_call(['git', 'check-ref-format', '--branch', '@{-1}'], stdout: "previous\n")
+      fake_runner.expect_call(['git', 'check-ref-format', '--branch', 'feat/#24'], stdout: "feat/#24\n")
 
-      expect(described_class.branch!('feat/#24', runner: fake_runner)).to eq('feat/#24')
-      expect_rejected(:branch, ['@{-1}']) { |value| described_class.branch!(value, runner: fake_runner) }
+      expect(described_class.branch!('feat/24+x', runner: fake_runner)).to eq('feat/24+x')
+      expect_rejected(:branch, ['@{-1}', 'feat/#24']) { |value| described_class.branch!(value, runner: fake_runner) }
     end
   end
 end

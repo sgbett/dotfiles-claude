@@ -5,10 +5,10 @@ require_relative 'slug'
 
 module Do
   # Turns the data IssueQuery's GraphQL query returned into an
-  # IssueQuery::Result of records. The labels, sub-issues, branches and
-  # their pull requests must have come back whole (IncompleteResults
-  # otherwise); for comments, editors and renamers it records whether they
-  # did, for the caller to fail closed on.
+  # IssueQuery::Result of records. The sub-issues, branches and their pull
+  # requests must have come back whole (IncompleteResults otherwise); for
+  # labels, comments, editors and renamers it records whether they did, for
+  # the caller to fail closed on or report.
   class ResultMapping
     def initialize(data)
       @data = data
@@ -38,7 +38,8 @@ module Do
 
     def repository_facts(home)
       { viewer: @data.dig('viewer', 'login'), repository: home, repository_id: @repository['id'],
-        default_branch_ref: @repository.dig('defaultBranchRef', 'name'), labels: labels, branches: branches(home) }
+        default_branch_ref: @repository.dig('defaultBranchRef', 'name'), labels: labels,
+        labels_complete: complete?(@repository['labels']), branches: branches(home) }
     end
 
     def issue_facts
@@ -48,7 +49,7 @@ module Do
     end
 
     def labels
-      nodes(@repository, 'labels').map { |label| Label.new(id: label['id'], name: label['name']) }
+      Array(@repository.dig('labels', 'nodes')).map { |label| Label.new(id: label['id'], name: label['name']) }
     end
 
     def sub_issues

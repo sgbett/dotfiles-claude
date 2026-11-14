@@ -16,9 +16,11 @@ module Do
       resume_local: 'the local branch',
       resume_push_remote: "the push remote's copy",
       local_branch_unpushed: 'the local branch, once the user accepts its commits the push remote lacks',
-      checked_out_pr: 'none: the local branch is a checked-out pull request'
+      checked_out_pr: 'none: the local branch is a checked-out pull request, and the push remote has no copy',
+      remote_tips_differ: "none: the push remote's URLs hold different copies"
     }.freeze
     ACCEPTED = 'the local branch, which the user accepted with commits the push remote lacks'
+    FRESH_WORKTREE = "the push remote's copy, in a fresh worktree beside the local branch, a checked-out pull request"
 
     # Each is set once its step has run: the PushRemote::Verdict, the
     # BranchAssessment, the BranchPullRequests, the ScriptsCheckout's
@@ -63,16 +65,21 @@ module Do
     end
 
     def resume_point
-      @branch.accepted? ? ACCEPTED : RESUME_POINTS.fetch(@branch.state)
+      return ACCEPTED if @branch.accepted?
+      return FRESH_WORKTREE if @branch.fresh_worktree?
+
+      RESUME_POINTS.fetch(@branch.state)
     end
 
+    # remote_tip is the commit a resume from the push remote checks out;
+    # remote_tips, given only when they differ, are each push URL's.
     def branch
       return unless @branch
 
       facts = @branch.facts
       { name: @options.branch, state: @branch.state, local_tip: facts.local_tip, remote_tip: facts.remote_tip,
-        accepted: @branch.accepted?, resume_from_push_remote: @branch.resume_from_push_remote?,
-        pull_requests: @pull_requests&.to_a }.compact
+        remote_tips: (facts.remote_tips if facts.remote_tips_differ?), accepted: @branch.accepted?,
+        fresh_worktree: @branch.fresh_worktree?, pull_requests: @pull_requests&.to_a }.compact
     end
 
     def security_focus
@@ -91,10 +98,13 @@ module Do
       remote_details.merge(branch_details, checkout_details).compact
     end
 
+    # The forks are those the remote passed with, or on fork_not_writable
+    # those the user can't write to.
     def remote_details
       return {} unless @remote
 
-      { push_urls: @remote.urls, push_remote_forks: (@remote.forks if remote_passed?), stderr: @remote.stderr }
+      { push_urls: @remote.urls, push_remote_forks: (@remote.forks if remote_passed? || @remote.fork?),
+        stderr: @remote.stderr }
     end
 
     # Commit subjects can carry issue text.

@@ -9,6 +9,7 @@ module Do
   # one; whatever an answer needs travels beside it in validated fields.
   module Reasons
     NOT_AN_ISSUE = :not_an_issue
+    HOST_NOT_LOGGED_IN = :host_not_logged_in
     NO_ORIGIN = :no_origin
     COMMENTS_TRUNCATED = :comments_truncated
     UNTRUSTED_AUTHOR_CRITERIA = :untrusted_author_criteria
@@ -18,9 +19,12 @@ module Do
     HOST_MISMATCH = :host_mismatch
     REMOTE_UNRESOLVABLE = :remote_unresolvable
     PUSH_REMOTE_NOT_THIS_REPOSITORY = :push_remote_not_this_repository
+    FORK_NOT_WRITABLE = :fork_not_writable
     PR_TARGET_NOT_THIS_REPOSITORY = :pr_target_not_this_repository
+    BRANCH_IS_BASE_OR_DEFAULT = :branch_is_base_or_default
     BASE_MISSING = :base_missing
     CHECKED_OUT_PR = :checked_out_pr
+    REMOTE_TIPS_DIFFER = :remote_tips_differ
     UNTRUSTED_PULL_REQUEST = :untrusted_pull_request
     LOCAL_BRANCH_UNPUSHED = :local_branch_unpushed
     SCRIPTS_UNREVIEWED = :scripts_unreviewed
@@ -35,14 +39,18 @@ module Do
     GATE_UNANSWERED = :gate_unanswered
     GATE_LINE_MISSING = :gate_line_missing
 
-    PREFLIGHT_STOPS = [NOT_AN_ISSUE, GATE_ADVISORY, REMOTE_MISSING, HOST_MISMATCH, REMOTE_UNRESOLVABLE,
-                       PUSH_REMOTE_NOT_THIS_REPOSITORY, PR_TARGET_NOT_THIS_REPOSITORY, BASE_MISSING, CHECKED_OUT_PR,
-                       UNTRUSTED_PULL_REQUEST].freeze
+    PREFLIGHT_STOPS = [NOT_AN_ISSUE, HOST_NOT_LOGGED_IN, GATE_ADVISORY, REMOTE_MISSING, HOST_MISMATCH,
+                       REMOTE_UNRESOLVABLE, PUSH_REMOTE_NOT_THIS_REPOSITORY, FORK_NOT_WRITABLE,
+                       PR_TARGET_NOT_THIS_REPOSITORY, BRANCH_IS_BASE_OR_DEFAULT, BASE_MISSING, CHECKED_OUT_PR,
+                       REMOTE_TIPS_DIFFER, UNTRUSTED_PULL_REQUEST].freeze
     PREFLIGHT_ASKS = [NO_ORIGIN, COMMENTS_TRUNCATED, UNTRUSTED_AUTHOR_CRITERIA, GATE_RECORD_MISSING,
                       LOCAL_BRANCH_UNPUSHED, SCRIPTS_UNREVIEWED].freeze
     PREFLIGHT = (PREFLIGHT_STOPS + PREFLIGHT_ASKS).freeze
-    RECORD_STOPS = [NOT_AN_ISSUE, NO_LEDGER, BOX_MISSING, BODY_CHANGED, UNTRUSTED_ISSUE_AUTHOR, NOT_A_SUB_ISSUE,
-                    UNTRUSTED_SUB_ISSUE, NO_SUCH_FINDING, GATE_ADVISORY, GATE_ANSWERED, GATE_LINE_MISSING].freeze
+    # record finds its issue as pre-flight does (IssueLocator), so it shares
+    # host_not_logged_in and no_origin.
+    RECORD_STOPS = [NOT_AN_ISSUE, HOST_NOT_LOGGED_IN, NO_LEDGER, BOX_MISSING, BODY_CHANGED, UNTRUSTED_ISSUE_AUTHOR,
+                    NOT_A_SUB_ISSUE, UNTRUSTED_SUB_ISSUE, NO_SUCH_FINDING, GATE_ADVISORY, GATE_ANSWERED,
+                    GATE_LINE_MISSING].freeze
     RECORD_ASKS = [NO_ORIGIN, GATE_UNANSWERED].freeze
     RECORD = (RECORD_STOPS + RECORD_ASKS).freeze
     ALL = (PREFLIGHT | RECORD).freeze

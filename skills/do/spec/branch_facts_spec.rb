@@ -6,9 +6,11 @@ require_relative 'support/git_repositories'
 RSpec.describe Do::BranchFacts do
   include Do::Testing::GitRepositories
 
-  subject(:branch_facts) { described_class.new(SkillSupport::CommandRunner.new, remote: 'origin') }
+  subject(:branch_facts) { described_class.new(SkillSupport::CommandRunner.new, remote: 'origin', urls: [push_url]) }
 
   let(:branch) { 'feat/24-x' }
+  let(:push_url) { sandbox.path('remote.git') }
+  let(:remote_read) { ['git', *Do::Git::NO_HOOKS_OR_FSMONITOR] }
 
   before { bare_origin }
 
@@ -21,17 +23,34 @@ RSpec.describe Do::BranchFacts do
     commit(message)
   end
 
+  # A bare repository beside origin's, holding +branch+ at a commit of its
+  # own, which this checkout doesn't have; returns the commit.
+  def repository_with_branch(name)
+    path = sandbox.path(name)
+    clone = sandbox.path("#{name}-clone")
+    git('clone', '--quiet', push_url, clone)
+    git('switch', '--quiet', '-c', branch, chdir: clone)
+    tip = commit("On #{name}", chdir: clone)
+    git('init', '--quiet', '--bare', '--initial-branch=master', path)
+    git('push', '--quiet', path, "#{branch}:#{branch}", chdir: clone)
+    tip
+  end
+
+  def here?(commit)
+    system('git', 'cat-file', '-e', "#{commit}^{commit}", err: File::NULL)
+  end
+
   it 'finds a branch that is nowhere' do
-    expect(collect).to eq(remote_tip: nil, local_tip: nil, tracking_remote: nil, push_remote: nil, merge: nil,
-                          lacking: nil, more_lacking: false)
+    expect(collect).to eq(remote_tips: [nil], remote_tip: nil, local_tip: nil, tracking_remote: nil, push_remote: nil,
+                          merge: nil, lacking: nil, more_lacking: false)
   end
 
   it 'reads a pushed branch that tracks its copy and lacks nothing there' do
     tip = start_branch('Work')
     git('push', '--quiet', '-u', 'origin', branch)
 
-    expect(collect).to eq(remote_tip: tip, local_tip: tip, tracking_remote: 'origin', push_remote: nil,
-                          merge: "refs/heads/#{branch}", lacking: [], more_lacking: false)
+    expect(collect).to eq(remote_tips: [tip], remote_tip: tip, local_tip: tip, tracking_remote: 'origin',
+                          push_remote: nil, merge: "refs/heads/#{branch}", lacking: [], more_lacking: false)
   end
 
   it 'lists the commits a pushed branch is ahead by, newest first, in the form git log prints' do
@@ -49,19 +68,51 @@ RSpec.describe Do::BranchFacts do
     expect(collect.values_at(:remote_tip, :local_tip, :lacking)).to eq([nil, tip, [log_line(tip)]])
   end
 
-  it "fetches the push remote's tip to compare with, when it isn't here yet" do
-    other = sandbox.path('other')
-    git('clone', '--quiet', sandbox.path('remote.git'), other)
-    git('switch', '--quiet', '-c', branch, chdir: other)
-    remote_tip = commit('From another clone', chdir: other)
-    git('push', '--quiet', 'origin', branch, chdir: other)
-    git('switch', '--quiet', '-c', branch)
-    git('config', "branch.#{branch}.remote", 'origin')
-    git('config', "branch.#{branch}.merge", "refs/heads/#{branch}")
+  it "fetches the push remote's tip from the push URL, to compare with or for the lead to check out" do
+    remote_tip = repository_with_branch('pushed.git')
+    pushed = described_class.new(SkillSupport::CommandRunner.new, remote: 'origin', urls: [sandbox.path('pushed.git')])
 
-    expect(system('git', 'cat-file', '-e', remote_tip, err: File::NULL)).to be(false)
-    expect(collect.values_at(:remote_tip, :lacking)).to eq([remote_tip, []])
-    expect(system('git', 'cat-file', '-e', remote_tip)).to be(true)
+    expect(here?(remote_tip)).to be(false)
+    expect(pushed.collect(branch).to_h.values_at(:remote_tip, :local_tip)).to eq([remote_tip, nil])
+    expect(here?(remote_tip)).to be(true)
+
+    git('switch', '--quiet', '-c', branch, remote_tip)
+    expect(pushed.collect(branch).to_h.values_at(:remote_tip, :lacking)).to eq([remote_tip, []])
+  end
+
+  it "reads the branch from the push URLs alone, never through the remote's fetch URL to another repository" do
+    elsewhere = repository_with_branch('elsewhere.git')
+    git('remote', 'set-url', 'origin', sandbox.path('elsewhere.git'))
+    git('config', 'remote.origin.pushurl', push_url)
+
+    expect(git('ls-remote', 'origin', "refs/heads/#{branch}")).to start_with(elsewhere)
+    expect(collect.values_at(:remote_tips, :remote_tip, :local_tip)).to eq([[nil], nil, nil])
+    expect(here?(elsewhere)).to be(false)
+  end
+
+  it "gives each push URL's tip, and none they share, when they differ, looking no further" do
+    elsewhere = repository_with_branch('elsewhere.git')
+    git('push', '--quiet', 'origin', "master:refs/heads/#{branch}")
+    origin_tip = git('rev-parse', 'master').chomp
+    start_branch('Local')
+    [[push_url, sandbox.path('elsewhere.git')], [sandbox.path('elsewhere.git'), sandbox.path('remote.git')]]
+      .zip([[origin_tip, elsewhere], [elsewhere, origin_tip]]).each do |urls, tips|
+        facts = described_class.new(SkillSupport::CommandRunner.new, remote: 'origin', urls: urls).collect(branch)
+
+        expect([facts.remote_tips, facts.remote_tip, facts.remote_tips_differ?, facts.local_tip])
+          .to eq([tips, nil, true, nil])
+      end
+    expect(here?(elsewhere)).to be(false)
+  end
+
+  it 'counts a branch on only some push URLs as differing' do
+    git('push', '--quiet', 'origin', "master:refs/heads/#{branch}")
+    nowhere = sandbox.path('empty.git')
+    git('init', '--quiet', '--bare', '--initial-branch=master', nowhere)
+    facts = described_class.new(SkillSupport::CommandRunner.new, remote: 'origin', urls: [push_url, nowhere])
+                           .collect(branch)
+
+    expect([facts.remote_tips, facts.remote_tip]).to eq([[git('rev-parse', 'master').chomp, nil], nil])
   end
 
   it 'matches the branch on the push remote by its whole name, which ls-remote matches as the end of a name' do
@@ -71,20 +122,32 @@ RSpec.describe Do::BranchFacts do
     expect(collect[:remote_tip]).to be_nil
   end
 
-  it "doesn't compare with a tip the push remote no longer has, as after a force-push mid-run" do
+  it 'fails as a tool when the fetch brings no copy at the tip ls-remote gave, as after a force-push mid-run' do
     ref = "refs/heads/#{branch}"
     gone = 'c' * 40
-    branch_facts = described_class.new(fake_runner, remote: 'origin')
-    fake_runner.expect_call(['git', 'ls-remote', 'origin', ref], stdout: "#{gone}\t#{ref}\n")
-    fake_runner.expect_call(['git', 'rev-parse', '--verify', '--quiet', ref], stdout: "#{'a' * 40}\n")
-    %w[remote pushRemote merge].each do |key|
-      fake_runner.expect_call(['git', 'config', '--get', "branch.#{branch}.#{key}"], exit_status: 1)
-    end
+    branch_facts = described_class.new(fake_runner, remote: 'origin', urls: [push_url])
+    fake_runner.expect_call([*remote_read, 'ls-remote', push_url, ref], stdout: "#{gone}\t#{ref}\n")
     fake_runner.expect_call(['git', 'rev-parse', '--verify', '--quiet', "#{gone}^{commit}"], exit_status: 1)
-    fake_runner.expect_call(['git', 'fetch', '--no-tags', '--quiet', 'origin', ref])
+    fake_runner.expect_call([*remote_read, 'fetch', '--no-tags', '--quiet', push_url, ref])
     fake_runner.expect_call(['git', 'rev-parse', '--verify', '--quiet', "#{gone}^{commit}"], exit_status: 1)
 
-    expect(branch_facts.collect(branch).to_h.values_at(:remote_tip, :lacking, :more_lacking)).to eq([gone, nil, false])
+    expect { branch_facts.collect(branch) }
+      .to raise_error(Do::BranchMoved, "the push remote's #{ref} moved while check read it; run check again")
+  end
+
+  it 'runs neither hooks nor an fsmonitor the checkout configures when it reads the push URLs' do
+    marker = sandbox.path('ran')
+    hook = sandbox.path('hooks', 'reference-transaction')
+    FileUtils.mkdir_p(File.dirname(hook))
+    File.write(hook, "#!/bin/sh\ntouch '#{marker}'\n")
+    File.chmod(0o755, hook)
+    git('config', 'core.hooksPath', File.dirname(hook))
+    git('config', 'core.fsmonitor', hook)
+    repository_with_branch('pushed.git')
+    described_class.new(SkillSupport::CommandRunner.new, remote: 'origin', urls: [sandbox.path('pushed.git')])
+                   .collect(branch)
+
+    expect(File).not_to exist(marker)
   end
 
   it 'reads the configuration a checked-out pull request leaves behind' do
@@ -104,9 +167,11 @@ RSpec.describe Do::BranchFacts do
     expect([facts[:lacking].length, facts[:lacking].first, facts[:more_lacking]]).to eq([50, log_line(tip), true])
   end
 
-  it 'fails as a tool when the push remote cannot be reached' do
-    git('remote', 'set-url', 'origin', sandbox.path('nowhere.git'))
+  it 'fails as a tool when a push URL cannot be reached' do
+    nowhere = sandbox.path('nowhere.git')
+    unreachable = described_class.new(SkillSupport::CommandRunner.new, remote: 'origin', urls: [nowhere])
+    call = [*remote_read, 'ls-remote', nowhere, "refs/heads/#{branch}"].join(' ')
 
-    expect { collect }.to raise_error(Do::GitError, %r{\Agit ls-remote origin refs/heads/feat/24-x exited 128})
+    expect { unreachable.collect(branch) }.to raise_error(Do::GitError, /\A#{Regexp.escape(call)} exited 128/)
   end
 end
