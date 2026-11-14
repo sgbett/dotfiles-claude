@@ -1,0 +1,8 @@
+{
+  "query": "query CopilotCheckPullRequest($owner: String!, $name: String!, $number: Int!) {\n  viewer { login }\n  repository(owner: $owner, name: $name) {\n    pullRequest(number: $number) {\n      state isDraft isCrossRepository headRefOid mergeable changedFiles\n      author { login }\n      autoMergeRequest { enabledAt }\n    }\n  }\n}\n",
+  "variables": {
+    "owner": "sgbett",
+    "name": "dotfiles-claude",
+    "number": 18
+  }
+}

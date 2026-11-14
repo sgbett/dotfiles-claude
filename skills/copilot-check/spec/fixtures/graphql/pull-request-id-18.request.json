@@ -1,0 +1,8 @@
+{
+  "query": "query CopilotCheckPullRequestId($owner: String!, $name: String!, $number: Int!) {\n  repository(owner: $owner, name: $name) {\n    pullRequest(number: $number) { id }\n  }\n}\n",
+  "variables": {
+    "owner": "sgbett",
+    "name": "dotfiles-claude",
+    "number": 18
+  }
+}

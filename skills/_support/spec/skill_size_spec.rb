@@ -9,9 +9,7 @@ RSpec.describe 'The character ceiling on SKILL.md' do
   ceiling = 19_000
   # Skills allowed over the ceiling until a planned cut. Each one's example
   # fails once it is within the ceiling, so its exception goes then.
-  # copilot-check: until sgbett/dotfiles-claude#24's L10 moves its inline
-  # blocks into scripts.
-  exceptions = %w[copilot-check]
+  exceptions = %w[]
   # Vendored skills, reached through symlinks into vendor/, are another
   # project's to cut.
   skill_files = Dir[File.join(SkillSupport::Testing::Helpers::REPOSITORY_ROOT, 'skills', '*', 'SKILL.md')]

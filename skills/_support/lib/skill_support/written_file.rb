@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-module Do
+module SkillSupport
   # A file a script was given can't be read: missing, a symlink, or not a
   # regular file.
-  class UnusableFile < SkillSupport::Error; end
+  class UnusableFile < Error; end
 
-  # A file the lead wrote with the Write tool, so that text from the user or
-  # from GitHub never passes through a shell: the issue /do was given, or a
-  # security finding. Read as a regular file, never through a symlink.
+  # A file the lead wrote, with the Write tool or from a command's output, so
+  # that text from the user or from GitHub never passes through a shell. Read
+  # as a regular file, never through a symlink.
   module WrittenFile
     # NONBLOCK stops a FIFO from hanging the open.
     OPEN_FLAGS = File::RDONLY | File::NOFOLLOW | File::NONBLOCK
@@ -20,7 +20,7 @@ module Do
     # control character.
     def path!(kind, value)
       unless value.is_a?(String) && !value.empty? && !value.start_with?('-') && !CONTROL_CHARACTER.match?(value)
-        raise SkillSupport::InvalidIdentifier.new(kind, value)
+        raise InvalidIdentifier.new(kind, value)
       end
 
       value

@@ -5,6 +5,12 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
 
+# An entry is named after its bin/ stub, which can take a hyphen, as
+# copilot-check's promote-check does.
+Naming/FileName:
+  Exclude:
+    - '*/lib/*-*.rb'
+
 # RSpec example groups are long blocks by design.
 Metrics/BlockLength:
   Exclude:

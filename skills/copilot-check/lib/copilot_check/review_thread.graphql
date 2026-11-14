@@ -1,0 +1,9 @@
+query CopilotCheckReviewThread($id: ID!) {
+  node(id: $id) {
+    ... on PullRequestReviewThread {
+      id isResolved
+      first: comments(first: 1) { nodes { author { __typename login ... on Bot { id } } } }
+      last: comments(last: 1) { nodes { viewerDidAuthor } }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+mutation CopilotCheckResolveReviewThread($id: ID!) {
+  resolveReviewThread(input: { threadId: $id }) {
+    thread { id isResolved }
+  }
+}

@@ -4,7 +4,6 @@ require_relative 'checklist'
 require_relative 'ledger'
 require_relative 'scripts_checkout'
 require_relative 'usage_error'
-require_relative 'written_file'
 
 module Do
   # The arguments of `record`, every one validated before anything else
@@ -106,7 +105,7 @@ module Do
       case flag
       when '--base' then SkillSupport::Identifiers.branch!(value, runner: runner)
       when '--number' then SkillSupport::Identifiers.issue_number!(value)
-      when '--finding-file' then WrittenFile.path!(:finding_file, value)
+      when '--finding-file' then SkillSupport::WrittenFile.path!(:finding_file, value)
       when '--boxes-digest' then Checklist.digest!(value)
       when ScriptsCheckout::ACCEPT_FLAG then ScriptsCheckout.token!(value)
       else send(CONVERTERS.fetch(flag), value)

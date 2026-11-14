@@ -1,0 +1,6 @@
+{
+  "query": "query CopilotCheckReviewThread($id: ID!) {\n  node(id: $id) {\n    ... on PullRequestReviewThread {\n      id isResolved\n      first: comments(first: 1) { nodes { author { __typename login ... on Bot { id } } } }\n      last: comments(last: 1) { nodes { viewerDidAuthor } }\n    }\n  }\n}\n",
+  "variables": {
+    "id": "PRRT_kwDOQzoXSs6wwd00"
+  }
+}

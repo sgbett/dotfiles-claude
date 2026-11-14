@@ -1,0 +1,10 @@
+query CopilotCheckPullRequest($owner: String!, $name: String!, $number: Int!) {
+  viewer { login }
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      state isDraft isCrossRepository headRefOid mergeable changedFiles
+      author { login }
+      autoMergeRequest { enabledAt }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+query CopilotCheckThreads($owner: String!, $name: String!, $number: Int!, $copilot: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      latest: reviews(last: 1, author: $copilot) {
+        nodes { submittedAt author { ... on Bot { id } } comments { totalCount } commit { oid } }
+      }
+      reviews(last: 100, author: $copilot) {
+        pageInfo { hasNextPage hasPreviousPage }
+        nodes { databaseId author { ... on Bot { id } } body }
+      }
+      comments(last: 100) {
+        pageInfo { hasNextPage hasPreviousPage }
+        nodes { viewerDidAuthor body }
+      }
+      reviewThreads(first: 100) {
+        pageInfo { hasNextPage hasPreviousPage }
+        nodes {
+          id isResolved isOutdated
+          first: comments(first: 1) {
+            nodes {
+              databaseId path line originalLine originalCommit { oid } body
+              author { __typename login ... on Bot { id } }
+            }
+          }
+          last: comments(last: 1) { nodes { viewerDidAuthor } }
+        }
+      }
+    }
+  }
+}

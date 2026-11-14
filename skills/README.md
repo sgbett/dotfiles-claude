@@ -39,7 +39,7 @@ exit SkillSupport::Cli.run('record', reasons: Do::Reasons::RECORD) { Do::Record.
 
 ## Runtime
 
-- **This repository's Ruby.** Claude Code's `PATH` has the Ruby of the directory it started in, possibly 2.x, so `ruby-launch` runs `mise which ruby` in its own directory, where this repository's `.ruby-version` applies, falling back to `ruby`. It lets mise read no config or tool-versions file but `mise.toml`, `.mise.toml` and `.tool-versions`, and no environment's or platform's `mise.<name>.toml`, so `/do`'s check that its scripts are the reviewed ones covers every file that can pick another Ruby: those, Ruby's own `.ruby-version` and `Gemfile`, and mise's early-init `.miserc.toml` and `.config/miserc.toml`.
+- **This repository's Ruby.** Claude Code's `PATH` has the Ruby of the directory it started in, possibly 2.x, so `ruby-launch` runs `mise which ruby` in its own directory, where this repository's `.ruby-version` applies, falling back to `ruby`. It lets mise read no config or tool-versions file but `mise.toml`, `.mise.toml` and `.tool-versions`, and no environment's or platform's `mise.<name>.toml`, so the check that a skill's scripts are the reviewed ones (`ScriptsCheckout`) covers every file that can pick another Ruby: those, Ruby's own `.ruby-version` and `Gemfile`, and mise's early-init `.miserc.toml` and `.config/miserc.toml`.
 - **None of the caller's environment.** Ruby runs with `--disable=rubyopt`, and with `RUBYOPT`, `RUBYLIB`, `GEM_HOME`, `GEM_PATH` and `BUNDLE_GEMFILE` cleared, so the calling repository's Bundler, load path and gems can't reach the script.
 - **A version guard.** The preamble, in syntax Ruby 2 can parse (Ruby parses a whole file before running any of it), stops a Ruby older than 3.1 with a tool failure. The code it loads may use 3.1 syntax, never newer: `.rubocop.yml` targets 3.1.
 - **The standard library only.** No `Gemfile`, since Bundler walks up from the working directory, which is another repository. Specs and lint use RSpec and RuboCop as installed in this repository's Ruby.
@@ -56,6 +56,10 @@ What every script needs is in `_support/lib/`:
 | `Gh#api`, `#graphql`, `#repo_view`, `#logged_in?` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data`; whether gh's active account there is logged in |
 | `Pagination.ensure_complete!` | Fails when a GraphQL connection has another page, or can't show it hasn't |
 | `RepositoryFiles#read` | A file at a ref through GitHub's contents API: `nil` only for a 404 "Not Found" |
+| `WrittenFile.read`, `.path!` | A file the lead wrote, read as a regular file, never through a symlink; and the check on the path a flag gives |
+| `Git#run`, `#output`, `#line_or_nil` | git through the runner, raising `GitError` on an exit status the caller doesn't allow |
+| `Porcelain.entries` | `git status --porcelain=v1 -z` as entries |
+| `ScriptsCheckout#examine` | Whether the checkout a skill's scripts run from may hold unreviewed scripts, and the `scripts_unreviewed` ask, in the skill's words, whose yes `--accept-scripts <digest>` names that state |
 | `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, a branch name only `[A-Za-z0-9._/+#-]`, and a remote's only `[A-Za-z0-9._-]` |
 | `RemoteUrl.host`, `.redacted` | A git remote URL's host, and the URL with any credentials masked, as `GhError`'s message prints it |
 
@@ -83,7 +87,7 @@ Exit 1 is a tool failure: no stdout, and `<name>: tool failure: <why>` on stderr
 
 ## Writes
 
-On GitHub, a script only edits an existing body in place: a ticked box, a ledger line added or rewritten. It makes the edit from one read, reads again just before writing and writes only if nothing changed in between (else it stops with `body_changed`), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
+On GitHub, a script only changes what already exists, in place: a ticked box, a ledger line added or rewritten, a review thread resolved, or Copilot asked to review again. It makes an edit or a resolve from one read, reads again just before writing and writes only if nothing changed in between (else an edit stops with `body_changed`, and a thread is left for the next round), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
 
 ## Calling a script
 
@@ -128,4 +132,10 @@ Each review round finds a gap, and each fix adds a clause. Two limits push back:
 
 ## Evaluation
 
-Not yet investigated: [#24](https://github.com/sgbett/dotfiles-claude/issues/24)'s L11 settles whether `claude plugin eval` can replay a skill's walk-throughs.
+Not adopted yet ([#24](https://github.com/sgbett/dotfiles-claude/issues/24)'s L11, Claude Code 2.1.287): `claude plugin eval` can replay a walk-through's recorded history, but not the lead's decision at the point a run makes it, and every case is another copy of `SKILL.md` to keep in step.
+
+- **What works.** A throwaway manifest around copies of `skills/do` and `skills/_support` validates, and the plugin loads `do` as its only skill. A case's `context.history_file`, a hand-built transcript in which `preflight facts` stops with `not_an_issue`, reaches the model intact. Free graders fit: `tool_used` with `max: 0` counts only the new turn's calls, and `regex` reads the last message.
+- **What doesn't.** When it resumes a transcript that ends at a tool result, Claude Code closes that turn with a synthetic "No response requested." before the case's prompt, so a case tests the lead's answer to a new user turn, not its next move on a script's output. The transcript embeds `SKILL.md` with its paths filled in, so it goes stale with every edit, and resuming writes the continued session beside it.
+- **The sandbox.** Bash and Write need the case's `allowed_tools` and `--allow-tools`, or they're withheld and a `max: 0` grader passes vacuously. The run has a temporary home with no `CLAUDE.md`, memory or `gh` login, and a case may set only `EVAL_*` variables, so pre-flight can't run live there. The first eval in a plugin directory needs the owner's assertion of trust: the first-run prompt in a terminal, or `--trust-plugin` given only on the owner's say-so.
+- **Cost.** Not measured: `claude plugin eval` stops at a trust step that needs the owner's assertion of trust; the findings above come from Claude Code 2.1.287's code and a $0 run against a local stand-in API.
+- **Revisit** when a resumed history can continue its last turn, or for an `ask` the user answers, which does start a new turn: a history ending at the lead's question, the answer as the prompt, and a `tool_used` grader on the rerun with `accept_with`. Build the plugin wrapper outside the repository, run it with `--runs 1 --ablation none --max-cost-usd 2 --no-publish`, and commit no results or transcripts.
