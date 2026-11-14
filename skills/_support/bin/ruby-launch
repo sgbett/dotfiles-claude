@@ -23,9 +23,9 @@ esac
 here=$(cd -P -- "$(dirname -- "$0")" && pwd) || exit 1
 # mise picks the Ruby that .ruby-version pins for the directory it runs in,
 # reading only config and tool-versions files of these names, and no
-# environment's or platform's mise.<name>.toml, so that /do's scripts digest
-# (ScriptsCheckout::RUBY_FILES, held in step by its spec) covers every file
-# that can pick another Ruby.
+# environment's or platform's mise.<name>.toml, so that the scripts digest
+# (SkillSupport::ScriptsCheckout::RUBY_FILES, held in step by /do's
+# scripts_checkout_spec.rb) covers every file that can pick another Ruby.
 ruby=$(cd "$here" && MISE_OVERRIDE_CONFIG_FILENAMES='mise.toml:.mise.toml' \
   MISE_OVERRIDE_TOOL_VERSIONS_FILENAMES='.tool-versions' MISE_ENV='' MISE_AUTO_ENV=false \
   mise which ruby 2>/dev/null) || ruby=ruby

@@ -39,7 +39,7 @@ exit SkillSupport::Cli.run('record', reasons: Do::Reasons::RECORD) { Do::Record.
 
 ## Runtime
 
-- **This repository's Ruby.** Claude Code's `PATH` has the Ruby of the directory it started in, possibly 2.x, so `ruby-launch` runs `mise which ruby` in its own directory, where this repository's `.ruby-version` applies, falling back to `ruby`. It lets mise read no config or tool-versions file but `mise.toml`, `.mise.toml` and `.tool-versions`, and no environment's or platform's `mise.<name>.toml`, so `/do`'s check that its scripts are the reviewed ones covers every file that can pick another Ruby: those, Ruby's own `.ruby-version` and `Gemfile`, and mise's early-init `.miserc.toml` and `.config/miserc.toml`.
+- **This repository's Ruby.** Claude Code's `PATH` has the Ruby of the directory it started in, possibly 2.x, so `ruby-launch` runs `mise which ruby` in its own directory, where this repository's `.ruby-version` applies, falling back to `ruby`. It lets mise read no config or tool-versions file but `mise.toml`, `.mise.toml` and `.tool-versions`, and no environment's or platform's `mise.<name>.toml`, so the check that a skill's scripts are the reviewed ones (`ScriptsCheckout`) covers every file that can pick another Ruby: those, Ruby's own `.ruby-version` and `Gemfile`, and mise's early-init `.miserc.toml` and `.config/miserc.toml`.
 - **None of the caller's environment.** Ruby runs with `--disable=rubyopt`, and with `RUBYOPT`, `RUBYLIB`, `GEM_HOME`, `GEM_PATH` and `BUNDLE_GEMFILE` cleared, so the calling repository's Bundler, load path and gems can't reach the script.
 - **A version guard.** The preamble, in syntax Ruby 2 can parse (Ruby parses a whole file before running any of it), stops a Ruby older than 3.1 with a tool failure. The code it loads may use 3.1 syntax, never newer: `.rubocop.yml` targets 3.1.
 - **The standard library only.** No `Gemfile`, since Bundler walks up from the working directory, which is another repository. Specs and lint use RSpec and RuboCop as installed in this repository's Ruby.
@@ -57,6 +57,9 @@ What every script needs is in `_support/lib/`:
 | `Pagination.ensure_complete!` | Fails when a GraphQL connection has another page, or can't show it hasn't |
 | `RepositoryFiles#read` | A file at a ref through GitHub's contents API: `nil` only for a 404 "Not Found" |
 | `WrittenFile.read`, `.path!` | A file the lead wrote, read as a regular file, never through a symlink; and the check on the path a flag gives |
+| `Git#run`, `#output`, `#line_or_nil` | git through the runner, raising `GitError` on an exit status the caller doesn't allow |
+| `Porcelain.entries` | `git status --porcelain=v1 -z` as entries |
+| `ScriptsCheckout#examine` | Whether the checkout a skill's scripts run from may hold unreviewed scripts, and the `scripts_unreviewed` ask, in the skill's words, whose yes `--accept-scripts <digest>` names that state |
 | `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, a branch name only `[A-Za-z0-9._/+#-]`, and a remote's only `[A-Za-z0-9._-]` |
 | `RemoteUrl.host`, `.redacted` | A git remote URL's host, and the URL with any credentials masked, as `GhError`'s message prints it |
 
