@@ -24,8 +24,8 @@ module Do
 
     # Each is set once its step has run: the PushRemote::Verdict, the
     # BranchAssessment, the BranchPullRequests, the ScriptsCheckout's
-    # Inspection, the SecurityFocus::Result and the working tree's Porcelain
-    # entries.
+    # Inspection, the SkillSupport::SecurityFocus::Result and the working
+    # tree's Porcelain entries.
     attr_writer :remote, :branch, :pull_requests, :scripts, :focus, :changes
 
     # +options+ are CheckArguments' Options; +repository+ this repository's

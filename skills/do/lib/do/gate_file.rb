@@ -2,7 +2,6 @@
 
 require_relative 'gate_state'
 require_relative 'local_records'
-require_relative 'markdown'
 require_relative 'private_file'
 
 module Do
@@ -71,7 +70,7 @@ module Do
       @findings = {}
       @headings = {}
       awaiting_answer = nil
-      Markdown.lines_with_fences(text).each_with_index do |(line, fenced), index|
+      SkillSupport::Markdown.lines_with_fences(text).each_with_index do |(line, fenced), index|
         awaiting_answer = read_line(line, index, awaiting_answer) unless fenced
       end
     end

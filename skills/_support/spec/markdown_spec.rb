@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../lib/do/markdown'
-
-RSpec.describe Do::Markdown do
+RSpec.describe SkillSupport::Markdown do
   def unfenced(text)
     described_class.unfenced_lines(text)
   end

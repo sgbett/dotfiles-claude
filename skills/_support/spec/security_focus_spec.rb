@@ -1,20 +1,42 @@
 # frozen_string_literal: true
 
-require_relative 'support/check_calls'
-
-RSpec.describe Do::SecurityFocus do
-  include Do::Testing::CheckCalls
-
+RSpec.describe SkillSupport::SecurityFocus do
   subject(:focus) do
     described_class.new(SkillSupport::RepositoryFiles.new(SkillSupport::Gh.new(host: 'github.com',
                                                                                runner: fake_runner)))
   end
 
-  let(:sha) { Do::Testing::CheckCalls::BASE_SHA }
-  let(:here) { Do::Testing::CheckCalls::HERE }
+  let(:sha) { '6b9895d961416bbb7561778aff4e651822796e9e' }
+  let(:repository) { 'sgbett/dotfiles-claude' }
 
   def read
-    focus.read(here, sha)
+    focus.read(repository, sha)
+  end
+
+  def contents_call(path, ref)
+    ['gh', 'api', '--hostname', 'github.com', '-X', 'GET', "repos/#{repository}/contents/#{path}", '-f',
+     "ref=#{ref}"]
+  end
+
+  # A contents API call answered with +body+, or with the recorded 404 for
+  # nil.
+  def expect_contents(path, ref, body)
+    return fake_runner.expect_call(contents_call(path, ref), stdout: JSON.generate(body)) if body
+
+    fake_runner.expect_call(contents_call(path, ref), exit_status: 1, stdout: fixture('contents/not-found.json'),
+                                                      stderr: fixture('contents/not-found.stderr'))
+  end
+
+  # CLAUDE.md holding +text+, or none for nil, and no .claude/rules/.
+  def expect_claude_md_without_rules(text)
+    expect_contents('CLAUDE.md', sha, text && contents_file('CLAUDE.md', text))
+    expect_contents('.claude/rules', sha, nil)
+  end
+
+  # The contents API's answer for a file holding +text+.
+  def contents_file(path, text)
+    { 'name' => File.basename(path), 'path' => path, 'type' => 'file', 'encoding' => 'base64',
+      'content' => [text].pack('m') }
   end
 
   def listing(*entries)
@@ -22,7 +44,7 @@ RSpec.describe Do::SecurityFocus do
   end
 
   it "reads CLAUDE.md's section at the commit given, when .claude/rules/ is absent" do
-    expect_focus_step(claude_md: "# Project\n\n## Security focus\n\nSecrets.\n\n## Code Style\n")
+    expect_claude_md_without_rules("# Project\n\n## Security focus\n\nSecrets.\n\n## Code Style\n")
     result = read
 
     expect([result.found?, result.sources, result.text]).to eq([true, ['CLAUDE.md'], "## Security focus\n\nSecrets."])
@@ -45,16 +67,15 @@ RSpec.describe Do::SecurityFocus do
   end
 
   it 'finds no focus when neither has a section, or neither exists' do
-    expect_focus_step
-    expect_focus_step(claude_md: nil)
+    expect_claude_md_without_rules("# Example\n\n## Code Style\n\nPlain.\n")
+    expect_claude_md_without_rules(nil)
 
     expect([read, read].map { |result| [result.found?, result.sources, result.text] }).to eq([[false, [], '']] * 2)
   end
 
   it 'fails as a tool on any answer but 404 Not Found' do
-    fake_runner.expect_call(['gh', 'api', '--hostname', 'github.com', '-X', 'GET', "repos/#{here}/contents/CLAUDE.md",
-                             '-f', "ref=#{sha}"], exit_status: 1, stdout: '{"message":"Bad credentials"}',
-                                                  stderr: "gh: Bad credentials (HTTP 401)\n")
+    fake_runner.expect_call(contents_call('CLAUDE.md', sha), exit_status: 1, stdout: '{"message":"Bad credentials"}',
+                                                             stderr: "gh: Bad credentials (HTTP 401)\n")
 
     expect { read }.to raise_error(SkillSupport::GhError, /HTTP 401/)
   end

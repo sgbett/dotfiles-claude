@@ -12,7 +12,6 @@ require_relative 'push_remote'
 require_relative 'reasons'
 require_relative 'records'
 require_relative 'scripts_checkout'
-require_relative 'security_focus'
 require_relative 'trust'
 
 module Do
@@ -114,8 +113,8 @@ module Do
 
     # At the base branch's commit, so every file comes from one snapshot.
     def read_security_focus
-      @report.focus = SecurityFocus.new(SkillSupport::RepositoryFiles.new(@github))
-                                   .read(@issue.repository, @base_commit)
+      @report.focus = SkillSupport::SecurityFocus.new(SkillSupport::RepositoryFiles.new(@github))
+                                                 .read(@issue.repository, @base_commit)
     end
 
     # Pull requests into this repository were written in it.
