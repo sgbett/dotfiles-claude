@@ -24,17 +24,18 @@ module Do
       @runner = runner
     end
 
-    # The Result of `git ARGUMENTS`, whose exit status must be in +allowed+.
-    def run(*arguments, allowed: [0])
-      result = @runner.run(['git', *arguments])
+    # The Result of `git ARGUMENTS`, given +stdin+ on its standard input,
+    # whose exit status must be in +allowed+.
+    def run(*arguments, allowed: [0], stdin: nil)
+      result = @runner.run(['git', *arguments], stdin: stdin)
       raise GitError.new(arguments, result) unless allowed.include?(result.exit_status)
 
       result
     end
 
     # What a call that must succeed printed, as valid UTF-8.
-    def output(*arguments)
-      run(*arguments).stdout.scrub
+    def output(*arguments, stdin: nil)
+      run(*arguments, stdin: stdin).stdout.scrub
     end
 
     # The first line a call printed when it exits 0, or nil when it exits 1,

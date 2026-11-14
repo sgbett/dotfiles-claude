@@ -67,7 +67,7 @@ RSpec.describe Do::Check do
 
       expect([exit_code, output['branch']['remote_tip']]).to eq([0, remote_tip])
       expect(git_calls.select { |argv| argv.include?('ls-remote') }.map { |argv| argv.last(2) })
-        .to eq([[origin_url, "refs/heads/#{branch}"], [mirror, "refs/heads/#{branch}"]])
+        .to eq([['--heads', origin_url], ['--heads', mirror]])
     end
 
     it 'lists a trusted pull request open on the branch, for the lead to update' do
@@ -246,7 +246,8 @@ RSpec.describe Do::Check do
         .to eq([3, [{ 'reason' => 'local_branch_unpushed', 'message' => message(:local_branch_unpushed),
                       'accept_with' => ['--accept-local-branch', local_tip] }]])
       expect(output['session_only']).to include('local_branch_commits' => commits,
-                                                'local_branch_commits_truncated' => false)
+                                                'local_branch_commits_truncated' => false,
+                                                'local_branch_commits_approximate' => false)
       expect(JSON.generate(output.except('session_only'))).not_to include('Work the push remote lacks')
       expect([output['branch']['state'], output['read']]).to eq(['local_branch_unpushed', ['references/resume.md']])
     end
@@ -259,6 +260,15 @@ RSpec.describe Do::Check do
       expect(run_check.last['session_only']['local_branch_commits']).to eq(['1234567 Example Author Work'])
       fetch, log = git_calls.select { |argv| argv.intersect?(%w[fetch log]) }
       expect([fetch.last(2), log.last(4)]).to eq([[origin_url, base], ["refs/heads/#{branch}", '--not', base, '--']])
+    end
+
+    it "says the list may hold commits the push remote has when it can't fetch the tip of one of its branches" do
+      expect_check(branch: { local_tip: local_tip, other_tips_here: false, lacking: ['1234567 Example Author Work'] })
+      exit_code, output = run_check
+
+      expect([exit_code, output['asks'].map { |ask| ask['reason'] }]).to eq([3, ['local_branch_unpushed']])
+      expect(output['session_only']).to include('local_branch_commits' => ['1234567 Example Author Work'],
+                                                'local_branch_commits_approximate' => true)
     end
 
     it 'asks about a local branch ahead of its copy on the push remote' do

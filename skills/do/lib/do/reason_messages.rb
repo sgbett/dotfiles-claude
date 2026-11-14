@@ -61,8 +61,11 @@ module Do
                               'another branch or deal with that pull request first.',
       local_branch_unpushed: 'The local branch was never pushed, or has commits the push remote lacks ' \
                              '(session_only.local_branch_commits: those its copy there lacks or, for a branch ' \
-                             'never pushed, those the base lacks). Show them to the user and ask whether to ' \
-                             'resume on this branch; on a yes, run check again with accept_with added.',
+                             'never pushed, those neither the base nor its branches hold). Show them to the ' \
+                             'user, saying when local_branch_commits_truncated is true that there are more, ' \
+                             'and when local_branch_commits_approximate is true that the list may include ' \
+                             'commits the push remote has, and ask whether to resume on this branch; on a yes, ' \
+                             'run check again with accept_with added.',
       scripts_unreviewed: 'The checkout these scripts run from has changes under skills/do or ' \
                           "skills/_support or to the files that pick their Ruby, or its HEAD isn't in its " \
                           'default branch, so they may not be the reviewed scripts (session_only.scripts_changes). ' \

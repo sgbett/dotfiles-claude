@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../lib/do/check'
+require_relative 'check_branch_calls'
 require_relative 'check_finish_calls'
 require_relative 'check_responses'
 
@@ -15,13 +16,11 @@ module Do
     #   expect_check(through: :base, base: { response: fixture('graphql/base-missing.json') })
     module CheckCalls
       include CheckResponses
+      include CheckBranchCalls
       include CheckFinishCalls
 
       STEPS = %i[arguments login issue remote base branch pull_requests scripts focus changes].freeze
       CONVENTIONS = { push_remote: 'origin', pr_target: HERE, base: 'master', branch: BRANCH }.freeze
-      BRANCH_DEFAULTS = { branch: BRANCH, urls: [ORIGIN_URL], remote_tip: nil, remote_tips: nil, local_tip: nil,
-                          config: {}, base_here: true, lacking: [] }.freeze
-      REMOTE_READ = ['git', *Do::Git::NO_HOOKS_OR_FSMONITOR].freeze
 
       # check's arguments for the issue +reference+, with the CONVENTIONS
       # given or their defaults, then +extra+.
@@ -82,24 +81,6 @@ module Do
                                          stdout: as_json(response))
       end
 
-      # Tips are nil for no such branch: each push URL in +urls+ answers
-      # +remote_tip+, or its own of +remote_tips+. +config+ holds
-      # branch.<name>.remote, pushRemote and merge; +base_here+ whether the
-      # base commit is here, without a fetch, to list a branch the push
-      # remote lacks against; +lacking+ is the log lines. The remote's tip is
-      # already here (branch_facts_spec covers fetching it).
-      def expect_branch_step(**overrides)
-        branch = BRANCH_DEFAULTS.merge(overrides)
-        ref = "refs/heads/#{branch[:branch]}"
-        tips = expect_remote_tips(branch, ref)
-        return if tips.uniq.length > 1
-
-        remote_tip = tips.first
-        expect_line(['git', 'rev-parse', '--verify', '--quiet', "#{remote_tip}^{commit}"], remote_tip) if remote_tip
-        expect_line(['git', 'rev-parse', '--verify', '--quiet', ref], branch[:local_tip])
-        expect_local_branch(branch, ref, remote_tip) if branch[:local_tip]
-      end
-
       # +nodes+ are pull request nodes, which pull_request_node builds, or
       # +response+ a whole answer.
       def expect_pull_requests_step(nodes: nil, response: nil, branch: BRANCH, repository: HERE)
@@ -111,37 +92,6 @@ module Do
 
       def git_calls
         fake_runner.calls.map { |call| call[:argv] }.select { |argv| argv.first == 'git' }
-      end
-
-      private
-
-      # Each push URL's ls-remote, answered with its tip; returns the tips.
-      def expect_remote_tips(branch, ref)
-        tips = branch[:remote_tips] || branch[:urls].map { branch[:remote_tip] }
-        branch[:urls].zip(tips).each do |url, tip|
-          fake_runner.expect_call([*REMOTE_READ, 'ls-remote', url, ref], stdout: tip ? "#{tip}\t#{ref}\n" : '')
-        end
-        tips
-      end
-
-      def expect_local_branch(branch, ref, remote_tip)
-        %w[remote pushRemote merge].each do |key|
-          expect_line(['git', 'config', '--get', "branch.#{branch[:branch]}.#{key}"], branch[:config][key.to_sym])
-        end
-        expect_base(branch) unless remote_tip
-        revisions = remote_tip ? ["#{remote_tip}..#{ref}"] : [ref, '--not', BASE_SHA]
-        fake_runner.expect_call(['git', 'log', '--no-show-signature', '--format=%h %an %s', '--max-count=51',
-                                 *revisions, '--'], stdout: lines(branch[:lacking]))
-      end
-
-      # The base commit GitHub gave, here or fetched through the first push
-      # URL.
-      def expect_base(branch)
-        present = ['git', 'rev-parse', '--verify', '--quiet', "#{BASE_SHA}^{commit}"]
-        return expect_line(present, BASE_SHA) if branch[:base_here]
-
-        expect_line(present, nil)
-        fake_runner.expect_call([*REMOTE_READ, 'fetch', '--no-tags', '--quiet', branch[:urls].first, BASE_SHA])
       end
     end
   end

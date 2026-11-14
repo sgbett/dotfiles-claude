@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'git'
+require_relative 'remote_tips'
 
 module Do
   # The push remote's copy of the branch moved between check's ls-remote and
@@ -16,26 +17,30 @@ module Do
   # the local copy and its branch.<name>.* configuration, and the local
   # commits the push remote lacks. BranchAssessment makes the decision.
   #
-  # The remote's copy is read from the push URLs the remote check passed,
-  # never through the remote's name, whose fetch URL can name another
-  # repository; its tip is fetched from them too, so the lead can check out
-  # that commit. Nor are the commits the user is asked to accept ever
-  # measured against remote-tracking refs, which any fetch refspec, such as
-  # one for refs/pull/*, can fill.
+  # The remote's branches are read from the push URLs the remote check
+  # passed, never through the remote's name, whose fetch URL can name another
+  # repository; the branch's tip is fetched from them too, so the lead can
+  # check out that commit. The commits the user is asked to accept are
+  # measured against those branches and the base alone, never against
+  # remote-tracking refs, which any fetch refspec, such as one for
+  # refs/pull/*, can fill.
   class BranchFacts
     MAX_COMMITS = 50
     LOG_FORMAT = '--format=%h %an %s'
+    UNLISTED = { lacking: nil, more_lacking: false, lacking_approximate: false }.freeze
 
     # Tips are full object names, nil for no such branch. +remote_tips+ holds
     # each push URL's, in their order, and +remote_tip+ the one they share,
     # nil when they differ. The configuration values are nil when unset.
     # +lacking+ is the local commits the push remote's copy lacks or, with
-    # no copy there, those the base lacks, newest first, at most MAX_COMMITS
-    # of them (+more_lacking+ when there are more), as `git log
-    # --format='%h %an %s'` prints them; nil when there is no local branch,
-    # or the push URLs differ.
+    # no copy there, those neither the base nor any branch on every push URL
+    # holds, newest first, at most MAX_COMMITS of them (+more_lacking+ when
+    # there are more), as `git log --format='%h %an %s'` prints them; nil
+    # when there is no local branch, or the push URLs differ.
+    # +lacking_approximate+ when some branch's tip couldn't be measured
+    # against, so the list may hold commits the push remote has.
     Facts = Struct.new(:remote_tips, :remote_tip, :local_tip, :tracking_remote, :push_remote, :merge, :lacking,
-                       :more_lacking, keyword_init: true) do
+                       :more_lacking, :lacking_approximate, keyword_init: true) do
       def remote_tips_differ?
         remote_tips.to_a.uniq.length > 1
       end
@@ -52,28 +57,31 @@ module Do
     # The Facts about the branch named +branch+.
     def collect(branch)
       ref = "refs/heads/#{branch}"
-      remote_tips = @urls.map { |url| remote_tip(url, ref) }
-      return Facts.new(remote_tips: remote_tips, more_lacking: false) if remote_tips.uniq.length > 1
+      branches = remote_branches
+      remote_tips = branches.map { |advertised| advertised[ref] }
+      return Facts.new(remote_tips: remote_tips, **UNLISTED) if remote_tips.uniq.length > 1
 
       remote_tip = remote_tips.first
       fetch(ref, remote_tip) if remote_tip
       local_tip = @git.line_or_nil('rev-parse', '--verify', '--quiet', ref)
       facts = { remote_tips: remote_tips, remote_tip: remote_tip, local_tip: local_tip }
-      return Facts.new(**facts, more_lacking: false) unless local_tip
+      return Facts.new(**facts, **UNLISTED) unless local_tip
 
-      Facts.new(**facts, **configuration(branch), **lacking(ref, remote_tip))
+      Facts.new(**facts, **configuration(branch), **lacking(ref, remote_tip, branches))
     end
 
     private
 
-    # git ls-remote matches a pattern against the tail of a ref's name, so
-    # refs/heads/x/<branch> would match <branch>: only the exact ref counts.
-    def remote_tip(url, ref)
-      @git.output(*Git::NO_HOOKS_OR_FSMONITOR, 'ls-remote', url, ref).lines(chomp: true).each do |line|
-        sha, name = line.split("\t", 2)
-        return SkillSupport::Identifiers.commit_sha!(sha) if name == ref
+    # For each push URL, in their order, each branch it advertises, by its
+    # full name, at its tip: refs/heads/* alone, never refs/pull/*. --heads
+    # rather than --branches, which git before 2.46 lacks.
+    def remote_branches
+      @urls.map do |url|
+        @git.output(*Git::NO_HOOKS_OR_FSMONITOR, 'ls-remote', '--heads', url).lines(chomp: true).to_h do |line|
+          sha, name = line.split("\t", 2)
+          [name, SkillSupport::Identifiers.commit_sha!(sha)]
+        end
       end
-      nil
     end
 
     # Every push URL holds +tip+, so the first serves.
@@ -105,19 +113,27 @@ module Do
       @git.line_or_nil('config', '--get', "branch.#{branch}.#{key}")
     end
 
-    # A branch the push remote doesn't hold lacks every commit the base,
-    # as GitHub gave it, doesn't hold.
-    def lacking(ref, remote_tip)
-      return log("#{remote_tip}..#{ref}") if remote_tip
+    # A branch the push remote doesn't hold lacks every commit that neither
+    # the base, as GitHub gave it, nor a branch tip every push URL
+    # advertises holds, as a push goes to every URL. A tip left unmeasured,
+    # one only some URLs advertise or one that isn't here, leaves its
+    # commits listed: the list is then approximate, never short.
+    def lacking(ref, remote_tip, branches)
+      return { **log("#{remote_tip}..#{ref}"), lacking_approximate: false } if remote_tip
 
       fetch_base
-      log(ref, '--not', @base_commit)
+      tips = branches.map { |advertised| advertised.values.uniq }
+      measured = RemoteTips.new(@git, url: @urls.first).here(tips.reduce(:&))
+      { **log(ref, '--not', @base_commit, excluded: measured), lacking_approximate: !(tips.flatten - measured).empty? }
     end
 
-    # log.showSignature would add signature checks to the lines.
-    def log(*revisions)
-      lines = @git.output('log', '--no-show-signature', LOG_FORMAT, "--max-count=#{MAX_COMMITS + 1}", *revisions, '--')
-                  .lines(chomp: true)
+    # log.showSignature would add signature checks to the lines. The
+    # +excluded+ commits go on standard input, as a remote can have more
+    # branches than a command line holds.
+    def log(*revisions, excluded: nil)
+      stdin = excluded&.map { |commit| "^#{commit}\n" }&.join
+      lines = @git.output('log', '--no-show-signature', LOG_FORMAT, "--max-count=#{MAX_COMMITS + 1}",
+                          *('--stdin' if stdin), *revisions, '--', stdin: stdin).lines(chomp: true)
       { lacking: lines.first(MAX_COMMITS), more_lacking: lines.length > MAX_COMMITS }
     end
   end

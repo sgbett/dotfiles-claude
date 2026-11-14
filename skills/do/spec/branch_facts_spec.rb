@@ -20,14 +20,26 @@ RSpec.describe Do::BranchFacts do
     branch_facts.collect(branch).to_h
   end
 
-  # A commit pushed to the push remote by someone else, at +ref+, which
-  # this checkout doesn't have; returns the commit.
-  def pushed_elsewhere(ref, message)
+  # A commit pushed to the push remote by someone else, at +ref+, on top of
+  # its branch +onto+ or its default branch, which this checkout doesn't
+  # have; returns the commit.
+  def pushed_elsewhere(ref, message, onto: nil)
     clone = sandbox.path("#{message.downcase.tr(' ', '-')}-clone")
-    git('clone', '--quiet', push_url, clone)
+    git('clone', '--quiet', *(['--branch', onto] if onto), push_url, clone)
     tip = commit(message, chdir: clone)
     git('push', '--quiet', 'origin', "HEAD:#{ref}", chdir: clone)
     tip
+  end
+
+  # A commit on the push remote's branch "shared", which someone else has
+  # since moved on to a commit this checkout doesn't have, and the branch
+  # started from it with a commit of its own; returns the three commits.
+  def built_on_a_moved_branch
+    git('switch', '--quiet', '-c', 'shared')
+    shared = commit('Shared')
+    git('push', '--quiet', 'origin', 'shared')
+    moved = pushed_elsewhere('refs/heads/shared', 'Shared moved on', onto: 'shared')
+    [shared, moved, start_branch('Mine')]
   end
 
   def start_branch(message)
@@ -54,7 +66,7 @@ RSpec.describe Do::BranchFacts do
 
   it 'finds a branch that is nowhere' do
     expect(collect).to eq(remote_tips: [nil], remote_tip: nil, local_tip: nil, tracking_remote: nil, push_remote: nil,
-                          merge: nil, lacking: nil, more_lacking: false)
+                          merge: nil, lacking: nil, more_lacking: false, lacking_approximate: false)
   end
 
   it 'reads a pushed branch that tracks its copy and lacks nothing there' do
@@ -62,7 +74,8 @@ RSpec.describe Do::BranchFacts do
     git('push', '--quiet', '-u', 'origin', branch)
 
     expect(collect).to eq(remote_tips: [tip], remote_tip: tip, local_tip: tip, tracking_remote: 'origin',
-                          push_remote: nil, merge: "refs/heads/#{branch}", lacking: [], more_lacking: false)
+                          push_remote: nil, merge: "refs/heads/#{branch}", lacking: [], more_lacking: false,
+                          lacking_approximate: false)
   end
 
   it 'lists the commits a pushed branch is ahead by, newest first, in the form git log prints' do
@@ -74,10 +87,66 @@ RSpec.describe Do::BranchFacts do
     expect(collect[:lacking]).to eq([log_line(second), log_line(first)])
   end
 
-  it 'lists a branch never pushed by its commits the base lacks' do
+  it "lists a branch never pushed by its commits that neither the base nor the push remote's branches hold" do
     tip = start_branch('Never pushed')
 
-    expect(collect.values_at(:remote_tip, :local_tip, :lacking)).to eq([nil, tip, [log_line(tip)]])
+    expect(collect.values_at(:remote_tip, :local_tip, :lacking, :lacking_approximate))
+      .to eq([nil, tip, [log_line(tip)], false])
+  end
+
+  it "lists only the commit the push remote lacks when a fork's default branch has commits the base lacks" do
+    # Read before the fork's own commits move master on.
+    upstream = base
+    forked = [commit('Fork one'), commit('Fork two')]
+    git('push', '--quiet', 'origin', 'master')
+    mine = start_branch('Mine')
+
+    expect(git('rev-list', branch, '--not', upstream).lines(chomp: true)).to eq([mine, *forked.reverse])
+    expect(collect.values_at(:lacking, :lacking_approximate)).to eq([[log_line(mine)], false])
+  end
+
+  it "fetches the tip of a push remote's branch that isn't here, leaving out the commits it holds" do
+    _shared, moved, mine = built_on_a_moved_branch
+
+    expect(here?(moved)).to be(false)
+    expect(collect.values_at(:lacking, :lacking_approximate)).to eq([[log_line(mine)], false])
+    expect(here?(moved)).to be(true)
+  end
+
+  it 'lists against the base and the tips here alone, saying so, when a tip that is not here fails to fetch' do
+    shared, moved, mine = built_on_a_moved_branch
+    # upload-pack honours this hook from global configuration alone, and
+    # runs `false` for pack-objects: ls-remote still answers, every fetch
+    # fails.
+    git('config', '--global', 'uploadpack.packObjectsHook', 'false')
+
+    expect(collect.values_at(:lacking, :lacking_approximate)).to eq([[log_line(mine), log_line(shared)], true])
+    expect(here?(moved)).to be(false)
+  end
+
+  it 'fetches no tips, saying so, when more than 50 of them are not here' do
+    clone = sandbox.path('branches-clone')
+    git('clone', '--quiet', push_url, clone)
+    tips = (1..51).map { |number| commit("Branch #{number}", chdir: clone) }
+    git('push', '--quiet', 'origin', *tips.map.with_index { |tip, index| "#{tip}:refs/heads/b#{index}" }, chdir: clone)
+    mine = start_branch('Mine')
+
+    expect(collect.values_at(:lacking, :lacking_approximate)).to eq([[log_line(mine)], true])
+    expect(tips.none? { |tip| here?(tip) }).to be(true)
+  end
+
+  it 'lists a commit that only some of the push URLs hold, as a push goes to them all' do
+    mirror = sandbox.path('mirror.git')
+    git('init', '--quiet', '--bare', '--initial-branch=master', mirror)
+    git('switch', '--quiet', '-c', 'extra')
+    extra = commit('Only on the mirror')
+    git('push', '--quiet', mirror, 'master', 'extra')
+    git('switch', '--quiet', '-c', branch)
+    mine = commit('Mine')
+    facts = described_class.new(SkillSupport::CommandRunner.new, urls: [push_url, mirror], base_commit: base)
+                           .collect(branch)
+
+    expect([facts.lacking, facts.lacking_approximate]).to eq([[log_line(mine), log_line(extra)], true])
   end
 
   it 'lists a pull request a refs/pull/* fetch refspec brought in, never hiding its commits behind that ref' do
@@ -146,10 +215,10 @@ RSpec.describe Do::BranchFacts do
     expect([facts.remote_tips, facts.remote_tip]).to eq([[git('rev-parse', 'master').chomp, nil], nil])
   end
 
-  it 'matches the branch on the push remote by its whole name, which ls-remote matches as the end of a name' do
+  it 'matches the branch on the push remote by its whole name, never as the end of a longer one' do
     git('push', '--quiet', 'origin', "master:refs/heads/old/refs/heads/#{branch}")
 
-    expect(git('ls-remote', 'origin', "refs/heads/#{branch}")).to include("refs/heads/old/refs/heads/#{branch}")
+    expect(git('ls-remote', '--heads', 'origin')).to include("refs/heads/old/refs/heads/#{branch}")
     expect(collect[:remote_tip]).to be_nil
   end
 
@@ -157,7 +226,7 @@ RSpec.describe Do::BranchFacts do
     ref = "refs/heads/#{branch}"
     gone = 'c' * 40
     branch_facts = described_class.new(fake_runner, urls: [push_url], base_commit: base)
-    fake_runner.expect_call([*remote_read, 'ls-remote', push_url, ref], stdout: "#{gone}\t#{ref}\n")
+    fake_runner.expect_call([*remote_read, 'ls-remote', '--heads', push_url], stdout: "#{gone}\t#{ref}\n")
     fake_runner.expect_call(['git', 'rev-parse', '--verify', '--quiet', "#{gone}^{commit}"], exit_status: 1)
     fake_runner.expect_call([*remote_read, 'fetch', '--no-tags', '--quiet', push_url, ref])
     fake_runner.expect_call(['git', 'rev-parse', '--verify', '--quiet', "#{gone}^{commit}"], exit_status: 1)
@@ -201,7 +270,7 @@ RSpec.describe Do::BranchFacts do
   it 'fails as a tool when a push URL cannot be reached' do
     nowhere = sandbox.path('nowhere.git')
     unreachable = described_class.new(SkillSupport::CommandRunner.new, urls: [nowhere], base_commit: base)
-    call = [*remote_read, 'ls-remote', nowhere, "refs/heads/#{branch}"].join(' ')
+    call = [*remote_read, 'ls-remote', '--heads', nowhere].join(' ')
 
     expect { unreachable.collect(branch) }.to raise_error(Do::GitError, /\A#{Regexp.escape(call)} exited 128/)
   end

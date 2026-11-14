@@ -109,10 +109,11 @@ module Do
 
     # Commit subjects can carry issue text.
     def branch_details
-      lacking = @branch&.facts&.lacking
-      return {} unless lacking
+      facts = @branch&.facts
+      return {} unless facts&.lacking
 
-      { local_branch_commits: lacking, local_branch_commits_truncated: @branch.facts.more_lacking }
+      { local_branch_commits: facts.lacking, local_branch_commits_truncated: facts.more_lacking,
+        local_branch_commits_approximate: facts.lacking_approximate }
     end
 
     def checkout_details
