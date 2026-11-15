@@ -62,7 +62,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
     check, = parsed('promote-check')
 
     expect(check.to_h.values_at(:rules_file, :reviews_without_findings, :bodies_dir))
-      .to eq(['/scratch/promotion-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/round-1'])
+      .to eq(['/scratch/promotion-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/pr-18-round-1'])
   end
 
   it "hands threads fetch and check the same round's bodies directory, and puts no thread's path on a command line" do
@@ -86,8 +86,8 @@ RSpec.describe "/copilot-check's calls of its scripts" do
   end
 
   it "says in Phase 0 that setup stops on a pull request that isn't open, and asks about its own scripts" do
-    expect(skill).to include("stops on a PR that isn't open, and asks before going on with a PR from a fork or with " \
-                             'scripts that may not be the reviewed ones.')
+    expect(skill).to include("stops on a PR that isn't open, and asks before going on with a PR from someone else's " \
+                             'fork or with scripts that may not be the reviewed ones.')
   end
 
   it 'names every outcome check takes, and the rules file by its keys' do

@@ -64,7 +64,7 @@ A QA sub-agent (or you, on the lean path) **verifies, never assumes**:
 
 - each acceptance criterion against what was delivered: a box is verified only when **every** clause is. Evidence may be another repository's PR or a machine-local path: give it, for step 7 to link within the Visibility rule;
 - that the test suite and linter are green, and docs were updated where public surface changed;
-- the word budget: it reports each changed skill's net change in words against the base (`wc -w`), for its `SKILL.md` alone and with its `references/`, and an increase over 100 in either needs offsetting cuts, or the owner's explicit agreement in the session.
+- the word budget: it reports each changed skill's net change in words against the base (`wc -w`), for its `SKILL.md` alone and with every reference it names, and an increase over 100 in either needs offsetting cuts, or the owner's explicit agreement in the session.
 
 **It reports, never records:** it lists the ledger items and acceptance boxes it verified, for step 7 to tick, and writes nothing to GitHub yet.
 
