@@ -53,7 +53,7 @@ Loop control:
 | REST inline comment, timeline `review_requested` | `Copilot` | `175728472` |
 | GraphQL review or comment `author` | `copilot-pull-request-reviewer` | `BOT_kgDOCnlnWA` |
 
-One `Bot` account, whose login differs by surface and is not its identity: the bare GraphQL login is also held by an unrelated Organization (id 213165537). The scripts match the GraphQL id. A query you improvise matches the id too — REST `.user.id == 175728472` (`.requested_reviewer.id` on the timeline), GraphQL `author { ... on Bot { id } }` equal to `"BOT_kgDOCnlnWA"` — never a substring, regex or `contains`. **Us** is the viewer: GraphQL `viewerDidAuthor`; in REST, the login from `gh api user --jq .login`.
+One `Bot` account, whose login differs by surface and is not its identity: the bare GraphQL login is also held by an unrelated Organization (id 213165537). The scripts match the GraphQL id. A query you improvise matches the id too — REST `.user.id == 175728472` (`.requested_reviewer.id` on the timeline), GraphQL `author { ... on Bot { id } }` equal to `"BOT_kgDOCnlnWA"` — never a substring, regex or `contains`. **Us** is the viewer: GraphQL `viewerDidAuthor`; in REST, the login from `gh api --hostname '{host}' user --jq .login`.
 
 ---
 
@@ -62,7 +62,7 @@ One `Bot` account, whose login differs by surface and is not its identity: the b
 Two cheap passes on the PR's diff:
 
 1. **Semantic-ripple grep (always, deterministic).** For every change in the diff that widened/tightened/renamed a **regex, identifier, constant, or user-visible string**, `git -C '{checkout}' grep -n` the old *and* related terms across the whole repo and fix every stale reference, for Phase 4 step 1 to check and commit. It needs no agent.
-2. **`/code-review` (first round, if the diff is non-trivial).** Run `Skill(skill: "code-review", args: "high {pr}")`, with no flags; it reviews the PR from GitHub. Take its findings as *input* to the Phase-3 gate; its subjective (simplification/altitude) findings pause for the human.
+2. **`/code-review` (first round, if the diff is non-trivial).** Run `Skill(skill: "code-review", args: "high https://{host}/{repo}/pull/{pr}")`, with no flags; it reviews the PR from GitHub. Take its findings as *input* to the Phase-3 gate; its subjective (simplification/altitude) findings pause for the human.
 
 ---
 
@@ -114,7 +114,7 @@ If empty, proceed autonomously, halting at 10 unattended rounds: the `{scratch}/
    ```bash
    gh issue create -R '{host}/{repo}' --title "$(cat {scratch}/issue-title.txt)" --body-file {scratch}/issue-body.md   # HLR: add --label project:hlr
    ```
-3. **Reply to every thread** with `in_reply_to` set to 2a's `comment_id`. Write each body to a file in `{scratch}` first and post it with `-F body=@…`, since Copilot's text quoted back can contain quotes. Like step 2's, these calls name `{host}` and `{repo}`, as `gh`'s default can be a fork or another host:
+3. **Reply to every thread** with `in_reply_to` set to 2a's `comment_id`. Write each body to a file in `{scratch}` first and post it with `-F body=@…`, since Copilot's text quoted back can contain quotes:
    ```bash
    gh api --hostname '{host}' repos/{repo}/pulls/{pr}/comments -F body=@{scratch}/reply.md -F in_reply_to={comment_id}
    ```
@@ -161,3 +161,4 @@ Never turn on auto-merge: it merges.
 ## Notes
 
 - **British English** in replies, comments, commits.
+- **Every `gh` call names the repository**, as `gh`'s default can be a fork or another host: `-R '{host}/{repo}'`, or `--hostname '{host}'` with `gh api`.
