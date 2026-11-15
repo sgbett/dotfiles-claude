@@ -40,19 +40,21 @@ module CopilotCheck
       end
     end
 
-    # Whether +path+ is under .github/workflows/, .github/actions/,
+    # Whether +path+ is, or is under, .github/workflows/, .github/actions/,
     # .github/instructions/, .github/skills/ or .agents/skills/, is
     # .github/copilot-instructions.md, is a file named CLAUDE.md,
-    # CLAUDE.local.md, .mcp.json, AGENTS.md, GEMINI.md or REVIEW.md, or is
-    # under a .claude directory, those last two at any depth, as Claude Code
-    # can start in any directory of a checkout and GitHub doesn't say where
-    # Copilot looks for each. Case is ignored, as a case-insensitive file
-    # system ignores it.
+    # CLAUDE.local.md, .mcp.json, AGENTS.md, GEMINI.md or REVIEW.md, or is,
+    # or is under, a .claude directory, those last two at any depth, as
+    # Claude Code can start in any directory of a checkout and GitHub doesn't
+    # say where Copilot looks for each. A pull request's files are never
+    # directories, so one at a directory's own path is a symlink or submodule
+    # in its place. Case is ignored, as a case-insensitive file system
+    # ignores it.
     def self.protected?(path)
       name = File.basename(path)
-      PROTECTED_DIRECTORIES.any? { |directory| path.downcase.start_with?(directory) } || path.casecmp?(RUBRIC) ||
-        PROTECTED_NAMES.any? { |protected_name| name.casecmp?(protected_name) } ||
-        path.split('/')[0...-1].any? { |directory| directory.casecmp?(RULES_DIRECTORY) }
+      PROTECTED_DIRECTORIES.any? { |directory| "#{path.downcase}/".start_with?(directory) } ||
+        path.casecmp?(RUBRIC) || PROTECTED_NAMES.any? { |protected_name| name.casecmp?(protected_name) } ||
+        path.split('/').any? { |part| part.casecmp?(RULES_DIRECTORY) }
     end
 
     # +github+ is the SkillSupport::Gh for the repository's host.

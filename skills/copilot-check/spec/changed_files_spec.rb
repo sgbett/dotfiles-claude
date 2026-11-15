@@ -95,14 +95,28 @@ RSpec.describe CopilotCheck::ChangedFiles do
       end
     end
 
+    it 'holds a file named .claude, at any depth, as a symlink or submodule in place of the directory, ignoring case' do
+      %w[.claude sub/.claude vendor/tool/.Claude].each do |path|
+        expect(described_class.protected?(path)).to be(true), path
+      end
+    end
+
+    it "holds a file at a protected directory's own path, as a symlink or submodule in its place, ignoring case" do
+      %w[.github/workflows .github/actions .github/instructions .github/skills .agents/skills
+         .GitHub/Workflows].each do |path|
+        expect(described_class.protected?(path)).to be(true), path
+      end
+    end
+
     it 'leaves other paths alone' do
-      %w[.github/workflow.yml .github/CODEOWNERS docs/CLAUDE.md.bak .claude skills/.claudex/a.md
+      %w[.github/workflow.yml .github/CODEOWNERS docs/CLAUDE.md.bak skills/.claudex/a.md sub/.claudex
          github/workflows/ci.yml README.md CLAUDE.local.md.bak mcp.json .mcp.jsonc docs/mcp.json
          docs/.github/copilot-instructions.md .github/copilot-instructions.md.bak copilot-instructions.md
          .github/instruction/ruby.instructions.md docs/.github/instructions/ruby.instructions.md
          ruby.instructions.md AGENTS.md.bak docs/AGENTS REVIEWS.md GEMINI.mdx agents/README.md
          .github/skill/code-review/SKILL.md docs/.github/skills/code-review/SKILL.md
-         skills/code-review/SKILL.md agents/skills/x docs/.agents/skills/x/SKILL.md].each do |path|
+         skills/code-review/SKILL.md agents/skills/x docs/.agents/skills/x/SKILL.md .github/workflowsx
+         docs/.github/workflows].each do |path|
         expect(described_class.protected?(path)).to be(false), path
       end
     end

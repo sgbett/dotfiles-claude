@@ -27,13 +27,13 @@ module CopilotCheck
       from_fork: "The pull request comes from a fork the authenticated user doesn't own.",
       files_unlisted: "The pull request's changed files could not all be listed, as GitHub lists at most 3,000, so " \
                       'changes to workflows or rules files cannot be ruled out.',
-      protected_paths_changed: 'The pull request changes a path under .github/workflows/ or .github/actions/, ' \
-                               "Copilot's rubric .github/copilot-instructions.md or a path under " \
+      protected_paths_changed: 'The pull request changes a path at or under .github/workflows/ or .github/actions/, ' \
+                               "Copilot's rubric .github/copilot-instructions.md or a path at or under " \
                                '.github/instructions/, .github/skills/ or .agents/skills/, a file named CLAUDE.md, ' \
-                               'CLAUDE.local.md, .mcp.json, AGENTS.md, GEMINI.md or REVIEW.md, or a path under a ' \
-                               '.claude directory (files.github_text.protected_paths), so what GitHub Actions ' \
-                               'runs, what Copilot reviews against or what Claude Code loads from the checkout ' \
-                               "may not be the base's.",
+                               'CLAUDE.local.md, .mcp.json, AGENTS.md, GEMINI.md or REVIEW.md, or a path at or ' \
+                               'under a .claude directory (files.github_text.protected_paths), so what GitHub ' \
+                               'Actions runs, what Copilot reviews against or what Claude Code loads from the ' \
+                               "checkout may not be the base's.",
       no_checks: 'No check has run on the head.',
       checks_pending: 'A check on the head is pending.',
       checks_cancelled: 'A check on the head was cancelled.',
