@@ -125,10 +125,12 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       expect_checkout_step
       fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
       expect_rubric
+      expect_focus
       expect_latest_review
       argument = sandbox.path('argument.txt').tap { |path| File.write(path, '18') }
       outcome = CopilotCheck::Setup.call(['--argument-file', argument, '--start-file', sandbox.path('pr0.json'),
-                                          '--rubric-file', sandbox.path('rubric.md')],
+                                          '--rubric-file', sandbox.path('rubric.md'),
+                                          '--focus-file', sandbox.path('security-focus.md')],
                                          runner: fake_runner, skill_directory: scripts_skill_directory)
       output = JSON.parse(outcome.to_json)
       fields = %w[pull_request.number repository.name_with_owner repository.host pull_request.base high_water_mark

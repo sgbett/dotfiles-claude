@@ -7,7 +7,8 @@ require_relative 'support/script_calls'
 RSpec.describe 'The arguments of setup, threads and rereview' do
   let(:head) { CopilotCheck::Testing::GateCalls::HEAD }
   let(:setup_flags) do
-    %w[--argument-file /scratch/argument.txt --start-file /scratch/pr0.json --rubric-file /scratch/rubric.md]
+    %w[--argument-file /scratch/argument.txt --start-file /scratch/pr0.json --rubric-file /scratch/rubric.md
+       --focus-file /scratch/security-focus.md]
   end
 
   describe CopilotCheck::SetupArguments do
@@ -15,7 +16,8 @@ RSpec.describe 'The arguments of setup, threads and rereview' do
       options = described_class.parse([*setup_flags.drop(2), '--accept-fork', head.upcase, *setup_flags.take(2)])
 
       expect(options.to_h).to eq(argument_file: '/scratch/argument.txt', start_file: '/scratch/pr0.json',
-                                 rubric_file: '/scratch/rubric.md', accept_fork: head, accept_scripts: nil)
+                                 rubric_file: '/scratch/rubric.md', focus_file: '/scratch/security-focus.md',
+                                 accept_fork: head, accept_scripts: nil)
     end
 
     it 'takes the digest a yes to its scripts was given for, and only a whole SHA-256 digest' do
@@ -30,8 +32,9 @@ RSpec.describe 'The arguments of setup, threads and rereview' do
     end
 
     it 'refuses a flag it lacks, repeats or does not take, and a subcommand' do
-      [setup_flags.take(4), [*setup_flags, '--pr', '18'], [*setup_flags, '--start-file', '/scratch/x.json'],
-       ['run', *setup_flags], [*setup_flags, '--dry-run'], [*setup_flags, '--accept-fork']].each do |arguments|
+      [setup_flags.take(4), setup_flags.take(6), [*setup_flags, '--pr', '18'],
+       [*setup_flags, '--start-file', '/scratch/x.json'], ['run', *setup_flags], [*setup_flags, '--dry-run'],
+       [*setup_flags, '--accept-fork']].each do |arguments|
         expect { described_class.parse(arguments) }
           .to raise_error(CopilotCheck::SetupUsageError, /\Ausage: setup --argument-file/), arguments.inspect
       end
@@ -39,7 +42,8 @@ RSpec.describe 'The arguments of setup, threads and rereview' do
 
     it 'writes only to absolute paths, and takes a yes only for a whole commit' do
       { %w[--start-file pr0.json] => 'start_file', %w[--rubric-file -x] => 'rubric_file',
-        %w[--argument-file -x] => 'argument_file' }.each do |(flag, value), kind|
+        %w[--focus-file security-focus.md] => 'focus_file', %w[--argument-file -x] => 'argument_file' }
+        .each do |(flag, value), kind|
         arguments = setup_flags.each_slice(2).to_h.merge(flag => value).flatten
         expect { described_class.parse(arguments) }
           .to raise_error(SkillSupport::InvalidIdentifier, "invalid #{kind}"), flag

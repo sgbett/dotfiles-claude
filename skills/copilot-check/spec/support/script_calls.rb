@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'checkout_calls'
+require_relative 'contents_calls'
 require_relative 'gate_calls'
 require_relative 'script_runs'
 require_relative '../../lib/copilot_check/rereview'
@@ -14,6 +15,7 @@ module CopilotCheck
     # what its case needs.
     module ScriptCalls
       include CheckoutCalls
+      include ContentsCalls
       include GateCalls
       include ScriptRuns
 
@@ -63,22 +65,6 @@ module CopilotCheck
         @scripts_skill_directory ||= sandbox.path('scripts', 'skills', 'copilot-check').tap do |path|
           FileUtils.mkdir_p(path)
         end
-      end
-
-      # The rubric read: +text+ the file's, or nil for GitHub's recorded 404.
-      def expect_rubric(text = nil)
-        if text
-          fake_runner.expect_call(RUBRIC, stdout: as_json(rubric_response(text)))
-        else
-          fake_runner.expect_call(RUBRIC, exit_status: 1, stdout: fixture('contents/rubric-not-found.json'),
-                                          stderr: fixture('contents/rubric-not-found.stderr'))
-        end
-      end
-
-      # The contents API's answer for a rubric holding +text+.
-      def rubric_response(text)
-        { 'type' => 'file', 'encoding' => 'base64', 'content' => [text].pack('m'),
-          'path' => '.github/copilot-instructions.md' }
       end
 
       def expect_latest_review(response = fixture('graphql/latest-review-18.json'), number: GateCalls::NUMBER,

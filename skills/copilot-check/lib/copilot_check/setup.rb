@@ -18,15 +18,16 @@ module CopilotCheck
   # checkout with its branch checked out, which the run works in, stopping
   # when it can't (PullRequestCheckout); then, asking first when the pull
   # request comes from a fork or when the checkout these scripts run from
-  # may not hold the reviewed ones (SkillSupport::ScriptsCheckout), the
-  # rubric, .github/copilot-instructions.md as it stands on the base branch,
-  # which the pull request can't change, where only a 404 means there is
-  # none; and the high-water mark, the submittedAt of Copilot's latest
-  # review, or the epoch before its first. Then it writes the start file,
-  # which promote-check reads, with the checkout and whether /do chained the
-  # run, and the rubric file, empty when there is none, never printing the
-  # rubric. A checkout's path is machine-local, so only session_only names
-  # it.
+  # may not hold the reviewed ones (SkillSupport::ScriptsCheckout), what
+  # stands on the base branch, which the pull request can't change: the
+  # rubric, .github/copilot-instructions.md, where only a 404 means there is
+  # none, and the repository's security focus (SkillSupport::SecurityFocus),
+  # which the security gate reviews Copilot's fixes against; and the
+  # high-water mark, the submittedAt of Copilot's latest review, or the epoch
+  # before its first. Then it writes the start file, which promote-check
+  # reads, with the checkout and whether /do chained the run, and the rubric
+  # and focus files, each empty when there is none, never printing either.
+  # A checkout's path is machine-local, so only session_only names it.
   class Setup
     RUBRIC = '.github/copilot-instructions.md'
     ACCEPT_FORK = '--accept-fork'
@@ -70,11 +71,21 @@ module CopilotCheck
     def start(base)
       github = SkillSupport::Gh.new(host: @repository.host, runner: @runner)
       rubric = rubric(github, base)
+      focus = SkillSupport::SecurityFocus.new(SkillSupport::RepositoryFiles.new(github))
+                                         .read(@repository.name_with_owner, base)
       mark = LatestReview.new(github).submitted_at(@repository.name_with_owner, @pull_request.number)
-      write(rubric)
+      write(rubric, focus)
+      started(base, rubric, focus, mark)
+    end
+
+    # +focus+ is the SkillSupport::SecurityFocus::Result, whose text only
+    # the focus file holds.
+    def started(base, rubric, focus, mark)
       SkillSupport::Outcome.proceed(repository: @repository.to_h, pull_request: pull_request_fields(base),
                                     push_remote: @checkout.push_remote, chained: @chained,
-                                    rubric_found: !rubric.nil?, high_water_mark: mark || Timestamp::EPOCH,
+                                    rubric_found: !rubric.nil?,
+                                    security_focus: { found: focus.found?, sources: focus.sources },
+                                    high_water_mark: mark || Timestamp::EPOCH,
                                     session_only: { checkout: @checkout.top_level })
     end
 
@@ -127,10 +138,11 @@ module CopilotCheck
       rubric
     end
 
-    def write(rubric)
+    def write(rubric, focus)
       state = @pull_request.start_state(@repository, checkout: @checkout.top_level, chained: @chained)
       OutputFile.write(@options.start_file, "#{JSON.generate(state)}\n")
       OutputFile.write(@options.rubric_file, rubric.to_s)
+      OutputFile.write(@options.focus_file, focus.text)
     end
 
     def pull_request_fields(base)

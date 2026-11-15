@@ -21,11 +21,11 @@ module CopilotCheck
   # setup was called with arguments it doesn't take.
   class SetupUsageError < UsageError
     USAGE = [
-      'usage: setup --argument-file <path> --start-file <path> --rubric-file <path> [--accept-fork <sha>]',
-      '             [--accept-scripts <digest>]',
+      'usage: setup --argument-file <path> --start-file <path> --rubric-file <path> --focus-file <path>',
+      '             [--accept-fork <sha>] [--accept-scripts <digest>]',
       "where the argument file holds the skill's argument as the user gave it, a pull request number,",
-      'followed by chained when /do hands the run on, or nothing, and setup writes the start file and the',
-      'rubric file, at absolute paths'
+      'followed by chained when /do hands the run on, or nothing, and setup writes the start file, the',
+      "rubric file and the repository's security focus file, at absolute paths"
     ].join("\n").freeze
   end
 

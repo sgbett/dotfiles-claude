@@ -8,6 +8,7 @@ RSpec.describe CopilotCheck::Setup do
   let(:head) { CopilotCheck::Testing::GateCalls::HEAD }
   let(:start_file) { sandbox.path('pr0.json') }
   let(:rubric_file) { sandbox.path('rubric.md') }
+  let(:focus_file) { sandbox.path('security-focus.md') }
 
   # The skill's argument, as the lead writes it.
   def argument_file(text = '18')
@@ -15,7 +16,8 @@ RSpec.describe CopilotCheck::Setup do
   end
 
   def arguments(argument = '18', *extra)
-    ['--argument-file', argument_file(argument), '--start-file', start_file, '--rubric-file', rubric_file, *extra]
+    ['--argument-file', argument_file(argument), '--start-file', start_file, '--rubric-file', rubric_file,
+     '--focus-file', focus_file, *extra]
   end
 
   def run_setup(*arguments)
@@ -24,14 +26,16 @@ RSpec.describe CopilotCheck::Setup do
   end
 
   # Every call setup makes on #18 after gh pr view, as recorded unless the
-  # case changes the rubric or the latest review, the checkout found at
-  # #18's head and tracking origin's copy of its branch unless +checkout+
-  # says otherwise (expect_checkout_step).
-  def expect_start(rubric: nil, latest: fixture('graphql/latest-review-18.json'), **checkout)
+  # case changes the rubric, CLAUDE.md, whose +claude_md+ holds any focus,
+  # or the latest review, the checkout found at #18's head and tracking
+  # origin's copy of its branch unless +checkout+ says otherwise
+  # (expect_checkout_step).
+  def expect_start(rubric: nil, claude_md: nil, latest: fixture('graphql/latest-review-18.json'), **checkout)
     expect_scripts_step
     expect_checkout_step(**checkout)
     fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
     expect_rubric(rubric)
+    expect_focus(claude_md)
     expect_latest_review(latest)
   end
 
@@ -40,8 +44,8 @@ RSpec.describe CopilotCheck::Setup do
     expect_pr_view(number, response: response)
   end
 
-  it 'starts on #18 as recorded, open: its facts, its checkout and where it pushes, no rubric, the mark from ' \
-     "Copilot's latest review, and the start file with its repository and checkout" do
+  it 'starts on #18 as recorded, open: its facts, its checkout and where it pushes, no rubric or security focus, ' \
+     "the mark from Copilot's latest review, and the start file with its repository and checkout" do
     expect_resolution
     expect_start
 
@@ -54,13 +58,40 @@ RSpec.describe CopilotCheck::Setup do
                                                                 'head_branch' => 'feat/17-do-qa-records-the-work-as',
                                                                 'is_draft' => false, 'is_cross_repository' => false },
                                             'push_remote' => 'origin', 'chained' => false, 'rubric_found' => false,
+                                            'security_focus' => { 'found' => false, 'sources' => [] },
                                             'high_water_mark' => CopilotCheck::Testing::ScriptCalls::REVIEWED_AT,
                                             'session_only' => { 'checkout' => sandbox.work_directory } }])
     expect(JSON.parse(File.read(start_file)))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
              'isCrossRepository' => false, 'isDraft' => false, 'checkout' => sandbox.work_directory,
              'chained' => false)
-    expect(File.read(rubric_file)).to eq('')
+    expect([File.read(rubric_file), File.read(focus_file)]).to eq(['', ''])
+  end
+
+  it "saves the base branch's security focus to the focus file, as the rubric is saved, never printing it" do
+    claude_md = "# Project\n\n## Security focus\n\nSecrets never reach a log.\n\n## Code Style\n\nPlain.\n"
+    expect_resolution
+    expect_start(claude_md: claude_md)
+
+    exit_code, output = run_setup(*arguments)
+
+    expect([exit_code, output['security_focus']]).to eq([0, { 'found' => true, 'sources' => ['CLAUDE.md'] }])
+    expect([File.read(focus_file), File.stat(focus_file).mode & 0o777])
+      .to eq(["## Security focus\n\nSecrets never reach a log.", 0o600])
+    expect(output.to_json).not_to include('Secrets never')
+  end
+
+  it 'fails as a tool when the security focus read fails, having written nothing' do
+    expect_resolution
+    expect_scripts_step
+    expect_checkout_step
+    fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
+    expect_rubric
+    fake_runner.expect_call(contents_call('CLAUDE.md'), exit_status: 1, stdout: '{"message":"Bad credentials"}',
+                                                        stderr: "gh: Bad credentials (HTTP 401)\n")
+
+    expect { run_setup(*arguments) }.to raise_error(SkillSupport::GhError, /HTTP 401/)
+    expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
   end
 
   describe "where #18's branch is checked out" do
@@ -75,7 +106,7 @@ RSpec.describe CopilotCheck::Setup do
       expect_scripts_step
       expect_checkout_step(**checkout)
       exit_code, output = run_setup(*arguments)
-      expect([start_file, rubric_file].map { |path| File.exist?(path) }).to eq([false, false])
+      expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
       [exit_code, output]
     end
 
@@ -206,7 +237,7 @@ RSpec.describe CopilotCheck::Setup do
         .to eq([2, ['stop', 'pull_request_not_open', CopilotCheck::Reasons::MESSAGES[:pull_request_not_open],
                     { 'number' => 18, 'state' => state }]]), state
     end
-    expect([start_file, rubric_file].map { |path| File.exist?(path) }).to eq([false, false])
+    expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
   end
 
   it "stops when Copilot's latest review carries another id, writing nothing" do
@@ -217,7 +248,7 @@ RSpec.describe CopilotCheck::Setup do
 
     expect([exit_code, output.values_at('status', 'reason')]).to eq([2, %w[stop copilot_id_changed]])
     expect(output['pull_request']).to eq('number' => 18)
-    expect([start_file, rubric_file].map { |path| File.exist?(path) }).to eq([false, false])
+    expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
   end
 
   describe 'on a pull request from a fork' do
@@ -284,19 +315,20 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
   let(:argument) { sandbox.path('argument.txt').tap { |path| File.write(path, "18\n") } }
   let(:branch) { CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }
 
-  # #18, as +response+ gives it, then its rubric and mark, as recorded.
+  # #18, as +response+ gives it, then its rubric, security focus and mark,
+  # as recorded: no rubric, CLAUDE.md or .claude/rules/.
   def shim_entries(response)
-    [repo_view_entry.merge(repeat: true),
-     { args: pr_view_call.drop(1), stdout: as_json(response), repeat: true },
-     { args: CopilotCheck::Testing::ScriptCalls::RUBRIC.drop(1), exit: 1,
-       stdout_file: fixture_path('contents/rubric-not-found.json'),
-       stderr: fixture('contents/rubric-not-found.stderr') },
-     recorded_graphql_entry('latest-review-18')]
+    absent = ['.github/copilot-instructions.md', 'CLAUDE.md', '.claude/rules'].map do |path|
+      { args: contents_call(path).drop(1), exit: 1, stdout_file: fixture_path('contents/rubric-not-found.json'),
+        stderr: fixture('contents/rubric-not-found.stderr'), repeat: true }
+    end
+    [repo_view_entry.merge(repeat: true), { args: pr_view_call.drop(1), stdout: as_json(response), repeat: true },
+     *absent, recorded_graphql_entry('latest-review-18')]
   end
 
   def arguments(argument_file, *extra)
     ['--argument-file', argument_file, '--start-file', sandbox.path('pr0.json'),
-     '--rubric-file', sandbox.path('rubric.md'), *extra]
+     '--rubric-file', sandbox.path('rubric.md'), '--focus-file', sandbox.path('security-focus.md'), *extra]
   end
 
   def git(*arguments, directory: sandbox.work_directory)
@@ -332,7 +364,9 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
     expect(output.values_at('status', 'push_remote', 'high_water_mark', 'session_only'))
       .to eq(['proceed', 'origin', CopilotCheck::Testing::ScriptCalls::REVIEWED_AT,
               { 'checkout' => sandbox.work_directory }])
-    expect(output['pull_request']['head_branch']).to eq(branch)
+    expect([output['pull_request']['head_branch'], output['security_focus']])
+      .to eq([branch, { 'found' => false, 'sources' => [] }])
+    expect(File.read(sandbox.path('security-focus.md'))).to eq('')
     start = CopilotCheck::StartState.read(sandbox.path('pr0.json'), 18)
     start.check_repository!(repository)
     expect([start.draft?, start.chained?, start.checkout]).to eq([false, false, sandbox.work_directory])
