@@ -104,6 +104,18 @@ RSpec.describe CopilotCheck::PromotionGate do
       .to eq([%w[protected_paths_changed], %w[docs/CLAUDE.local.md .mcp.json]])
   end
 
+  it "holds a change to Copilot's rubric, or a rename away from it, for the owner" do
+    files = [{ 'filename' => '.github/copilot-instructions.md' },
+             { 'filename' => 'docs/old-rubric.md', 'previous_filename' => '.github/copilot-instructions.md' }]
+    expect_gate(files: { pages: [files] })
+
+    output = run_promote_check(gate_arguments).last
+
+    expect([output['verdict'], output['reasons'].map { |reason| reason['reason'] }])
+      .to eq(['HOLD', %w[protected_paths_changed]])
+    expect(output['files']['github_text']['protected_paths']).to eq(%w[.github/copilot-instructions.md])
+  end
+
   it "holds a documented failure beside a failure annotation the rules don't give, and passes it once they do" do
     text = 'The suite runs once the pull request is ready.'
     exit_code = 'Process completed with exit code 1.'

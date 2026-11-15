@@ -62,9 +62,17 @@ RSpec.describe CopilotCheck::ChangedFiles do
       end
     end
 
+    it "holds Copilot's rubric, where Copilot reads it, ignoring case" do
+      %w[.github/copilot-instructions.md .GitHub/Copilot-Instructions.MD].each do |path|
+        expect(described_class.protected?(path)).to be(true), path
+      end
+    end
+
     it 'leaves other paths alone' do
       %w[.github/workflow.yml .github/CODEOWNERS docs/CLAUDE.md.bak .claude skills/.claudex/a.md
-         github/workflows/ci.yml README.md CLAUDE.local.md.bak mcp.json .mcp.jsonc docs/mcp.json].each do |path|
+         github/workflows/ci.yml README.md CLAUDE.local.md.bak mcp.json .mcp.jsonc docs/mcp.json
+         docs/.github/copilot-instructions.md .github/copilot-instructions.md.bak copilot-instructions.md
+         .github/instructions/ruby.instructions.md].each do |path|
         expect(described_class.protected?(path)).to be(false), path
       end
     end
