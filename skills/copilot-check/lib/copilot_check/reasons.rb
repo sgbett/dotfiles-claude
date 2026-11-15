@@ -65,8 +65,7 @@ module CopilotCheck
                           'identity table and CopilotCheck::Copilot::BOT_ID; never treat this as convergence.',
       copilot_timeout: 'No new Copilot review came within 15 minutes (failed_polls counts the polls that could not ' \
                        "read GitHub, and session_only.error holds the last one's error). Copilot occasionally does " \
-                       "not review, and as its review only comments it can't be a required approval, so nothing " \
-                       'else will notice: say so plainly in the report.',
+                       'not review, and nothing else may notice: say so plainly in the report.',
       copilot_unrecognised: "Copilot's latest review has inline comments, but no review thread was started by " \
                             "Copilot's id: the filters no longer recognise Copilot. Stop and flag it; never treat " \
                             'this as convergence.',

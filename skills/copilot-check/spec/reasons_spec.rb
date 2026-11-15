@@ -26,6 +26,12 @@ RSpec.describe CopilotCheck::Reasons do
     end
   end
 
+  it "says on a timeout that nothing else may notice a missed review, not that Copilot's can't be a required one" do
+    expect(described_class::MESSAGES[:copilot_timeout])
+      .to include('Copilot occasionally does not review, and nothing else may notice: say so plainly in the report.')
+    expect(described_class::MESSAGES[:copilot_timeout]).not_to include('required approval')
+  end
+
   it "says in the fork's ask that a yes means Phase 4 runs the fork's specs and linter as the owner" do
     expect(described_class::MESSAGES[:fork_pull_request])
       .to include("a yes means Phase 4 runs the fork's specs and linter as the owner")
