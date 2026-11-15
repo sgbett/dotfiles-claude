@@ -27,8 +27,9 @@ module CopilotCheck
       files_unlisted: "The pull request's changed files could not all be listed, as GitHub lists at most 3,000, so " \
                       'changes to workflows or rules files cannot be ruled out.',
       protected_paths_changed: 'The pull request changes a path under .github/workflows/ or .github/actions/, ' \
-                               "Copilot's rubric .github/copilot-instructions.md, a file named CLAUDE.md, " \
-                               'CLAUDE.local.md or .mcp.json, or a path under a .claude directory ' \
+                               "Copilot's rubric .github/copilot-instructions.md or a path under " \
+                               '.github/instructions/, a file named CLAUDE.md, CLAUDE.local.md, .mcp.json, ' \
+                               'AGENTS.md, GEMINI.md or REVIEW.md, or a path under a .claude directory ' \
                                '(files.github_text.protected_paths), so what GitHub Actions runs, what Copilot ' \
                                "reviews against or what Claude Code loads from the checkout may not be the base's.",
       no_checks: 'No check has run on the head.',
