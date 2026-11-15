@@ -82,6 +82,12 @@ RSpec.describe CopilotCheck::ChangedFiles do
       end
     end
 
+    it "holds anything under .agents/skills/, where a project can also keep Copilot's agent skills, ignoring case" do
+      %w[.agents/skills/x/SKILL.md .agents/skills/x/scripts/check.sh .Agents/Skills/X/SKILL.MD].each do |path|
+        expect(described_class.protected?(path)).to be(true), path
+      end
+    end
+
     it 'holds any AGENTS.md, GEMINI.md and REVIEW.md, the other files Copilot takes instructions from, at any ' \
        'depth, ignoring case' do
       %w[AGENTS.md GEMINI.md REVIEW.md docs/AGENTS.md skills/x/gemini.md lib/a/b/Review.MD agents.md].each do |path|
@@ -96,7 +102,7 @@ RSpec.describe CopilotCheck::ChangedFiles do
          .github/instruction/ruby.instructions.md docs/.github/instructions/ruby.instructions.md
          ruby.instructions.md AGENTS.md.bak docs/AGENTS REVIEWS.md GEMINI.mdx agents/README.md
          .github/skill/code-review/SKILL.md docs/.github/skills/code-review/SKILL.md
-         skills/code-review/SKILL.md].each do |path|
+         skills/code-review/SKILL.md agents/skills/x docs/.agents/skills/x/SKILL.md].each do |path|
         expect(described_class.protected?(path)).to be(false), path
       end
     end
