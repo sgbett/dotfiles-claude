@@ -53,8 +53,10 @@ module CopilotCheck
     end
 
     # A chained run's draft is one /do opened, by its own conventions, for
-    # the loop, and /do's invariants leave merging to the owner, so the
-    # chain makes both true whatever the repository's rules say.
+    # the loop, and the owner's own rules make merging their call in every
+    # repository, so the chain makes both true whatever the repository's
+    # rules say. A repository whose own automation merges a pull request
+    # once it is ready is an accepted risk.
     def rules_reasons
       [(:no_draft_flow unless @facts.rules.draft_flow? || @facts.chained),
        (:merge_not_owners_step unless @facts.rules.merge_is_owners_step? || @facts.chained),

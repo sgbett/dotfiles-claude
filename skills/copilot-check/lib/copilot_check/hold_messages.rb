@@ -10,7 +10,8 @@ module CopilotCheck
       no_draft_flow: "The rules don't say pull requests open as drafts, and the run wasn't chained from /do, " \
                      'whose conventions open the draft for the loop.',
       merge_not_owners_step: "The rules don't list merging as a later step the owner takes, and the run wasn't " \
-                             'chained from /do, whose invariants leave merging to the owner.',
+                             "chained from /do, which counts it as one, as the owner's own rules make merging " \
+                             'their call in every repository.',
       not_draft_at_start: "The pull request wasn't a draft when the run began, as Phase 0 recorded it.",
       not_converged: "The run didn't converge: it halted, timed out, stopped or failed to push.",
       local_head_differs: "The checkout's HEAD (local_head) isn't the pull request's head commit.",
