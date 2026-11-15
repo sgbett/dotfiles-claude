@@ -7,11 +7,12 @@ module CopilotCheck
     module ScriptRuns
       # Runs +script+ ("setup", "threads" or "rereview") from bin/ of
       # +skill+, this repository's copy of the skill unless a spec gives
-      # another, with +arguments+, returning the exit code, the output parsed
-      # as JSON (nil for none), and stderr.
+      # another, with +arguments+, in +directory+, returning the exit code,
+      # the output parsed as JSON (nil for none), and stderr.
       def run_script(script, *arguments, environment: {},
-                     skill: File.join(repository_root, 'skills', 'copilot-check'))
-        stdout, stderr, status = Open3.capture3(environment, File.join(skill, 'bin', script), *arguments)
+                     skill: File.join(repository_root, 'skills', 'copilot-check'), directory: Dir.pwd)
+        stdout, stderr, status = Open3.capture3(environment, File.join(skill, 'bin', script), *arguments,
+                                                chdir: directory)
         [status.exitstatus, stdout.empty? ? nil : JSON.parse(stdout), stderr]
       end
 

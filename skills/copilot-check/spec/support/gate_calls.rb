@@ -25,7 +25,6 @@ module CopilotCheck
       COPILOT = 'BOT_kgDOCnlnWA'
       GRAPHQL = %w[gh api graphql --hostname github.com --input -].freeze
       REPO_VIEW = %w[gh repo view --json nameWithOwner,url].freeze
-      LOCAL_HEAD = %w[git rev-parse --verify HEAD].freeze
       CHECKS = ['gh', 'pr', 'checks', NUMBER.to_s, '-R', "github.com/#{HERE}", '--json', 'name,bucket,link'].freeze
       JOB_LINK = "https://github.com/#{HERE}/actions/runs/7/job/%<job>d".freeze
       STEPS = %i[repository pull_request threads local_head files checks mergeable].freeze
@@ -92,8 +91,9 @@ module CopilotCheck
                                          stdout: as_json(response), **result)
       end
 
-      def expect_local_head_step(sha: HEAD)
-        fake_runner.expect_call(LOCAL_HEAD, stdout: "#{sha}\n")
+      # The read of HEAD in +checkout+, the start file's unless given.
+      def expect_local_head_step(sha: HEAD, checkout: sandbox.work_directory)
+        fake_runner.expect_call(['git', '-C', checkout, 'rev-parse', '--verify', 'HEAD'], stdout: "#{sha}\n")
       end
 
       # +pages+ are the files list's pages, each a recorded answer or a list.

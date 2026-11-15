@@ -5,8 +5,9 @@ require_relative '../lib/copilot_check/reasons'
 RSpec.describe CopilotCheck::Reasons do
   it "is each script's whole enum of stops and asks, apart from the reasons promote-check's verdict holds for" do
     expect(described_class::SETUP)
-      .to eq(%i[not_a_pull_request_number chained_without_number pull_request_not_open fork_pull_request
-                scripts_unreviewed copilot_id_changed])
+      .to eq(%i[not_a_pull_request_number chained_without_number pull_request_not_open no_pull_request_checkout
+                checkout_runs_scripts no_upstream checkout_not_at_head fork_pull_request scripts_unreviewed
+                copilot_id_changed])
     expect(described_class::THREADS).to eq(%i[copilot_id_changed copilot_unrecognised threads_overflow])
     expect(described_class::REREVIEW).to eq(%i[copilot_id_changed copilot_timeout])
     expect(described_class::PROMOTE_CHECK)
@@ -30,6 +31,19 @@ RSpec.describe CopilotCheck::Reasons do
     expect(described_class::MESSAGES[:copilot_timeout])
       .to include('Copilot occasionally does not review, and nothing else may notice: say so plainly in the report.')
     expect(described_class::MESSAGES[:copilot_timeout]).not_to include('required approval')
+  end
+
+  it "tells the lead what the user does about each checkout the run can't work in, and to run it again" do
+    {
+      no_pull_request_checkout: 'Tell the user to check it out in one',
+      checkout_runs_scripts: "Tell the user to switch that checkout to another branch and check the pull request's " \
+                             'branch out in a worktree of it',
+      no_upstream: 'Tell the user to set its upstream to that branch',
+      checkout_not_at_head: 'Tell the user to push or pull first'
+    }.each do |reason, remedy|
+      expect(described_class::MESSAGES[reason]).to include(remedy).and(end_with('then run /copilot-check again.')),
+                                                   reason.to_s
+    end
   end
 
   it "says in the fork's ask that a yes means Phase 4 runs the fork's specs and linter as the owner" do

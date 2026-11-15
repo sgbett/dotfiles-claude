@@ -9,24 +9,27 @@ module CopilotCheck
   # resolves itself. Its URL must name the checkout's repository, so that
   # every later call targets the same one.
   class PullRequestView
-    FIELDS = %w[number baseRefName isCrossRepository isDraft headRefOid state url].freeze
+    FIELDS = %w[number baseRefName headRefName isCrossRepository isDraft headRefOid state url].freeze
     URL = %r{\Ahttps://(?<host>[^/]+)/(?<path>[^/]+/[^/]+)/pull/(?<number>[1-9][0-9]*)\z}
     OPEN = 'OPEN'
     STATES = [OPEN, 'CLOSED', 'MERGED'].freeze
 
-    # +base+ is the base branch's name; +head+ the head commit's oid; +state+
-    # one of STATES.
-    PullRequest = Struct.new(:number, :base, :draft, :cross_repository, :head, :state, keyword_init: true) do
+    # +base+ is the base branch's name and +head_branch+ the head branch's,
+    # as GitHub gives them; +head+ the head commit's oid; +state+ one of
+    # STATES.
+    PullRequest = Struct.new(:number, :base, :head_branch, :draft, :cross_repository, :head, :state,
+                             keyword_init: true) do
       def open?
         state == OPEN
       end
 
       # What the start file records, as promote-check reads it (StartState):
       # the pull request of +repository+, the CheckoutRepository::Repository,
-      # as it was when the run began, and whether /do +chained+ the run.
-      def start_state(repository, chained:)
+      # as it was when the run began, the top level of the +checkout+ the run
+      # works in, and whether /do +chained+ the run.
+      def start_state(repository, checkout:, chained:)
         { 'number' => number, 'repository' => repository.argument, 'baseRefName' => base,
-          'isCrossRepository' => cross_repository, 'isDraft' => draft, 'chained' => chained }
+          'isCrossRepository' => cross_repository, 'isDraft' => draft, 'checkout' => checkout, 'chained' => chained }
       end
     end
 
@@ -64,8 +67,8 @@ module CopilotCheck
         raise SkillSupport::UnexpectedResponse, "gh pr view gave another pull request than this repository's asked for"
       end
 
-      PullRequest.new(number: number, base: base(view), draft: flag(view, 'isDraft'),
-                      cross_repository: flag(view, 'isCrossRepository'),
+      PullRequest.new(number: number, base: branch(view, 'baseRefName'), head_branch: branch(view, 'headRefName'),
+                      draft: flag(view, 'isDraft'), cross_repository: flag(view, 'isCrossRepository'),
                       head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']), state: state(view))
     end
 
@@ -75,11 +78,11 @@ module CopilotCheck
         Integer(match[:number], 10) == number
     end
 
-    def base(view)
-      base = view['baseRefName']
-      return base if base.is_a?(String) && !base.empty?
+    def branch(view, name)
+      branch = view[name]
+      return branch if branch.is_a?(String) && !branch.empty?
 
-      raise SkillSupport::UnexpectedResponse, 'gh pr view gave no base branch'
+      raise SkillSupport::UnexpectedResponse, "gh pr view gave no #{name}"
     end
 
     def flag(view, name)

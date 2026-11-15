@@ -24,9 +24,12 @@ RSpec.describe CopilotCheck::Setup do
   end
 
   # Every call setup makes on #18 after gh pr view, as recorded unless the
-  # case changes the rubric or the latest review.
-  def expect_start(rubric: nil, latest: fixture('graphql/latest-review-18.json'))
+  # case changes the rubric or the latest review, the checkout found at
+  # #18's head and tracking origin's copy of its branch unless +checkout+
+  # says otherwise (expect_checkout_step).
+  def expect_start(rubric: nil, latest: fixture('graphql/latest-review-18.json'), **checkout)
     expect_scripts_step
+    expect_checkout_step(**checkout)
     fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
     expect_rubric(rubric)
     expect_latest_review(latest)
@@ -37,8 +40,8 @@ RSpec.describe CopilotCheck::Setup do
     expect_pr_view(number, response: response)
   end
 
-  it "starts on #18 as recorded, open: its facts, no rubric, the mark from Copilot's latest review, and the " \
-     'start file with its repository' do
+  it 'starts on #18 as recorded, open: its facts, its checkout and where it pushes, no rubric, the mark from ' \
+     "Copilot's latest review, and the start file with its repository and checkout" do
     expect_resolution
     expect_start
 
@@ -47,14 +50,89 @@ RSpec.describe CopilotCheck::Setup do
     expect([exit_code, output]).to eq([0, { 'status' => 'proceed',
                                             'repository' => { 'host' => 'github.com',
                                                               'name_with_owner' => 'sgbett/dotfiles-claude' },
-                                            'pull_request' => { 'number' => 18, 'base' => 'master', 'is_draft' => false,
-                                                                'is_cross_repository' => false },
-                                            'chained' => false, 'rubric_found' => false,
-                                            'high_water_mark' => CopilotCheck::Testing::ScriptCalls::REVIEWED_AT }])
+                                            'pull_request' => { 'number' => 18, 'base' => 'master',
+                                                                'head_branch' => 'feat/17-do-qa-records-the-work-as',
+                                                                'is_draft' => false, 'is_cross_repository' => false },
+                                            'push_remote' => 'origin', 'chained' => false, 'rubric_found' => false,
+                                            'high_water_mark' => CopilotCheck::Testing::ScriptCalls::REVIEWED_AT,
+                                            'session_only' => { 'checkout' => sandbox.work_directory } }])
     expect(JSON.parse(File.read(start_file)))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
-             'isCrossRepository' => false, 'isDraft' => false, 'chained' => false)
+             'isCrossRepository' => false, 'isDraft' => false, 'checkout' => sandbox.work_directory,
+             'chained' => false)
     expect(File.read(rubric_file)).to eq('')
+  end
+
+  describe "where #18's branch is checked out" do
+    let(:branch) { CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }
+    let(:linked) { sandbox.path('linked').tap { |path| FileUtils.mkdir_p(path) } }
+    let(:other) { CopilotCheck::Testing::GateCalls::OTHER_COMMIT }
+
+    # Runs setup to its stop on the checkout, which it reaches having read
+    # nothing from GitHub but the pull request, and writing nothing.
+    def stop_on_checkout(**checkout)
+      expect_resolution
+      expect_scripts_step
+      expect_checkout_step(**checkout)
+      exit_code, output = run_setup(*arguments)
+      expect([start_file, rubric_file].map { |path| File.exist?(path) }).to eq([false, false])
+      [exit_code, output]
+    end
+
+    it 'finds it in a linked worktree too, as /do builds in, giving its path in the session alone' do
+      expect_resolution
+      expect_start(checkout: linked, worktrees: [{ path: sandbox.work_directory, head: other, branch: 'master' },
+                                                 { path: linked, head: head, branch: branch }])
+
+      output = run_setup(*arguments).last
+
+      expect([output['session_only'], JSON.parse(File.read(start_file))['checkout']])
+        .to eq([{ 'checkout' => linked }, linked])
+    end
+
+    it 'stops when no checkout has it, as when one is on another branch and another detached' do
+      exit_code, output = stop_on_checkout(worktrees: [{ path: sandbox.work_directory, head: head, branch: 'master' },
+                                                       { path: linked, head: head, branch: nil }], upstream: nil)
+
+      expect([exit_code, output.values_at('status', 'reason', 'message')])
+        .to eq([2, ['stop', 'no_pull_request_checkout', CopilotCheck::Reasons::MESSAGES[:no_pull_request_checkout]]])
+      expect(output.except('status', 'reason', 'message'))
+        .to eq('repository' => { 'host' => 'github.com', 'name_with_owner' => 'sgbett/dotfiles-claude' },
+               'pull_request' => { 'number' => 18, 'head_branch' => branch, 'head' => head })
+    end
+
+    it "stops when the branch doesn't track #18's branch on a remote, giving the checkout in the session alone" do
+      ["\0\n", "origin\0refs/heads/master\n", ".\0refs/heads/#{branch}\n"].each do |upstream|
+        exit_code, output = stop_on_checkout(upstream: upstream)
+
+        expect([exit_code, output.values_at('reason', 'local_head', 'session_only')])
+          .to eq([2, ['no_upstream', head, { 'checkout' => sandbox.work_directory }]]), upstream.inspect
+      end
+    end
+
+    it "stops when the checkout's HEAD isn't #18's head, giving both" do
+      exit_code, output = stop_on_checkout(worktrees: [{ path: sandbox.work_directory, head: other, branch: branch }])
+
+      expect([exit_code, output.values_at('reason', 'local_head', 'session_only')])
+        .to eq([2, ['checkout_not_at_head', other, { 'checkout' => sandbox.work_directory }]])
+      expect(output['pull_request']).to eq('number' => 18, 'head_branch' => branch, 'head' => head)
+    end
+
+    it "fails as a tool on an upstream's remote whose name isn't safe on a command line" do
+      expect_resolution
+      expect_scripts_step
+      expect_checkout_step(upstream: "fork$(touch x)\0refs/heads/#{branch}\n")
+
+      expect { run_setup(*arguments) }.to raise_error(SkillSupport::InvalidIdentifier, 'invalid remote')
+    end
+
+    it "fails as a tool on a head branch that isn't safe on a command line, before looking for it" do
+      expect_resolution(response: open_pr_view_response(headRefName: "feat'1"))
+      expect_scripts_step
+      fake_runner.expect_call(%w[git check-ref-format --branch feat'1], stdout: "feat'1\n")
+
+      expect { run_setup(*arguments) }.to raise_error(SkillSupport::InvalidIdentifier, 'invalid branch')
+    end
   end
 
   it 'records that /do chained the run when the number is followed by chained, in its output and the start file' do
@@ -145,9 +223,11 @@ RSpec.describe CopilotCheck::Setup do
   describe 'on a pull request from a fork' do
     let(:fork) { open_pr_view_response(isCrossRepository: true) }
 
-    it 'asks before anything else is read or written, with the yes tied to its head' do
+    it 'asks, once it has found its checkout, before anything else is read or written, with the yes tied to its ' \
+       'head' do
       expect_resolution(response: fork)
       expect_scripts_step
+      expect_checkout_step
 
       exit_code, output = run_setup(*arguments)
 
@@ -159,13 +239,16 @@ RSpec.describe CopilotCheck::Setup do
     end
 
     it 'goes on once the user says yes for its head, and asks again once the head has moved' do
+      moved = CopilotCheck::Testing::GateCalls::OTHER_COMMIT
       expect_resolution(response: fork)
       expect_start
       expect(run_setup(*arguments('18', '--accept-fork', head)).last['pull_request']['is_cross_repository'])
         .to be(true)
 
-      expect_resolution(response: fork.merge('headRefOid' => CopilotCheck::Testing::GateCalls::OTHER_COMMIT))
+      expect_resolution(response: fork.merge('headRefOid' => moved))
       expect_scripts_step
+      expect_checkout_step(worktrees: [{ path: pull_request_checkout, head: moved,
+                                         branch: CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }])
       expect(run_setup(*arguments('18', '--accept-fork', head)).first).to eq(3)
     end
   end
@@ -173,6 +256,7 @@ RSpec.describe CopilotCheck::Setup do
   it 'fails as a tool when the rubric read fails for any reason but a 404, as on a missing base' do
     expect_resolution
     expect_scripts_step
+    expect_checkout_step
     fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
     fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::RUBRIC,
                             exit_status: 1, stdout: '{"message":"No commit found for the ref master"}',
@@ -185,6 +269,7 @@ RSpec.describe CopilotCheck::Setup do
   it 'fails as a tool on a base branch that is not safe on a command line' do
     expect_resolution(response: open_pr_view_response(baseRefName: "release'1"))
     expect_scripts_step
+    expect_checkout_step
     fake_runner.expect_call(%w[git check-ref-format --branch release'1], stdout: "release'1\n")
 
     expect { run_setup(*arguments) }.to raise_error(SkillSupport::InvalidIdentifier, 'invalid branch')
@@ -197,10 +282,10 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
 
   let(:clone) { skill_clone('copilot-check') }
   let(:argument) { sandbox.path('argument.txt').tap { |path| File.write(path, "18\n") } }
+  let(:branch) { CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }
 
-  # #18 open, unless +response+ gives another, then its rubric and mark, as
-  # recorded.
-  def shim_entries(response = open_pr_view_response)
+  # #18, as +response+ gives it, then its rubric and mark, as recorded.
+  def shim_entries(response)
     [repo_view_entry.merge(repeat: true),
      { args: pr_view_call.drop(1), stdout: as_json(response), repeat: true },
      { args: CopilotCheck::Testing::ScriptCalls::RUBRIC.drop(1), exit: 1,
@@ -214,9 +299,29 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
      '--rubric-file', sandbox.path('rubric.md'), *extra]
   end
 
-  it 'starts on #18, open, from a reviewed copy of its scripts, whatever RUBYOPT says, writing the start file ' \
-     'promote-check reads' do
-    shim = install_gh_shim(shim_entries)
+  def git(*arguments, directory: sandbox.work_directory)
+    output, status = Open3.capture2e('git', '-C', directory, *arguments)
+    raise "git #{arguments.join(' ')} failed: #{output}" unless status.success?
+
+    output
+  end
+
+  # Checks #18's branch out at a commit of the working directory's
+  # repository, tracking origin's copy of the branch, in that directory or,
+  # given one, a linked +worktree+. Returns #18, open, with that commit as
+  # its head, as gh pr view would give it.
+  def check_out_pull_request(worktree: nil)
+    git('commit', '--quiet', '--allow-empty', '-m', 'Head')
+    git('remote', 'add', 'origin', 'https://github.com/sgbett/dotfiles-claude.git')
+    worktree ? git('worktree', 'add', '--quiet', '-b', branch, worktree) : git('checkout', '--quiet', '-b', branch)
+    git('config', "branch.#{branch}.remote", 'origin')
+    git('config', "branch.#{branch}.merge", "refs/heads/#{branch}")
+    open_pr_view_response(headRefOid: git('rev-parse', 'HEAD').chomp)
+  end
+
+  it 'starts on #18, open, from a reviewed copy of its scripts, whatever RUBYOPT says, in the checkout with its ' \
+     'branch, writing the start file promote-check reads' do
+    shim = install_gh_shim(shim_entries(check_out_pull_request))
 
     exit_code, output, stderr = run_script('setup', *arguments(argument), skill: clone,
                                                                           environment: hostile_environment)
@@ -224,10 +329,36 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
                                                                   name_with_owner: 'sgbett/dotfiles-claude')
 
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
-    expect(output.values_at('status', 'high_water_mark'))
-      .to eq(['proceed', CopilotCheck::Testing::ScriptCalls::REVIEWED_AT])
-    start = CopilotCheck::StartState.read(sandbox.path('pr0.json'), 18).tap { |state| state.check_repository!(repository) }
-    expect([start.draft?, start.chained?]).to eq([false, false])
+    expect(output.values_at('status', 'push_remote', 'high_water_mark', 'session_only'))
+      .to eq(['proceed', 'origin', CopilotCheck::Testing::ScriptCalls::REVIEWED_AT,
+              { 'checkout' => sandbox.work_directory }])
+    expect(output['pull_request']['head_branch']).to eq(branch)
+    start = CopilotCheck::StartState.read(sandbox.path('pr0.json'), 18)
+    start.check_repository!(repository)
+    expect([start.draft?, start.chained?, start.checkout]).to eq([false, false, sandbox.work_directory])
+  end
+
+  it "finds #18's branch in a linked worktree, as /do builds in, while the working directory is on another" do
+    worktree = sandbox.path('pr-worktree')
+    install_gh_shim(shim_entries(check_out_pull_request(worktree: worktree)))
+
+    exit_code, output, stderr = run_script('setup', *arguments(argument), skill: clone)
+
+    expect([exit_code, stderr, output.values_at('push_remote', 'session_only')])
+      .to eq([0, '', ['origin', { 'checkout' => worktree }]])
+    expect(JSON.parse(File.read(sandbox.path('pr0.json')))['checkout']).to eq(worktree)
+  end
+
+  it "stops when #18's branch is checked out where its scripts run from, whose scripts the fixes would change" do
+    scripts_checkout = File.dirname(clone, 2)
+    git('checkout', '--quiet', '-b', branch, directory: scripts_checkout)
+    shim = install_gh_shim([repo_view_entry, { args: pr_view_call.drop(1), stdout: as_json(open_pr_view_response) }])
+
+    exit_code, output, stderr = run_script('setup', *arguments(argument), skill: clone, directory: scripts_checkout)
+
+    expect([exit_code, stderr, shim.unmatched_calls, output.values_at('reason', 'session_only')])
+      .to eq([2, '', [], ['checkout_runs_scripts', { 'checkout' => scripts_checkout }]])
+    expect(File.exist?(sandbox.path('pr0.json'))).to be(false)
   end
 
   it 'stops on #18 as recorded, merged, before looking at its own scripts' do
@@ -243,7 +374,7 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
 
   it 'asks before going on with scripts whose checkout has a change, naming it in the session alone, and goes ' \
      'on with the digest a yes names, as /do does' do
-    install_gh_shim(shim_entries)
+    install_gh_shim(shim_entries(check_out_pull_request))
     File.write(File.join(clone, 'lib', 'unreviewed.rb'), "# not reviewed\n")
 
     exit_code, output, stderr = run_script('setup', *arguments(argument), skill: clone)
@@ -261,7 +392,7 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
   end
 
   it "asks about a fork's head and the scripts at once, and asks again about scripts changed since the yes" do
-    install_gh_shim(shim_entries(open_pr_view_response(isCrossRepository: true)))
+    install_gh_shim(shim_entries(check_out_pull_request.merge('isCrossRepository' => true)))
     File.write(File.join(clone, 'lib', 'unreviewed.rb'), "# not reviewed\n")
 
     first = run_script('setup', *arguments(argument), skill: clone)

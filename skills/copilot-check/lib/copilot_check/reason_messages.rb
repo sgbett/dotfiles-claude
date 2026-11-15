@@ -14,6 +14,23 @@ module CopilotCheck
                               "the user that /do's hand-off lacks the number.",
       pull_request_not_open: "The pull request isn't open: it has been merged or closed (pull_request.state), so " \
                              'there is nothing for /copilot-check to fix. Tell the user.',
+      no_pull_request_checkout: "No checkout of this repository, the working directory's or a worktree of it, " \
+                                "has the pull request's branch (pull_request.head_branch) checked out, so the run " \
+                                'has nowhere to make its fixes. Tell the user to check it out in one, then run ' \
+                                '/copilot-check again.',
+      checkout_runs_scripts: "The pull request's branch is checked out where these scripts run from " \
+                             "(session_only.checkout), so the run's fixes would change the scripts as they run. " \
+                             'Tell the user to switch that checkout to another branch and check the pull ' \
+                             "request's branch out in a worktree of it, as git worktree add does, then run " \
+                             '/copilot-check again.',
+      no_upstream: "The branch checked out at session_only.checkout doesn't track the pull request's branch " \
+                   '(pull_request.head_branch) on a remote, where the run pushes its fixes. Tell the user to set ' \
+                   'its upstream to that branch, as git branch --set-upstream-to does, then run /copilot-check ' \
+                   'again.',
+      checkout_not_at_head: "The checkout with the pull request's branch (session_only.checkout) isn't at the pull " \
+                            "request's head: its HEAD is local_head, the head pull_request.head, so the run's " \
+                            "fixes wouldn't build on what Copilot reviews. Tell the user to push or pull first, so " \
+                            'the two match, then run /copilot-check again.',
       fork_pull_request: "The pull request comes from a fork: its author isn't trusted, yet controls the code the " \
                          "verifiers read and the fixes would build on, and a yes means Phase 4 runs the fork's specs " \
                          'and linter as the owner. Ask the user whether to go on, saying so; on a yes, run setup ' \

@@ -61,6 +61,15 @@ RSpec.describe CopilotCheck::PromotionGate do
       .to eq(['HOLD', %w[no_draft_flow merge_not_owners_step]])
   end
 
+  it 'reads HEAD in the checkout the start file records, which the run pushed from, not the working directory' do
+    checkout = sandbox.path('pr-worktree')
+    expect_gate(local_head: { checkout: checkout })
+
+    output = run_promote_check(gate_arguments(start: start_file(checkout: checkout))).last
+
+    expect([output['verdict'], output['local_head']]).to eq(['PROMOTE', head])
+  end
+
   it 'reads mergeable once more after the checks when it was UNKNOWN, and only once' do
     expect_gate(pull_request: { response: pull_request_response('mergeable' => 'UNKNOWN') },
                 mergeable: { reread: pull_request_response })

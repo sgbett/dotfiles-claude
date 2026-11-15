@@ -14,14 +14,15 @@ module CopilotCheck
     FLAGS = %w[isDraft chained].freeze
 
     # The start file at +path+, which must record pull request +number+, its
-    # repository, whether it was a draft and whether /do chained the run.
-    # Raises UnusableStartFile when the file isn't that JSON, or records
-    # another pull request.
+    # repository, whether it was a draft, the checkout the run works in, by
+    # its absolute path, and whether /do chained the run. Raises
+    # UnusableStartFile when the file isn't that JSON, or records another
+    # pull request.
     def self.read(path, number)
       state = JSON.parse(SkillSupport::WrittenFile.read(path, error: UnusableStartFile))
       unless recorded?(state, number)
-        raise UnusableStartFile, "#{path} doesn't record pull request #{number}'s number, repository, isDraft and " \
-                                 'chained'
+        raise UnusableStartFile, "#{path} doesn't record pull request #{number}'s number, repository, isDraft, " \
+                                 'checkout and chained'
       end
 
       new(path, state)
@@ -31,7 +32,8 @@ module CopilotCheck
 
     def self.recorded?(state, number)
       state.is_a?(Hash) && state['number'] == number && state['repository'].is_a?(String) &&
-        FLAGS.all? { |flag| [true, false].include?(state[flag]) }
+        FLAGS.all? { |flag| [true, false].include?(state[flag]) } &&
+        state['checkout'].is_a?(String) && File.absolute_path?(state['checkout'])
     end
 
     private_class_method :recorded?
@@ -58,6 +60,12 @@ module CopilotCheck
     # (PullRequestArgument).
     def chained?
       @state['chained']
+    end
+
+    # The top level of the checkout the run works in and pushes from
+    # (PullRequestCheckout).
+    def checkout
+      @state['checkout']
     end
   end
 end

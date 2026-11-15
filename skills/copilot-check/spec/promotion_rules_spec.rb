@@ -48,27 +48,32 @@ RSpec.describe CopilotCheck::StartState do
   let(:checkout) do
     CopilotCheck::CheckoutRepository::Repository.new(host: 'github.com', name_with_owner: 'sgbett/dotfiles-claude')
   end
-  let(:valid) { { 'number' => 18, 'repository' => here, 'isDraft' => true, 'chained' => false } }
+  let(:valid) do
+    { 'number' => 18, 'repository' => here, 'isDraft' => true, 'checkout' => '/work/dotfiles-27', 'chained' => false }
+  end
 
   def read(state, number = 18)
     File.write(path, state.is_a?(String) ? state : JSON.generate(state))
     described_class.read(path, number)
   end
 
-  it "reads whether the pull request was a draft and the run chained from Phase 0's file, which names the " \
-     "checkout's repository" do
+  it "reads whether the pull request was a draft, the run's checkout and whether it was chained from Phase 0's " \
+     "file, which names the checkout's repository" do
     state = read(valid.merge('baseRefName' => 'master', 'isCrossRepository' => false))
     state.check_repository!(checkout)
     chained = read(valid.merge('isDraft' => false, 'chained' => true,
                                'repository' => 'GitHub.com/SGBETT/dotfiles-claude'))
     chained.check_repository!(checkout)
 
-    expect([state.draft?, state.chained?, chained.draft?, chained.chained?]).to eq([true, false, false, true])
+    expect([state.draft?, state.chained?, state.checkout]).to eq([true, false, '/work/dotfiles-27'])
+    expect([chained.draft?, chained.chained?]).to eq([false, true])
   end
 
-  it "refuses another pull request's file, one without isDraft, chained or the repository, and one that isn't JSON" do
+  it "refuses another pull request's file, one without isDraft, chained, the checkout's absolute path or the " \
+     "repository, and one that isn't JSON" do
     [valid.merge('number' => 19), valid.merge('number' => '18'), valid.except('isDraft'),
      valid.merge('isDraft' => 'true'), valid.except('chained'), valid.merge('chained' => 'chained'),
+     valid.except('checkout'), valid.merge('checkout' => 'work/dotfiles-27'), valid.merge('checkout' => ['/work']),
      valid.except('repository'), valid.merge('repository' => ['sgbett/dotfiles-claude']), 'not json'].each do |state|
       expect { read(state) }.to raise_error(CopilotCheck::UnusableStartFile), state.inspect
     end

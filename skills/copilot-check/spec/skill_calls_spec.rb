@@ -122,6 +122,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       expect_repo_view
       expect_pr_view
       expect_scripts_step
+      expect_checkout_step
       fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
       expect_rubric
       expect_latest_review

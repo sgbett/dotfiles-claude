@@ -44,7 +44,8 @@ gh api graphql --hostname github.com --input $F/graphql/review-thread-14.request
 
 gh repo view --json nameWithOwner,url > $F/repo-view/checkout.json
 gh pr view 18 -R github.com/sgbett/dotfiles-claude \
-  --json number,baseRefName,isCrossRepository,isDraft,headRefOid,state,url > $F/pr-view/pull-request-18.json
+  --json number,baseRefName,headRefName,isCrossRepository,isDraft,headRefOid,state,url \
+  > $F/pr-view/pull-request-18.json
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/contents/.github/copilot-instructions.md -f ref=master \
   > $F/contents/rubric-not-found.json 2> $F/contents/rubric-not-found.stderr
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/pulls/18/files -f per_page=100 -f page=1 \

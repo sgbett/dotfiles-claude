@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'checkout_calls'
 require_relative 'gate_calls'
 require_relative 'script_runs'
 require_relative '../../lib/copilot_check/rereview'
@@ -12,10 +13,11 @@ module CopilotCheck
     # sgbett/dotfiles-claude as recorded where it can; a spec changes only
     # what its case needs.
     module ScriptCalls
+      include CheckoutCalls
       include GateCalls
       include ScriptRuns
 
-      PR_VIEW_FIELDS = 'number,baseRefName,isCrossRepository,isDraft,headRefOid,state,url'
+      PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,isDraft,headRefOid,state,url'
       RUBRIC = ['gh', 'api', '--hostname', 'github.com', '-X', 'GET',
                 "repos/#{GateCalls::HERE}/contents/.github/copilot-instructions.md", '-f', 'ref=master'].freeze
       BRANCH_CHECK = %w[git check-ref-format --branch master].freeze

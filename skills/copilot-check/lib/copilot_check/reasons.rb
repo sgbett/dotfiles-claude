@@ -11,6 +11,10 @@ module CopilotCheck
     NOT_A_PULL_REQUEST_NUMBER = :not_a_pull_request_number
     CHAINED_WITHOUT_NUMBER = :chained_without_number
     PULL_REQUEST_NOT_OPEN = :pull_request_not_open
+    NO_PULL_REQUEST_CHECKOUT = :no_pull_request_checkout
+    CHECKOUT_RUNS_SCRIPTS = :checkout_runs_scripts
+    NO_UPSTREAM = :no_upstream
+    CHECKOUT_NOT_AT_HEAD = :checkout_not_at_head
     FORK_PULL_REQUEST = :fork_pull_request
     SCRIPTS_UNREVIEWED = SkillSupport::ScriptsCheckout::REASON
     COPILOT_ID_CHANGED = :copilot_id_changed
@@ -24,11 +28,13 @@ module CopilotCheck
     # The thread fetch's stops (Threads), which leave nothing to judge.
     THREAD_STOPS = [COPILOT_ID_CHANGED, COPILOT_UNRECOGNISED, THREADS_OVERFLOW].freeze
     # setup's whole enum: an argument that names no pull request, chained
-    # alone, a pull request that isn't open, the asks on a fork's and on
-    # scripts that may not be the reviewed ones, and Copilot's latest review
-    # under another id.
-    SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, FORK_PULL_REQUEST,
-             SCRIPTS_UNREVIEWED, COPILOT_ID_CHANGED].freeze
+    # alone, a pull request that isn't open, a checkout the run can't work
+    # in (PullRequestCheckout), the asks on a fork's and on scripts that may
+    # not be the reviewed ones, and Copilot's latest review under another
+    # id.
+    SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, NO_PULL_REQUEST_CHECKOUT,
+             CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM, CHECKOUT_NOT_AT_HEAD, FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED,
+             COPILOT_ID_CHANGED].freeze
     # threads': `fetch` and `resolve` stop only where the thread fetch does.
     THREADS = THREAD_STOPS
     # rereview's: `request` never stops, and `watch` stops on Copilot's

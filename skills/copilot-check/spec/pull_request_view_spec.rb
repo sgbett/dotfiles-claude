@@ -17,11 +17,11 @@ RSpec.describe CopilotCheck::PullRequestView do
     pull_request = view.fetch(18)
 
     expect([pull_request.to_h, pull_request.open?])
-      .to eq([{ number: 18, base: 'master', draft: false, cross_repository: false,
-                head: CopilotCheck::Testing::GateCalls::HEAD, state: 'MERGED' }, false])
-    expect(pull_request.start_state(repository, chained: true))
+      .to eq([{ number: 18, base: 'master', head_branch: 'feat/17-do-qa-records-the-work-as', draft: false,
+                cross_repository: false, head: CopilotCheck::Testing::GateCalls::HEAD, state: 'MERGED' }, false])
+    expect(pull_request.start_state(repository, checkout: '/work/dotfiles-27', chained: true))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
-             'isCrossRepository' => false, 'isDraft' => false, 'chained' => true)
+             'isCrossRepository' => false, 'isDraft' => false, 'checkout' => '/work/dotfiles-27', 'chained' => true)
   end
 
   it 'tells an open pull request from a closed or merged one' do
@@ -54,9 +54,10 @@ RSpec.describe CopilotCheck::PullRequestView do
     end
   end
 
-  it 'fails rather than guess when a flag, the base, the state or the head is missing, or gh prints no JSON' do
+  it 'fails rather than guess when a flag, a branch, the state or the head is missing, or gh prints no JSON' do
     unusable = [pr_view_response(isDraft: nil), pr_view_response(isCrossRepository: 'false'),
-                pr_view_response(baseRefName: ''), pr_view_response(state: nil), pr_view_response(state: 'open')]
+                pr_view_response(baseRefName: ''), pr_view_response(headRefName: nil), pr_view_response(state: nil),
+                pr_view_response(state: 'open')]
     unusable.each do |response|
       expect_pr_view(response: response)
       expect { view.fetch(18) }.to raise_error(SkillSupport::UnexpectedResponse), response.inspect
