@@ -14,6 +14,7 @@ module CopilotCheck
     NO_PULL_REQUEST_CHECKOUT = :no_pull_request_checkout
     CHECKOUT_RUNS_SCRIPTS = :checkout_runs_scripts
     NO_UPSTREAM = :no_upstream
+    PUSH_REMOTE_NOT_HEAD_REPOSITORY = :push_remote_not_head_repository
     CHECKOUT_NOT_AT_HEAD = :checkout_not_at_head
     FORK_PULL_REQUEST = :fork_pull_request
     SCRIPTS_UNREVIEWED = SkillSupport::ScriptsCheckout::REASON
@@ -33,8 +34,8 @@ module CopilotCheck
     # not be the reviewed ones, and Copilot's latest review under another
     # id.
     SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, NO_PULL_REQUEST_CHECKOUT,
-             CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM, CHECKOUT_NOT_AT_HEAD, FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED,
-             COPILOT_ID_CHANGED].freeze
+             CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM, PUSH_REMOTE_NOT_HEAD_REPOSITORY, CHECKOUT_NOT_AT_HEAD,
+             FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED, COPILOT_ID_CHANGED].freeze
     # threads': `fetch` and `resolve` stop only where the thread fetch does.
     THREADS = THREAD_STOPS
     # rereview's: `request` never stops, and `watch` stops on Copilot's

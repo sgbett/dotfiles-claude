@@ -19,8 +19,8 @@ module CopilotCheck
       include GateCalls
       include ScriptRuns
 
-      PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,headRepositoryOwner,isDraft,headRefOid,' \
-                       'state,url'
+      PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,headRepository,headRepositoryOwner,isDraft,' \
+                       'headRefOid,state,url'
       RUBRIC = ['gh', 'api', '--hostname', 'github.com', '-X', 'GET',
                 "repos/#{GateCalls::HERE}/contents/.github/copilot-instructions.md", '-f', 'ref=master'].freeze
       VIEWER = %w[gh api --hostname github.com -X GET user].freeze
@@ -47,9 +47,11 @@ module CopilotCheck
         pr_view_response(state: 'OPEN', **fields)
       end
 
-      # #18 open, but from a fork +owner+ owns.
+      # #18 open, but from +owner+'s fork of the same name.
       def fork_pr_view_response(owner)
-        open_pr_view_response(isCrossRepository: true, headRepositoryOwner: { 'login' => owner })
+        open_pr_view_response(isCrossRepository: true, headRepositoryOwner: { 'login' => owner },
+                              headRepository: { 'name' => 'dotfiles-claude',
+                                                'nameWithOwner' => "#{owner}/dotfiles-claude" })
       end
 
       # gh api user's answer, cut to the login: the rest holds the account's

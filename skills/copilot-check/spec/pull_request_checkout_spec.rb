@@ -2,10 +2,14 @@
 
 require_relative '../lib/copilot_check/pull_request_checkout'
 
-# Against real worktrees of the sandbox's repository.
+# Against real worktrees of the sandbox's repository, with gh's answers on
+# the fake runner.
 RSpec.describe CopilotCheck::PullRequestCheckout do
   let(:branch) { 'feat/27-chain-into-copilot-check' }
   let(:linked) { sandbox.path('linked') }
+  let(:here) { 'sgbett/dotfiles-claude' }
+  let(:origin_url) { 'https://github.com/sgbett/dotfiles-claude.git' }
+  let(:fork_url) { 'https://github.com/example-owner/dotfiles-claude.git' }
 
   def git(*arguments, directory: sandbox.work_directory)
     output, status = Open3.capture2e('git', '-C', directory, *arguments)
@@ -19,7 +23,7 @@ RSpec.describe CopilotCheck::PullRequestCheckout do
   # Returns the commit.
   def repository_with_branch
     git('commit', '--quiet', '--allow-empty', '-m', 'Head')
-    git('remote', 'add', 'origin', 'https://github.com/sgbett/dotfiles-claude.git')
+    git('remote', 'add', 'origin', origin_url)
     git('branch', branch)
     track(remote: 'origin', merge: "refs/heads/#{branch}")
     git('rev-parse', 'HEAD')
@@ -32,13 +36,24 @@ RSpec.describe CopilotCheck::PullRequestCheckout do
     end
   end
 
-  def assess(head, scripts_top_level: nil)
-    described_class.new(SkillSupport::CommandRunner.new, scripts_top_level: scripts_top_level).assess(branch, head)
+  # The Assessment for the pull request at +head+ whose head repository is
+  # +head_repository+, this one unless given.
+  def assess(head, scripts_top_level: nil, head_repository: here)
+    github = SkillSupport::Gh.new(host: 'github.com', runner: fake_runner)
+    described_class.new(SkillSupport::CommandRunner.new, github: github, scripts_top_level: scripts_top_level)
+                   .assess(branch, head, head_repository)
+  end
+
+  # gh resolving push URL +url+ to +repository+.
+  def expect_view(url, repository = here)
+    fake_runner.expect_call(['gh', 'repo', 'view', url, '--json', 'nameWithOwner'],
+                            stdout: JSON.generate('nameWithOwner' => repository))
   end
 
   it 'finds the branch checked out in the working directory, with its HEAD and the remote its upstream is on' do
     head = repository_with_branch
     git('checkout', '--quiet', branch)
+    expect_view(origin_url)
 
     expect(assess(head).to_h)
       .to eq(top_level: sandbox.work_directory, head: head, push_remote: 'origin', stop_reason: nil)
@@ -48,6 +63,7 @@ RSpec.describe CopilotCheck::PullRequestCheckout do
      'scripts run from it' do
     head = repository_with_branch
     git('worktree', 'add', '--quiet', linked, branch)
+    expect_view(origin_url)
 
     expect(assess(head, scripts_top_level: sandbox.work_directory).to_h)
       .to eq(top_level: linked, head: head, push_remote: 'origin', stop_reason: nil)
@@ -81,10 +97,75 @@ RSpec.describe CopilotCheck::PullRequestCheckout do
     end
   end
 
+  describe 'where its upstream pushes' do
+    def stop_reason(head, **options)
+      assess(head, **options).to_h.values_at(:push_remote, :stop_reason)
+    end
+
+    it "stops on a triangular clone's branch, which tracks the base repository's although pushDefault names the " \
+       'fork the pull request comes from' do
+      head = repository_with_branch
+      git('remote', 'add', 'fork', fork_url)
+      git('config', 'remote.pushDefault', 'fork')
+      git('checkout', '--quiet', branch)
+      expect_view(origin_url)
+
+      expect(stop_reason(head, head_repository: 'example-owner/dotfiles-claude'))
+        .to eq([nil, :push_remote_not_head_repository])
+    end
+
+    it "stops on a pull request within its repository whose branch tracks a fork's branch of that name" do
+      head = repository_with_branch
+      git('remote', 'add', 'fork', fork_url)
+      track(remote: 'fork', merge: "refs/heads/#{branch}")
+      git('checkout', '--quiet', branch)
+      expect_view(fork_url, 'example-owner/dotfiles-claude')
+
+      expect(stop_reason(head)).to eq([nil, :push_remote_not_head_repository])
+    end
+
+    it 'passes an upstream whose every push URL GitHub resolves to the head repository' do
+      head = repository_with_branch
+      ssh_url = 'git@github.com:sgbett/dotfiles-claude.git'
+      [origin_url, ssh_url].each { |url| git('config', '--add', 'remote.origin.pushurl', url) }
+      git('checkout', '--quiet', branch)
+      expect_view(origin_url, 'SGBett/Dotfiles-Claude')
+      expect_view(ssh_url)
+
+      expect(stop_reason(head)).to eq(['origin', nil])
+    end
+
+    it 'stops on a push URL on another host, asking GitHub about none' do
+      head = repository_with_branch
+      git('config', '--add', 'remote.origin.pushurl', origin_url)
+      git('config', '--add', 'remote.origin.pushurl', 'https://gitlab.example.com/sgbett/dotfiles-claude.git')
+      git('checkout', '--quiet', branch)
+
+      expect(stop_reason(head)).to eq([nil, :push_remote_not_head_repository])
+    end
+
+    it 'stops when GitHub names no head repository, as for a deleted fork, asking it nothing' do
+      head = repository_with_branch
+      git('checkout', '--quiet', branch)
+
+      expect(stop_reason(head, head_repository: nil)).to eq([nil, :push_remote_not_head_repository])
+    end
+
+    it "fails as a tool when gh can't resolve a push URL" do
+      head = repository_with_branch
+      git('checkout', '--quiet', branch)
+      fake_runner.expect_call(['gh', 'repo', 'view', origin_url, '--json', 'nameWithOwner'],
+                              exit_status: 1, stderr: "GraphQL: Could not resolve to a Repository\n")
+
+      expect { assess(head) }.to raise_error(SkillSupport::GhError, /Could not resolve/)
+    end
+  end
+
   it "stops on a checkout whose HEAD isn't the pull request's head, giving its HEAD" do
     head = repository_with_branch
     git('worktree', 'add', '--quiet', linked, branch)
     git('commit', '--quiet', '--allow-empty', '-m', 'Unpushed', directory: linked)
+    expect_view(origin_url)
 
     expect(assess(head).to_h)
       .to eq(top_level: linked, head: git('rev-parse', 'HEAD', directory: linked), push_remote: 'origin',

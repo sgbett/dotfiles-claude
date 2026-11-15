@@ -106,11 +106,13 @@ module CopilotCheck
     # from, if any.
     def assess_checkout(scripts_top_level)
       branch = SkillSupport::Identifiers.branch!(@pull_request.head_branch, runner: @runner)
-      PullRequestCheckout.new(@runner, scripts_top_level: scripts_top_level).assess(branch, @pull_request.head)
+      PullRequestCheckout.new(@runner, github: github, scripts_top_level: scripts_top_level)
+                         .assess(branch, @pull_request.head, @pull_request.head_repository)
     end
 
     def checkout_stop
-      pull_request = { number: @pull_request.number, head_branch: @pull_request.head_branch, head: @pull_request.head }
+      pull_request = { number: @pull_request.number, head_branch: @pull_request.head_branch, head: @pull_request.head,
+                       head_repository: @pull_request.head_repository }
       session_only = { checkout: @checkout.top_level } if @checkout.top_level
       Reasons.stop(@checkout.stop_reason, **{ repository: @repository.to_h, pull_request: pull_request,
                                               local_head: @checkout.head, session_only: session_only }.compact)

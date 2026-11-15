@@ -9,18 +9,19 @@ module CopilotCheck
   # resolves itself. Its URL must name the checkout's repository, so that
   # every later call targets the same one.
   class PullRequestView
-    FIELDS = %w[number baseRefName headRefName isCrossRepository headRepositoryOwner isDraft headRefOid state
-                url].freeze
+    FIELDS = %w[number baseRefName headRefName isCrossRepository headRepository headRepositoryOwner isDraft
+                headRefOid state url].freeze
     URL = %r{\Ahttps://(?<host>[^/]+)/(?<path>[^/]+/[^/]+)/pull/(?<number>[1-9][0-9]*)\z}
     OPEN = 'OPEN'
     STATES = [OPEN, 'CLOSED', 'MERGED'].freeze
 
     # +base+ is the base branch's name and +head_branch+ the head branch's,
     # as GitHub gives them; +head_owner+ the login of the head repository's
-    # owner, nil when gh gives none; +head+ the head commit's oid; +state+
-    # one of STATES.
-    PullRequest = Struct.new(:number, :base, :head_branch, :draft, :cross_repository, :head_owner, :head, :state,
-                             keyword_init: true) do
+    # owner, nil when gh gives none; +head_repository+ the head repository
+    # as "owner/repo", nil when gh names no owner or no name; +head+ the head
+    # commit's oid; +state+ one of STATES.
+    PullRequest = Struct.new(:number, :base, :head_branch, :draft, :cross_repository, :head_owner, :head_repository,
+                             :head, :state, keyword_init: true) do
       def open?
         state == OPEN
       end
@@ -71,8 +72,8 @@ module CopilotCheck
 
       PullRequest.new(number: number, base: branch(view, 'baseRefName'), head_branch: branch(view, 'headRefName'),
                       draft: flag(view, 'isDraft'), cross_repository: flag(view, 'isCrossRepository'),
-                      head_owner: head_owner(view), head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']),
-                      state: state(view))
+                      head_owner: head_owner(view), head_repository: head_repository(view),
+                      head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']), state: state(view))
     end
 
     def this_repository?(url, number)
@@ -94,6 +95,17 @@ module CopilotCheck
       owner = view['headRepositoryOwner']
       login = owner['login'] if owner.is_a?(Hash)
       login if login.is_a?(String) && !login.empty?
+    end
+
+    # From the owner's login and the repository's name, rather than the
+    # repository's nameWithOwner, which some versions of gh leave empty. Nil
+    # rather than a failure when gh leaves either out, as for a fork since
+    # deleted: no remote can be it then, so setup stops.
+    def head_repository(view)
+      owner = head_owner(view)
+      repository = view['headRepository']
+      name = repository['name'] if repository.is_a?(Hash)
+      SkillSupport::Identifiers.repository!("#{owner}/#{name}") if owner && name.is_a?(String) && !name.empty?
     end
 
     def flag(view, name)

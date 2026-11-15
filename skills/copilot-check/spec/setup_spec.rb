@@ -28,9 +28,9 @@ RSpec.describe CopilotCheck::Setup do
   # Every call setup makes on #18 after gh pr view, as recorded unless the
   # case changes the rubric, CLAUDE.md, whose +claude_md+ holds any focus,
   # or the latest review, the checkout found at #18's head and tracking
-  # origin's copy of its branch unless +checkout+ says otherwise
-  # (expect_checkout_step), and, given a +viewer+, the read of that login a
-  # fork needs.
+  # origin's copy of its branch, which pushes to this repository, unless
+  # +checkout+ says otherwise (expect_checkout_step), and, given a
+  # +viewer+, the read of that login a fork needs.
   def expect_start(rubric: nil, claude_md: nil, latest: fixture('graphql/latest-review-18.json'), viewer: nil,
                    **checkout)
     expect_scripts_step
@@ -132,16 +132,28 @@ RSpec.describe CopilotCheck::Setup do
         .to eq([2, ['stop', 'no_pull_request_checkout', CopilotCheck::Reasons::MESSAGES[:no_pull_request_checkout]]])
       expect(output.except('status', 'reason', 'message'))
         .to eq('repository' => { 'host' => 'github.com', 'name_with_owner' => 'sgbett/dotfiles-claude' },
-               'pull_request' => { 'number' => 18, 'head_branch' => branch, 'head' => head })
+               'pull_request' => { 'number' => 18, 'head_branch' => branch, 'head' => head,
+                                   'head_repository' => 'sgbett/dotfiles-claude' })
     end
 
     it "stops when the branch doesn't track #18's branch on a remote, giving the checkout in the session alone" do
       ["\0\n", "origin\0refs/heads/master\n", ".\0refs/heads/#{branch}\n"].each do |upstream|
-        exit_code, output = stop_on_checkout(upstream: upstream)
+        exit_code, output = stop_on_checkout(upstream: upstream, pushes_to: nil)
 
         expect([exit_code, output.values_at('reason', 'local_head', 'session_only')])
           .to eq([2, ['no_upstream', head, { 'checkout' => sandbox.work_directory }]]), upstream.inspect
       end
+    end
+
+    it "stops when the remote the branch tracks pushes to another repository than #18's head repository, naming " \
+       'it' do
+      exit_code, output = stop_on_checkout(pushes_to: 'example-owner/dotfiles-claude')
+
+      expect([exit_code, output.values_at('reason', 'message', 'session_only')])
+        .to eq([2, ['push_remote_not_head_repository',
+                    CopilotCheck::Reasons::MESSAGES[:push_remote_not_head_repository],
+                    { 'checkout' => sandbox.work_directory }]])
+      expect(output['pull_request']['head_repository']).to eq('sgbett/dotfiles-claude')
     end
 
     it "stops when the checkout's HEAD isn't #18's head, giving both" do
@@ -149,13 +161,14 @@ RSpec.describe CopilotCheck::Setup do
 
       expect([exit_code, output.values_at('reason', 'local_head', 'session_only')])
         .to eq([2, ['checkout_not_at_head', other, { 'checkout' => sandbox.work_directory }]])
-      expect(output['pull_request']).to eq('number' => 18, 'head_branch' => branch, 'head' => head)
+      expect(output['pull_request'])
+        .to eq('number' => 18, 'head_branch' => branch, 'head' => head, 'head_repository' => 'sgbett/dotfiles-claude')
     end
 
     it "fails as a tool on an upstream's remote whose name isn't safe on a command line" do
       expect_resolution
       expect_scripts_step
-      expect_checkout_step(upstream: "fork$(touch x)\0refs/heads/#{branch}\n")
+      expect_checkout_step(upstream: "fork$(touch x)\0refs/heads/#{branch}\n", pushes_to: nil)
 
       expect { run_setup(*arguments) }.to raise_error(SkillSupport::InvalidIdentifier, 'invalid remote')
     end
@@ -256,12 +269,13 @@ RSpec.describe CopilotCheck::Setup do
 
   describe 'on a pull request from a fork' do
     let(:fork) { fork_pr_view_response('example-stranger') }
+    let(:stranger) { 'example-stranger/dotfiles-claude' }
 
     it 'asks when someone else owns it, once it has found its checkout and read the viewer, before anything else ' \
        'is read or written, with the yes tied to its head' do
       expect_resolution(response: fork)
       expect_scripts_step
-      expect_checkout_step
+      expect_checkout_step(pushes_to: stranger)
       expect_viewer
 
       exit_code, output = run_setup(*arguments)
@@ -273,12 +287,16 @@ RSpec.describe CopilotCheck::Setup do
       expect(File.exist?(start_file)).to be(false)
     end
 
-    it "asks without reading the viewer when gh names no owner, who can't be the viewer" do
+    it 'stops on its checkout, asking nothing, when gh names no owner, whose repository nothing can push to, as ' \
+       'for a deleted fork' do
       expect_resolution(response: fork.merge('headRepositoryOwner' => nil))
       expect_scripts_step
-      expect_checkout_step
+      expect_checkout_step(pushes_to: nil)
 
-      expect(run_setup(*arguments).last['asks'].map { |ask| ask['reason'] }).to eq(%w[fork_pull_request])
+      exit_code, output = run_setup(*arguments)
+
+      expect([exit_code, output['reason'], output['pull_request']['head_repository']])
+        .to eq([2, 'push_remote_not_head_repository', nil])
     end
 
     it "goes on without asking when the viewer owns it, whatever the case of the owner's login" do
@@ -297,13 +315,14 @@ RSpec.describe CopilotCheck::Setup do
        'has moved' do
       moved = CopilotCheck::Testing::GateCalls::OTHER_COMMIT
       expect_resolution(response: fork)
-      expect_start
+      expect_start(pushes_to: stranger)
       expect(run_setup(*arguments('18', '--accept-fork', head)).last['pull_request']['is_cross_repository'])
         .to be(true)
 
       expect_resolution(response: fork.merge('headRefOid' => moved))
       expect_scripts_step
-      expect_checkout_step(worktrees: [{ path: pull_request_checkout, head: moved,
+      expect_checkout_step(pushes_to: stranger,
+                           worktrees: [{ path: pull_request_checkout, head: moved,
                                          branch: CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }])
       expect_viewer
       expect(run_setup(*arguments('18', '--accept-fork', head)).first).to eq(3)
@@ -312,7 +331,7 @@ RSpec.describe CopilotCheck::Setup do
     it "fails as a tool when GitHub gives no viewer's login" do
       expect_resolution(response: fork)
       expect_scripts_step
-      expect_checkout_step
+      expect_checkout_step(pushes_to: stranger)
       expect_viewer(nil)
 
       expect { run_setup(*arguments) }.to raise_error(SkillSupport::UnexpectedResponse, 'gh api user gave no login')
@@ -350,15 +369,27 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
   let(:argument) { sandbox.path('argument.txt').tap { |path| File.write(path, "18\n") } }
   let(:branch) { CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }
 
-  # #18, as +response+ gives it, then its rubric, security focus and mark,
-  # as recorded: no rubric, CLAUDE.md or .claude/rules/.
-  def shim_entries(response)
+  # #18, as +response+ gives it; where its branch's upstream pushes
+  # (push_url_entry); then its rubric, security focus and mark, as
+  # recorded: no rubric, CLAUDE.md or .claude/rules/.
+  def shim_entries(response, **push)
     absent = ['.github/copilot-instructions.md', 'CLAUDE.md', '.claude/rules'].map do |path|
       { args: contents_call(path).drop(1), exit: 1, stdout_file: fixture_path('contents/rubric-not-found.json'),
         stderr: fixture('contents/rubric-not-found.stderr'), repeat: true }
     end
     [repo_view_entry.merge(repeat: true), { args: pr_view_call.drop(1), stdout: as_json(response), repeat: true },
-     *absent, recorded_graphql_entry('latest-review-18')]
+     push_url_entry(**push), *absent, recorded_graphql_entry('latest-review-18')]
+  end
+
+  # gh resolving +push_url+ to this repository, as recorded, unless
+  # +pushes_to+ names another.
+  def push_url_entry(push_url: CopilotCheck::Testing::CheckoutCalls::ORIGIN_URL, pushes_to: nil)
+    view = if pushes_to
+             { stdout: as_json('nameWithOwner' => pushes_to) }
+           else
+             { stdout_file: fixture_path('repo-view/push-url.json') }
+           end
+    { args: ['repo', 'view', push_url, '--json', 'nameWithOwner'], repeat: true, **view }
   end
 
   def arguments(argument_file, *extra)
@@ -374,12 +405,13 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
   end
 
   # Checks #18's branch out at a commit of the working directory's
-  # repository, tracking origin's copy of the branch, in that directory or,
+  # repository, tracking origin's copy of the branch, origin being this
+  # repository unless +origin_url+ says otherwise, in that directory or,
   # given one, a linked +worktree+. Returns #18, open, with that commit as
   # its head, as gh pr view would give it.
-  def check_out_pull_request(worktree: nil)
+  def check_out_pull_request(worktree: nil, origin_url: CopilotCheck::Testing::CheckoutCalls::ORIGIN_URL)
     git('commit', '--quiet', '--allow-empty', '-m', 'Head')
-    git('remote', 'add', 'origin', 'https://github.com/sgbett/dotfiles-claude.git')
+    git('remote', 'add', 'origin', origin_url)
     worktree ? git('worktree', 'add', '--quiet', '-b', branch, worktree) : git('checkout', '--quiet', '-b', branch)
     git('config', "branch.#{branch}.remote", 'origin')
     git('config', "branch.#{branch}.merge", "refs/heads/#{branch}")
@@ -462,10 +494,13 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
 
   it "asks about the head of someone else's fork and the scripts at once, and asks again about scripts changed " \
      'since the yes' do
-    fork = check_out_pull_request.merge('isCrossRepository' => true,
-                                        'headRepositoryOwner' => { 'login' => 'example-stranger' })
+    stranger_url = 'https://github.com/example-stranger/dotfiles-claude.git'
+    fork = check_out_pull_request(origin_url: stranger_url)
+           .merge(fork_pr_view_response('example-stranger').slice('isCrossRepository', 'headRepository',
+                                                                  'headRepositoryOwner'))
     viewer = { args: CopilotCheck::Testing::ScriptCalls::VIEWER.drop(1), stdout: as_json(viewer_response) }
-    install_gh_shim([*shim_entries(fork), viewer])
+    install_gh_shim([*shim_entries(fork, push_url: stranger_url, pushes_to: 'example-stranger/dotfiles-claude'),
+                     viewer])
     File.write(File.join(clone, 'lib', 'unreviewed.rb'), "# not reviewed\n")
 
     first = run_script('setup', *arguments(argument), skill: clone)

@@ -6,8 +6,8 @@ RSpec.describe CopilotCheck::Reasons do
   it "is each script's whole enum of stops and asks, apart from the reasons promote-check's verdict holds for" do
     expect(described_class::SETUP)
       .to eq(%i[not_a_pull_request_number chained_without_number pull_request_not_open no_pull_request_checkout
-                checkout_runs_scripts no_upstream checkout_not_at_head fork_pull_request scripts_unreviewed
-                copilot_id_changed])
+                checkout_runs_scripts no_upstream push_remote_not_head_repository checkout_not_at_head
+                fork_pull_request scripts_unreviewed copilot_id_changed])
     expect(described_class::THREADS).to eq(%i[copilot_id_changed copilot_unrecognised threads_overflow])
     expect(described_class::REREVIEW).to eq(%i[copilot_id_changed copilot_timeout])
     expect(described_class::PROMOTE_CHECK)
@@ -39,6 +39,8 @@ RSpec.describe CopilotCheck::Reasons do
       checkout_runs_scripts: "Tell the user to switch that checkout to another branch and check the pull request's " \
                              'branch out in a worktree of it',
       no_upstream: 'Tell the user to set its upstream to that branch',
+      push_remote_not_head_repository: 'Tell the user to set its upstream to that branch on a remote of the head ' \
+                                       'repository',
       checkout_not_at_head: 'Tell the user to push or pull first'
     }.each do |reason, remedy|
       expect(described_class::MESSAGES[reason]).to include(remedy).and(end_with('then run /copilot-check again.')),

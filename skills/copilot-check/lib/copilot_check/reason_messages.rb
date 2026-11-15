@@ -27,6 +27,14 @@ module CopilotCheck
                    '(pull_request.head_branch) on a remote, where the run pushes its fixes. Tell the user to set ' \
                    'its upstream to that branch, as git branch --set-upstream-to does, then run /copilot-check ' \
                    'again.',
+      push_remote_not_head_repository: "The branch checked out at session_only.checkout tracks the pull request's " \
+                                       "branch on a remote that doesn't push to the pull request's head " \
+                                       'repository (pull_request.head_repository, null when GitHub names none) ' \
+                                       "alone: a URL it pushes to is on another host, isn't a repository URL gh " \
+                                       'reads, or resolves through GitHub to another repository, so the run would ' \
+                                       'push its fixes there. Tell the user to set its upstream to that branch on ' \
+                                       'a remote of the head repository, as git branch --set-upstream-to does, ' \
+                                       'then run /copilot-check again.',
       checkout_not_at_head: "The checkout with the pull request's branch (session_only.checkout) isn't at the pull " \
                             "request's head: its HEAD is local_head, the head pull_request.head, so the run's " \
                             "fixes wouldn't build on what Copilot reviews. Tell the user to push or pull first, so " \
