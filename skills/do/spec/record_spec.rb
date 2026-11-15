@@ -53,7 +53,13 @@ RSpec.describe 'skills/do/bin/record' do
                 stdout_file: fixture_path('repo-view/origin.json') },
        issue_query,
        { args: %w[api --hostname github.com -X GET repos/sgbett/dotfiles-claude/issues/24],
-         stdout_file: fixture_path('rest/issue-24.json') }]
+         stdout_file: fixture_path('rest/issue-24.json') },
+       { args: %w[api --hostname github.com -X GET repos/sgbett/dotfiles-claude/rules/branches/master -f per_page=100],
+         stdout_file: fixture_path('rest/branch-rules-none.json') },
+       { args: %w[api --hostname github.com -X GET repos/sgbett/dotfiles-claude/contents/.github/copilot-instructions.md
+                  -f ref=master],
+         exit: 1, stdout_file: fixture_path('contents/rules-not-found.json'),
+         stderr: fixture('contents/rules-not-found.stderr') }]
     )
 
     digest = Do::Checklist.scan(JSON.parse(fixture('rest/issue-24.json'))['body'], target: :issue_body).digest
@@ -67,6 +73,7 @@ RSpec.describe 'skills/do/bin/record' do
       .to eq(['proceed', 'issue_boxes', [], []])
     expect(output['held'])
       .to eq([{ 'reference' => '#24', 'reasons' => ['unverified_boxes'], 'unverified' => (2..11).to_a }])
+    expect(output['copilot_review']).to eq('ruleset' => false, 'instructions' => false, 'signal' => false)
   end
 
   it 'reports the box a dry run would tick, asking gh nothing but its login and the issue query' do

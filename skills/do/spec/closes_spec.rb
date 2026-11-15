@@ -7,14 +7,18 @@ RSpec.describe Do::Closes do
 
   let(:upstream) { 'example-owner/upstream' }
   let(:body) { "## Acceptance criteria\n\n- [ ] One\n  - [ ] a detail\n- [ ] Two\n```\n- [ ] Quoted\n```\n" }
+  let(:copilot) { {} }
 
   # Runs closes on the recorded issue answered with +response+ and, unless
   # its criteria live in the ledger, an issue body of +body+; any verified
-  # boxes come with the body's digest, as facts gave it.
+  # boxes come with the body's digest, as facts gave it. The Copilot signal
+  # answers with +copilot+ (CopilotSignalCalls), unless it is nil, for a run
+  # that stops before reading it.
   def closes(response = record_response, body: self.body, base: 'master', items: nil, boxes: nil)
     expect_base(base)
     expect_located(response)
     expect_read(Do::Testing::RecordCalls::ISSUE_PATH, body) if body
+    expect_copilot_signal(branch: base, ref: base, **copilot) if copilot
     record('closes', 'sgbett/dotfiles-claude#24', '--base', base, *(['--verified-items', items] if items),
            *(['--verified-boxes', boxes, '--boxes-digest', boxes_digest(body)] if boxes))
   end
@@ -25,6 +29,7 @@ RSpec.describe Do::Closes do
     expect_base(base)
     expect_located(record_response)
     expect_read(Do::Testing::RecordCalls::ISSUE_PATH, edited)
+    expect_copilot_signal(branch: base, ref: base)
     record('closes', 'sgbett/dotfiles-claude#24', '--base', base, '--verified-boxes', '1,2,3',
            '--boxes-digest', boxes_digest(body))
   end
@@ -149,6 +154,18 @@ RSpec.describe Do::Closes do
     end
   end
 
+  describe 'the Copilot signal' do
+    let(:copilot) { { rules: fixture('rest/branch-rules-copilot.json'), instructions: "# Review\n" } }
+
+    it "reports the base's, read here again, after what is held open and before session_only" do
+      _exit_code, output = closes(base: 'feat/20-parent', boxes: '1,2,3')
+
+      expect(output.keys).to eq(%w[status base default_branch base_is_default closes_lines close_by_hand criteria held
+                                   copilot_review session_only])
+      expect(output['copilot_review']).to eq('ruleset' => true, 'instructions' => true, 'signal' => true)
+    end
+  end
+
   describe 'boxes it cannot place' do
     let(:held_open) { [{ 'reference' => '#24', 'reasons' => ['boxes_changed'] }] }
 
@@ -198,6 +215,8 @@ RSpec.describe Do::Closes do
   end
 
   describe 'what it refuses' do
+    let(:copilot) { nil }
+
     it 'stops, naming them, on ids or positions that match no box, or several' do
       response = record_response(ledger: "- [ ] **L1 One.**\n- [ ] **L1 Again.**\n- [ ] **L2 Two.**\n")
       exit_code, output = closes(response, items: 'L1,L2,L9', boxes: '2,4')

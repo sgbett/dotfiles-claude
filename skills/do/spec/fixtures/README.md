@@ -73,7 +73,7 @@ F=skills/do/spec/fixtures
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/issues/24 > $F/rest/issue-24.json
 ```
 
-`CopilotSignal`'s two recordings are the rules for a base branch, which `check` reads, recorded the same way after also checking that `gh repo view sgbett/bsv-ruby-sdk --json visibility` prints `PUBLIC`: `branch-rules-copilot.json` holds a `copilot_code_review` rule beside a status-check rule, and `branch-rules-none.json` is this repository's empty list. A contents 404 reads the same for any path, so an absent `.github/copilot-instructions.md` is `rules-not-found.json` again.
+`CopilotSignal`'s two recordings are the rules for a base branch, which `check` and `record closes` read, recorded the same way after also checking that `gh repo view sgbett/bsv-ruby-sdk --json visibility` prints `PUBLIC`: `branch-rules-copilot.json` holds a `copilot_code_review` rule beside a status-check rule, and `branch-rules-none.json` is this repository's empty list. A contents 404 reads the same for any path, so an absent `.github/copilot-instructions.md` is `rules-not-found.json` again.
 
 ```sh
 F=skills/do/spec/fixtures
