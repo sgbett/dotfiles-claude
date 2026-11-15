@@ -53,7 +53,7 @@ What every script needs is in `_support/lib/`:
 | `Cli.run(name, reasons:) { … }` | Prints the block's `Outcome`, returns its exit code, and turns an exception into a tool failure |
 | `Outcome.proceed`, `.stop`, `.ask` | The JSON object; the only place exit codes are defined |
 | `CommandRunner#run(argv, stdin:)` | An argument array, never a shell, with `GH_REPO` and `GH_HOST` cleared and prompts off |
-| `Gh#api`, `#graphql`, `#repo_view`, `#logged_in?` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data`; whether gh's active account there is logged in |
+| `Gh#api`, `#graphql`, `#repo_view`, `#logged_in?`, `.path_segment` | `gh` on one named host; GraphQL through `--input -` with variables, failing on `errors` even beside `data`; whether gh's active account there is logged in; a value percent-encoded as one segment of an API path |
 | `Pagination.ensure_complete!` | Fails when a GraphQL connection has another page, or can't show it hasn't |
 | `RepositoryFiles#read` | A file at a ref through GitHub's contents API: `nil` only for a 404 "Not Found" |
 | `WrittenFile.read`, `.path!` | A file the lead wrote, read as a regular file, never through a symlink; and the check on the path a flag gives |

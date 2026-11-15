@@ -9,7 +9,6 @@ module SkillSupport
     ABSENT_MESSAGE = 'Not Found'
     # The contents API lists at most 1,000 entries of a directory.
     LISTING_LIMIT = 1000
-    RESERVED_BYTE = /[^A-Za-z0-9._~-]/n
     DOT_SEGMENTS = %w[. ..].freeze
     CONTROL_CHARACTER = /[[:cntrl:]]/
 
@@ -44,7 +43,7 @@ module SkillSupport
         raise InvalidIdentifier.new(:file_path, path)
       end
 
-      segments.map { |segment| segment.b.gsub(RESERVED_BYTE) { |byte| format('%%%02X', byte.ord) } }.join('/')
+      segments.map { |segment| Gh.path_segment(segment) }.join('/')
     end
 
     # An empty ref would make the API read the default branch instead.
