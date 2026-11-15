@@ -48,6 +48,19 @@ RSpec.describe CopilotCheck::PromotionGate do
     expect(output['files']['github_text']['protected_paths']).to eq(%w[CLAUDE.md .github/workflows/x])
   end
 
+  it "promotes a chained run's draft where the rules say neither that drafts open nor that merging is the " \
+     "owner's, and holds one that wasn't chained" do
+    silent = rules_file(draft_flow: false, merge_is_owners_step: false)
+    expect_gate
+    chained = run_promote_check(gate_arguments(rules: silent, start: start_file(chained: true))).last
+    expect_gate
+    unchained = run_promote_check(gate_arguments(rules: silent, start: start_file(chained: false))).last
+
+    expect([chained['verdict'], chained['reasons']]).to eq(['PROMOTE', []])
+    expect([unchained['verdict'], unchained['reasons'].map { |reason| reason['reason'] }])
+      .to eq(['HOLD', %w[no_draft_flow merge_not_owners_step]])
+  end
+
   it 'reads mergeable once more after the checks when it was UNKNOWN, and only once' do
     expect_gate(pull_request: { response: pull_request_response('mergeable' => 'UNKNOWN') },
                 mergeable: { reread: pull_request_response })

@@ -9,6 +9,9 @@ module CopilotCheck
       not_a_pull_request_number: "The argument isn't a pull request number. Tell the user that /copilot-check " \
                                  "takes a bare number, or nothing on the pull request's branch, as the repository " \
                                  "is always this checkout's.",
+      chained_without_number: 'The argument is chained with no pull request number before it, yet /do, which ' \
+                              'chains a run, always names the pull request it hands on, as in 18 chained. Tell ' \
+                              "the user that /do's hand-off lacks the number.",
       pull_request_not_open: "The pull request isn't open: it has been merged or closed (pull_request.state), so " \
                              'there is nothing for /copilot-check to fix. Tell the user.',
       fork_pull_request: "The pull request comes from a fork: its author isn't trusted, yet controls the code the " \
@@ -39,8 +42,10 @@ module CopilotCheck
                               'auto_merge is true, tell the user: gh pr merge --disable-auto turns it off.',
       not_open: "The pull request isn't open.",
       not_a_draft: "The pull request isn't a draft now.",
-      no_draft_flow: "The rules don't say pull requests open as drafts.",
-      merge_not_owners_step: "The rules don't list merging as a later step the owner takes.",
+      no_draft_flow: "The rules don't say pull requests open as drafts, and the run wasn't chained from /do, " \
+                     'whose conventions open the draft for the loop.',
+      merge_not_owners_step: "The rules don't list merging as a later step the owner takes, and the run wasn't " \
+                             'chained from /do, whose invariants leave merging to the owner.',
       not_draft_at_start: "The pull request wasn't a draft when the run began, as Phase 0 recorded it.",
       not_converged: "The run didn't converge: it halted, timed out, stopped or failed to push.",
       local_head_differs: "The checkout's HEAD (local_head) isn't the pull request's head commit.",

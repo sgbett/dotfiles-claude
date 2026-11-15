@@ -44,7 +44,7 @@ RSpec.describe CopilotCheck::Verdict do
   end
 
   def facts(**overrides)
-    CopilotCheck::Verdict::Facts.new(rules: rules, started_as_draft: true, outcome: 'converged',
+    CopilotCheck::Verdict::Facts.new(rules: rules, started_as_draft: true, chained: false, outcome: 'converged',
                                      pull_request: pull_request, mergeable: 'MERGEABLE', local_head: head,
                                      threads: threads, reviews_without_findings: [], reviews_read: [], files: files,
                                      checks: [check('pass')], **overrides)
@@ -108,6 +108,23 @@ RSpec.describe CopilotCheck::Verdict do
     expect(verdict(**combined).reasons).to eq(CopilotCheck::Reasons::HOLD - [:no_checks])
     expect(verdict(**combined, checks: []).reasons)
       .to eq(CopilotCheck::Reasons::HOLD - %i[checks_pending checks_cancelled undocumented_failures])
+  end
+
+  describe 'a run /do chained' do
+    let(:silent) { rules(draft_flow: false, merge_is_owners_step: false) }
+
+    it "counts as a draft flow and as merging being the owner's step where the rules say neither" do
+      expect(verdict(rules: silent, chained: true).reasons).to eq([])
+      expect(verdict(rules: silent).reasons).to eq(%i[no_draft_flow merge_not_owners_step])
+    end
+
+    it 'stands in for nothing else' do
+      chained = { rules: silent, chained: true }
+
+      expect(verdict(**chained, started_as_draft: false).reasons).to eq([:not_draft_at_start])
+      expect(verdict(**chained, pull_request: pull_request(draft: false)).reasons).to eq([:not_a_draft])
+      expect(verdict(**chained, outcome: 'halted').reasons).to eq([:not_converged])
+    end
   end
 
   it 'holds for every outcome but converged' do

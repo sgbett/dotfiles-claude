@@ -9,6 +9,7 @@ module CopilotCheck
   # whatever the lead needs travels beside it in validated fields.
   module Reasons
     NOT_A_PULL_REQUEST_NUMBER = :not_a_pull_request_number
+    CHAINED_WITHOUT_NUMBER = :chained_without_number
     PULL_REQUEST_NOT_OPEN = :pull_request_not_open
     FORK_PULL_REQUEST = :fork_pull_request
     SCRIPTS_UNREVIEWED = SkillSupport::ScriptsCheckout::REASON
@@ -22,11 +23,12 @@ module CopilotCheck
 
     # The thread fetch's stops (Threads), which leave nothing to judge.
     THREAD_STOPS = [COPILOT_ID_CHANGED, COPILOT_UNRECOGNISED, THREADS_OVERFLOW].freeze
-    # setup's whole enum: an argument that names no pull request, one that
-    # isn't open, the asks on a fork's and on scripts that may not be the
-    # reviewed ones, and Copilot's latest review under another id.
-    SETUP = [NOT_A_PULL_REQUEST_NUMBER, PULL_REQUEST_NOT_OPEN, FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED,
-             COPILOT_ID_CHANGED].freeze
+    # setup's whole enum: an argument that names no pull request, chained
+    # alone, a pull request that isn't open, the asks on a fork's and on
+    # scripts that may not be the reviewed ones, and Copilot's latest review
+    # under another id.
+    SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, FORK_PULL_REQUEST,
+             SCRIPTS_UNREVIEWED, COPILOT_ID_CHANGED].freeze
     # threads': `fetch` and `resolve` stop only where the thread fetch does.
     THREADS = THREAD_STOPS
     # rereview's: `request` never stops, and `watch` stops on Copilot's

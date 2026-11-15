@@ -15,10 +15,11 @@ module CopilotCheck
       end
 
       # Phase 0's pr0.json for #18 of this repository, a draft when the run
-      # began unless +draft+ is false.
-      def start_file(draft: true, number: 18, repository: 'github.com/sgbett/dotfiles-claude')
+      # began unless +draft+ is false, in a run /do didn't chain unless
+      # +chained+.
+      def start_file(draft: true, chained: false, number: 18, repository: 'github.com/sgbett/dotfiles-claude')
         state = { 'number' => number, 'repository' => repository, 'baseRefName' => 'master',
-                  'isCrossRepository' => false, 'isDraft' => draft }
+                  'isCrossRepository' => false, 'isDraft' => draft, 'chained' => chained }
         sandbox.path('pr0.json').tap { |path| File.write(path, JSON.generate(state)) }
       end
 

@@ -21,12 +21,12 @@ module CopilotCheck
         state == OPEN
       end
 
-      # What the start file records: the pull request of +repository+, the
-      # CheckoutRepository::Repository, as it was when the run began, as
-      # promote-check reads it (StartState).
-      def start_state(repository)
+      # What the start file records, as promote-check reads it (StartState):
+      # the pull request of +repository+, the CheckoutRepository::Repository,
+      # as it was when the run began, and whether /do +chained+ the run.
+      def start_state(repository, chained:)
         { 'number' => number, 'repository' => repository.argument, 'baseRefName' => base,
-          'isCrossRepository' => cross_repository, 'isDraft' => draft }
+          'isCrossRepository' => cross_repository, 'isDraft' => draft, 'chained' => chained }
       end
     end
 

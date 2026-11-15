@@ -49,12 +49,35 @@ RSpec.describe CopilotCheck::Setup do
                                                               'name_with_owner' => 'sgbett/dotfiles-claude' },
                                             'pull_request' => { 'number' => 18, 'base' => 'master', 'is_draft' => false,
                                                                 'is_cross_repository' => false },
-                                            'rubric_found' => false,
+                                            'chained' => false, 'rubric_found' => false,
                                             'high_water_mark' => CopilotCheck::Testing::ScriptCalls::REVIEWED_AT }])
     expect(JSON.parse(File.read(start_file)))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
-             'isCrossRepository' => false, 'isDraft' => false)
+             'isCrossRepository' => false, 'isDraft' => false, 'chained' => false)
     expect(File.read(rubric_file)).to eq('')
+  end
+
+  it 'records that /do chained the run when the number is followed by chained, in its output and the start file' do
+    ['18 chained', " 18\tchained\n"].each do |argument|
+      expect_resolution
+      expect_start
+
+      exit_code, output = run_setup(*arguments(argument))
+
+      expect([exit_code, output['chained'], JSON.parse(File.read(start_file))['chained']])
+        .to eq([0, true, true]), argument.inspect
+    end
+  end
+
+  it 'stops on chained without a number, as /do always names the pull request it hands on, asking GitHub nothing' do
+    ['chained', " chained\n"].each do |argument|
+      exit_code, output = run_setup(*arguments(argument))
+
+      expect([exit_code, output.values_at('status', 'reason', 'message')])
+        .to eq([2, ['stop', 'chained_without_number', CopilotCheck::Reasons::MESSAGES[:chained_without_number]]]),
+            argument.inspect
+    end
+    expect(fake_runner.calls).to eq([])
   end
 
   it 'finds the pull request from the current branch when the argument is empty or only white space' do
@@ -84,7 +107,8 @@ RSpec.describe CopilotCheck::Setup do
   end
 
   it 'stops, without asking GitHub anything, on an argument that is no pull request number' do
-    not_numbers = %w[https://github.com/sgbett/dotfiles-claude/pull/18 #18 0 sgbett/dotfiles-claude#18].push('18 19')
+    not_numbers = %w[https://github.com/sgbett/dotfiles-claude/pull/18 #18 0 sgbett/dotfiles-claude#18]
+                  .push('18 19', 'chained 18', '18 chained chained', '18 Chained', '18 chained 19', '#18 chained')
     not_numbers.each do |argument|
       exit_code, output = run_setup(*arguments(argument))
 
@@ -202,7 +226,8 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
     expect(output.values_at('status', 'high_water_mark'))
       .to eq(['proceed', CopilotCheck::Testing::ScriptCalls::REVIEWED_AT])
-    expect(CopilotCheck::StartState.read(sandbox.path('pr0.json'), 18).draft?(repository)).to be(false)
+    start = CopilotCheck::StartState.read(sandbox.path('pr0.json'), 18).tap { |state| state.check_repository!(repository) }
+    expect([start.draft?, start.chained?]).to eq([false, false])
   end
 
   it 'stops on #18 as recorded, merged, before looking at its own scripts' do

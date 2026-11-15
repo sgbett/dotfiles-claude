@@ -19,9 +19,9 @@ RSpec.describe CopilotCheck::PullRequestView do
     expect([pull_request.to_h, pull_request.open?])
       .to eq([{ number: 18, base: 'master', draft: false, cross_repository: false,
                 head: CopilotCheck::Testing::GateCalls::HEAD, state: 'MERGED' }, false])
-    expect(pull_request.start_state(repository))
+    expect(pull_request.start_state(repository, chained: true))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
-             'isCrossRepository' => false, 'isDraft' => false)
+             'isCrossRepository' => false, 'isDraft' => false, 'chained' => true)
   end
 
   it 'tells an open pull request from a closed or merged one' do

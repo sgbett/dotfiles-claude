@@ -35,8 +35,9 @@ module CopilotCheck
       rules = PromotionRules.read(@options.rules_file)
       start = StartState.read(@options.start_file, @options.pr)
       @repository = CheckoutRepository.resolve(@runner)
+      start.check_repository!(@repository)
       @github = SkillSupport::Gh.new(host: @repository.host, runner: @runner)
-      report(Verdict.new(facts(rules, start.draft?(@repository))))
+      report(Verdict.new(facts(rules, start)))
     rescue Stop => e
       Reasons.stop(e.reason, repository: GateReport.repository_fields(@repository),
                              pull_request: { number: @options.pr })
@@ -49,11 +50,12 @@ module CopilotCheck
                                                      verdict: verdict).fields)
     end
 
-    def facts(rules, started_as_draft)
+    # +start+ is the StartState.
+    def facts(rules, start)
       pull_request = PullRequestQuery.new(@github).fetch(name, @options.pr)
-      Verdict::Facts.new(rules: rules, started_as_draft: started_as_draft, outcome: @options.outcome,
-                         pull_request: pull_request, reviews_without_findings: @options.reviews_without_findings,
-                         **fetched(rules, pull_request))
+      Verdict::Facts.new(rules: rules, started_as_draft: start.draft?, chained: start.chained?,
+                         outcome: @options.outcome, pull_request: pull_request,
+                         reviews_without_findings: @options.reviews_without_findings, **fetched(rules, pull_request))
     end
 
     # Read in this order, Phase 6's, so that mergeable, re-read only after

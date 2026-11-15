@@ -20,8 +20,8 @@ module CopilotCheck
   # which the pull request can't change, where only a 404 means there is
   # none; and the high-water mark, the submittedAt of Copilot's latest
   # review, or the epoch before its first. Then it writes the start file,
-  # which promote-check reads, and the rubric file, empty when there is
-  # none, never printing the rubric.
+  # which promote-check reads, with whether /do chained the run, and the
+  # rubric file, empty when there is none, never printing the rubric.
   class Setup
     RUBRIC = '.github/copilot-instructions.md'
     ACCEPT_FORK = '--accept-fork'
@@ -40,7 +40,7 @@ module CopilotCheck
     end
 
     def call
-      number = PullRequestArgument.read(@options.argument_file)
+      number, @chained = PullRequestArgument.read(@options.argument_file)
       @repository = CheckoutRepository.resolve(@runner)
       @pull_request = PullRequestView.new(@runner, @repository).fetch(number)
       @pull_request.open? ? ask_or_start : not_open
@@ -65,7 +65,8 @@ module CopilotCheck
       mark = LatestReview.new(github).submitted_at(@repository.name_with_owner, @pull_request.number)
       write(rubric)
       SkillSupport::Outcome.proceed(repository: @repository.to_h, pull_request: pull_request_fields(base),
-                                    rubric_found: !rubric.nil?, high_water_mark: mark || Timestamp::EPOCH)
+                                    chained: @chained, rubric_found: !rubric.nil?,
+                                    high_water_mark: mark || Timestamp::EPOCH)
     end
 
     def not_open
@@ -104,7 +105,8 @@ module CopilotCheck
     end
 
     def write(rubric)
-      OutputFile.write(@options.start_file, "#{JSON.generate(@pull_request.start_state(@repository))}\n")
+      state = @pull_request.start_state(@repository, chained: @chained)
+      OutputFile.write(@options.start_file, "#{JSON.generate(state)}\n")
       OutputFile.write(@options.rubric_file, rubric.to_s)
     end
 
