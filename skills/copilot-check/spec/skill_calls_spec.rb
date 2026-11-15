@@ -16,7 +16,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       'rereview' => CopilotCheck::RereviewArguments, 'promote-check' => CopilotCheck::PromoteCheckArguments }
   end
   let(:values) do
-    { '{pr}' => '18', '{arg}' => '18', '{scratch}' => '/scratch', '{n}' => '1', '{mark}' => '2026-11-12T20:23:51Z',
+    { '{pr}' => '18', '{scratch}' => '/scratch', '{n}' => '1', '{mark}' => '2026-11-12T20:23:51Z',
       '{outcome}' => 'converged', '{review_ids}' => '5881418347,5881467821',
       '{pull_request.head}' => CopilotCheck::Testing::GateCalls::HEAD }
   end
@@ -44,9 +44,10 @@ RSpec.describe "/copilot-check's calls of its scripts" do
                             %w[rereview watch], %w[promote-check check], %w[promote-check verify]])
   end
 
-  it 'puts $ARGUMENTS on no call: setup reads it from the file the lead writes it to' do
+  it 'puts $ARGUMENTS on no call, nor a name made from it: setup reads it from the file the lead writes it to' do
     expect(skill).to include('Write `$ARGUMENTS` (empty if none) with the Write tool to `{scratch}/argument.txt`')
-    expect(parsed('setup').first.argument_file).to eq('/scratch/argument.txt')
+    expect(parsed('setup').first.to_h.values_at(:argument_file, :start_file, :rubric_file, :focus_file))
+      .to eq(%w[/scratch/argument.txt /scratch/pr0.json /scratch/rubric.md /scratch/security-focus.md])
     expect(calls.map(&:last).grep(/\$ARGUMENTS/)).to be_empty
   end
 
