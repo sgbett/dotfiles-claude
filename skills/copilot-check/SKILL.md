@@ -17,7 +17,7 @@ Per finding, after verification:
 
 - **Refuted** (high-confidence nonsense — e.g. hits `## Do not flag`) → auto-reply + resolve, no fix.
 - **Confirmed & fix-confidence ≥ 80%** → auto-fix.
-- **Confirmed & fix-confidence < 80%, or verdict uncertain, or a big/tangential change, or a change to a dependency manifest or lockfile, a CI workflow or action, or the rubric** → **pause and flag for the human**.
+- **Confirmed & fix-confidence < 80%, or verdict uncertain, or a big/tangential change, or a fix or edit to a dependency manifest or lockfile, a CI workflow or action, or Copilot's instruction files** (`.github/copilot-instructions.md`, `.github/instructions/`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `REVIEW.md`) → **pause and flag for the human**.
 
 Loop control:
 
@@ -61,7 +61,7 @@ One `Bot` account, whose login differs by surface and is not its identity: the b
 
 Two cheap passes on the PR's diff:
 
-1. **Semantic-ripple grep (always, deterministic).** For every change in the diff that widened/tightened/renamed a **regex, identifier, constant, or user-visible string**, `git -C '{checkout}' grep -n` the old *and* related terms across the whole repo and fix every stale reference **in the same commit**. It needs no agent.
+1. **Semantic-ripple grep (always, deterministic).** For every change in the diff that widened/tightened/renamed a **regex, identifier, constant, or user-visible string**, `git -C '{checkout}' grep -n` the old *and* related terms across the whole repo and fix every stale reference, for Phase 4 step 1 to check and commit. It needs no agent.
 2. **`/code-review` (first round, if the diff is non-trivial).** Run `Skill(skill: "code-review", args: "high {pr}")`, with no flags; it reviews the PR from GitHub. Take its findings as *input* to the Phase-3 gate; its subjective (simplification/altitude) findings pause for the human.
 
 ---
@@ -74,7 +74,7 @@ Run `"${CLAUDE_SKILL_DIR}/bin/threads" fetch --pr {pr} --bodies-dir '{scratch}/p
 
 **Findings in review bodies.** Copilot also lists findings in a review's body that have no thread, such as "previously missed" issues in code unchanged since its last review. Nothing on GitHub records that one was answered, and a later review needn't repeat it, so Phase 4's answer marks each review it covered, and `todo_reviews` gives each Copilot review no comment of ours marks yet, with its `body_file`. Their findings join the round alongside the to-do threads.
 
-No to-do thread, no finding in a to-do review's body and none left from Phase 1 is convergence if `copilot_on_head` is true, else go to Phase 5 for Copilot's review of the head. Otherwise cluster the findings into **classes** (e.g. "stale reference after widening", "unrescued external call", "docstring ≠ behaviour").
+No to-do thread, no finding in a to-do review's body and nothing left from Phase 1 is convergence if `copilot_on_head` is true, else go to Phase 5 for Copilot's review of the head. Otherwise cluster the findings into **classes** (e.g. "stale reference after widening", "unrescued external call", "docstring ≠ behaviour").
 
 ### 2b. One combined verify+scan agent per class (parallel)
 
@@ -83,7 +83,7 @@ Spawn one `Task` agent per class, passing it `{checkout}`'s path, each finding's
 > **(a) Refute.** Given the real types / control-flow / call-sites and the rubric's `## Do not flag` list, does the concern actually hold? **Default to "refuted" when uncertain.**
 > **(b) Scan.** If it holds, find *every other instance* of the pattern, seeded by the rubric's flag-lists. Split instances into in-scope (files the PR touches) vs related vs tangential.
 
-Route **security-flavoured** classes (crypto, auth, memory-safety) to the **white-hat** agent for (a). Cheap triage first: a finding that plainly hits `## Do not flag` is auto-refuted without spending an agent.
+Route **security-flavoured** classes (crypto, auth, memory-safety) to the **white-hat** agent for (a). Tell every 2b agent, the white-hat included, to report only to you, writing nothing to GitHub, files or agent memory. Cheap triage first: a finding that plainly hits `## Do not flag` is auto-refuted without spending an agent.
 
 **Each returns**, per class: `class`, `verdict` (confirmed/refuted/uncertain), `verdict_confidence` (0–1), `hits_do_not_flag` (true ⇒ strong auto-refute), `evidence`, `original` (path, line), `instances` (each: path, line, `relation` in-scope/related/tangential, `size` minor/big, `disposition` fix/task-issue/hlr), `proposed_fix`, `fix_confidence` (0–1).
 
@@ -109,7 +109,7 @@ If empty, proceed autonomously, halting at 10 unattended rounds: the `{scratch}/
 
 ## Phase 4 — Act
 
-1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple grep again for any string/identifier the fixes themselves touch. Then, from `{checkout}`, run the specs the fixes touch and the project's linter on the changed files, and, when the fixes' diff matches the triggers in `${CLAUDE_SKILL_DIR}/../_support/references/security-gate.md`, with `{scratch}/security-focus.md` as the focus, brief the white-hat agent as it says. Commit (a Conventional Commit referencing the PR) only when all pass. Test before posting anything, so that no reply, answered marker or resolved thread claims a fix that hasn't passed: a fix that won't pass, or one with a Critical or High gate finding, goes to the human, as in Phase 3, not into a `Fixed` reply, and nothing on GitHub describes the gate finding. On a draft this is the only test run before the PR is ready, because a draft's CI may skip the suite.
+1. **Fixes** — batched by class, conforming to the rubric (`{scratch}/rubric.md`). Apply the semantic-ripple grep again for any string/identifier the fixes themselves touch. Then, from `{checkout}`, run the specs the fixes touch and the project's linter on the changed files, and, when the fixes' diff matches the triggers in `${CLAUDE_SKILL_DIR}/../_support/references/security-gate.md`, with `{scratch}/security-focus.md` as the focus, brief the white-hat agent as it says. Commit (a Conventional Commit referencing the PR) only when all pass, by path, so nothing rejected is swept in: `git -C '{checkout}' commit -- <paths>`. Test before posting anything, so that no reply, answered marker or resolved thread claims a fix that hasn't passed: a fix that won't pass, or one with a Critical or High gate finding, has its edits undone and goes to the human, as in Phase 3, not into a `Fixed` reply, and nothing on GitHub describes the gate finding; if the human leaves that finding, end the run with outcome `stop`, so promotion holds. On a draft this is the only test run before the PR is ready, because a draft's CI may skip the suite.
 2. **Tracking** — for tracked items, create the issue (task) or `[HLR]` + `project:hlr` (big); reference it in both the PR and the Copilot reply. A suspected security flaw in code the PR didn't change goes to the human, never onto GitHub, which would disclose it unfixed. Write the title and body to files in `{scratch}` first and pass them as below, never inline, since they quote Copilot's text:
    ```bash
    gh issue create -R '{host}/{repo}' --title "$(cat {scratch}/issue-title.txt)" --body-file {scratch}/issue-body.md   # HLR: add --label project:hlr
