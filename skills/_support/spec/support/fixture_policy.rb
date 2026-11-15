@@ -10,6 +10,7 @@ module SkillSupport
     module FixturePolicy
       PUBLIC_REPOSITORIES = %w[
         sgbett/dotfiles-claude
+        sgbett/bsv-ruby-sdk
         bettison-org/ai-software-architect
         codenamev/ai-software-architect
         twbs/bootstrap

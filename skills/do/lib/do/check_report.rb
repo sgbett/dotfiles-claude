@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'copilot_signal'
 require_relative 'reference_files'
 
 module Do
@@ -21,12 +22,21 @@ module Do
     }.freeze
     ACCEPTED = 'the local branch, which the user accepted with commits the push remote lacks'
     FRESH_WORKTREE = "the push remote's copy, in a fresh worktree beside the local branch, a checked-out pull request"
+    COPILOT_REVIEW = {
+      [true, true] =>
+        "present: a ruleset asks for Copilot's review, and #{CopilotSignal::INSTRUCTIONS} is on the base",
+      [true, false] =>
+        "absent: a ruleset asks for Copilot's review, but #{CopilotSignal::INSTRUCTIONS} isn't on the base",
+      [false, true] =>
+        "absent: #{CopilotSignal::INSTRUCTIONS} is on the base, but no ruleset asks for Copilot's review",
+      [false, false] => 'none'
+    }.freeze
 
     # Each is set once its step has run: the PushRemote::Verdict, the
     # BranchAssessment, the BranchPullRequests, the ScriptsCheckout's
-    # Inspection, the SkillSupport::SecurityFocus::Result and the working
-    # tree's Porcelain entries.
-    attr_writer :remote, :branch, :pull_requests, :scripts, :focus, :changes
+    # Inspection, the SkillSupport::SecurityFocus::Result, the
+    # CopilotSignal::Result and the working tree's Porcelain entries.
+    attr_writer :remote, :branch, :pull_requests, :scripts, :focus, :copilot_signal, :changes
 
     # +options+ are CheckArguments' Options; +repository+ this repository's
     # nameWithOwner as GitHub gives it; +host+ the issue's host.
@@ -41,7 +51,8 @@ module Do
         push_remote: @options.push_remote, push_remote_is_fork: (@remote.fork? if remote_passed?),
         pr_target: @options.pr_target, base: @options.base, branch: branch,
         scripts_in_work_tree: @scripts&.in_work_tree, security_focus: security_focus,
-        working_tree_clean: @changes&.empty?, read: read, session_only: session_only }.compact
+        copilot_review: @copilot_signal&.to_h, working_tree_clean: @changes&.empty?, read: read,
+        session_only: session_only }.compact
     end
 
     private
@@ -53,7 +64,7 @@ module Do
     def summary
       { push_remote: (push_remote_summary if remote_passed?), pr_target: @options.pr_target, base: @options.base,
         branch: @options.branch, resume_point: (resume_point if @branch),
-        security_focus: (focus_summary if @focus) }.compact
+        security_focus: (focus_summary if @focus), copilot_review: (copilot_summary if @copilot_signal) }.compact
     end
 
     def push_remote_summary
@@ -62,6 +73,10 @@ module Do
 
     def focus_summary
       @focus.found? ? @focus.sources.join(', ') : NO_FOCUS
+    end
+
+    def copilot_summary
+      COPILOT_REVIEW.fetch([@copilot_signal.ruleset, @copilot_signal.instructions])
     end
 
     def resume_point

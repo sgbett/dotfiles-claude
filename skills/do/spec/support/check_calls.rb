@@ -9,9 +9,9 @@ module Do
   module Testing
     # The calls `preflight check` makes, step by step, expected on the fake
     # runner. Each step has defaults recorded from sgbett/dotfiles-claude#24
-    # (a new branch, nothing open on it, no security focus, a clean working
-    # tree, scripts outside any checkout), and a spec overrides only what its
-    # case changes:
+    # (a new branch, nothing open on it, no security focus, no Copilot
+    # signal, a clean working tree, scripts outside any checkout), and a spec
+    # overrides only what its case changes:
     #
     #   expect_check(through: :base, base: { response: fixture('graphql/base-missing.json') })
     module CheckCalls
@@ -19,7 +19,7 @@ module Do
       include CheckBranchCalls
       include CheckFinishCalls
 
-      STEPS = %i[arguments login issue remote base branch pull_requests scripts focus changes].freeze
+      STEPS = %i[arguments login issue remote base branch pull_requests scripts focus copilot changes].freeze
       CONVENTIONS = { push_remote: 'origin', pr_target: HERE, base: 'master', branch: BRANCH }.freeze
 
       # check's arguments for the issue +reference+, with the CONVENTIONS

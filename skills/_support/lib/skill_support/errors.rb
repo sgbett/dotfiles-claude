@@ -85,6 +85,7 @@ module SkillSupport
   # data, or not the kind of content the caller needs.
   class UnexpectedResponse < Error; end
 
-  # A GraphQL connection has more entries than the page that came back.
+  # A GraphQL connection has more entries than the page that came back, or a
+  # REST list came back as a full page, which may go on to another.
   class IncompleteResults < Error; end
 end
