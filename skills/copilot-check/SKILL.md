@@ -17,7 +17,7 @@ Per finding, after verification:
 
 - **Refuted** (high-confidence nonsense — e.g. hits `## Do not flag`) → auto-reply + resolve, no fix.
 - **Confirmed & fix-confidence ≥ 80%** → auto-fix.
-- **Confirmed & fix-confidence < 80%, or verdict uncertain, or a big/tangential change, or a fix or edit to a dependency manifest or lockfile, a CI workflow or action, or Copilot's instruction files** (`.github/copilot-instructions.md`, `.github/instructions/`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `REVIEW.md`) → **pause and flag for the human**.
+- **Confirmed & fix-confidence < 80%, or verdict uncertain, or a big/tangential change, or a fix or edit to a dependency manifest or lockfile, a CI workflow or action, or Copilot's instruction files** (`.github/copilot-instructions.md`, `.github/instructions/`, `.github/skills/`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `REVIEW.md`) → **pause and flag for the human**.
 
 Loop control:
 
