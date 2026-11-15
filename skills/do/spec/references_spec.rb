@@ -5,7 +5,9 @@ require_relative '../lib/do/reference_files'
 # /do's rarer branches live in references/, which the lead reads only when
 # they apply: SKILL.md names each with the event that calls for it, and the
 # scripts' `read` lists them by the same paths. Claude Code substitutes
-# ${CLAUDE_SKILL_DIR} and $ARGUMENTS in SKILL.md alone.
+# ${CLAUDE_SKILL_DIR} and $ARGUMENTS in SKILL.md alone. A reference another
+# skill reads too lives in _support/references/, named from this directory
+# through ../_support/.
 RSpec.describe "/do's reference files" do
   let(:skill_directory) { File.expand_path('..', __dir__) }
   let(:skill) { File.read(File.join(skill_directory, 'SKILL.md')) }
@@ -26,7 +28,7 @@ RSpec.describe "/do's reference files" do
 
   it 'are the only ones SKILL.md and the references name' do
     named = [skill, *references.map { |path| File.read(path) }].flat_map do |text|
-      text.scan(%r{references/[\w-]+(?:\.[\w-]+)*})
+      text.scan(%r{(?:\.\./_support/)?references/[\w-]+(?:\.[\w-]+)*})
     end
 
     expect(missing(named.uniq)).to be_empty
