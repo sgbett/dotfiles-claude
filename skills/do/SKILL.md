@@ -16,7 +16,7 @@ These hold for the whole run.
 - **Visibility.** On GitHub, name, link into or quote another repository only if it's public, and never give a machine-local path or anything a script puts under `session_only`; report the rest in the session. A suspected flaw in existing code, whoever finds it, stays off GitHub until the user decides in the session. Nothing on GitHub describes a security gate finding or names its file or trigger until its fix is pushed, or ever if the user decided to leave it: no ledger item, rewind or blocker comment.
 - **Shell text.** Always quote refs: `#` starts a comment. Issue text never goes on a command line, even double-quoted: write it with the Write tool to the session scratchpad, never the working tree, and pass the file (`git commit -F`, `--body-file`, `--title "$(cat <file>)"`, whose output isn't re-expanded, or JSON with `gh api … --input <file>`).
 - **Git.** All work via PR; never force-push, `git revert`, skip hooks or `git add -f`.
-- **The owner's calls.** Never mark a draft ready (`gh pr ready`) or turn on auto-merge (`gh pr merge --auto`), even when the repository's rules list them as next steps; only a chained `/copilot-check` (step 7) marks one ready, on its `PROMOTE`.
+- **The owner's calls.** Never mark a draft ready (`gh pr ready`) or turn on auto-merge (`gh pr merge --auto`), even when the repository's rules list them as next steps; only step 7's `/copilot-check` marks one ready, on its `PROMOTE`.
 - **Scripts.** Run each `bin/` call exactly as written here, unpiped, one `record` call at a time. It prints one JSON object: on `proceed`, go on; on `stop`, tell the user its `message` and end the run; on `ask`, put each `asks[].message` to the user and, on a yes, run the same call again with that ask's `accept_with` added (an ask without one is settled as its message says). Any other exit code, or output that isn't JSON, is a tool failure: stop, quote stderr and name the fix; never retry with other arguments or do the step by hand.
 
 ## Definitions
@@ -80,7 +80,7 @@ Never open the PR on red tests, draft or not: QA's local run is what counts. Run
 
 **Then record the work**, once the PR is open and never before: the step that habitually gets missed. Tick what QA verified with `"${CLAUDE_SKILL_DIR}/bin/record" tick '<facts.reference>' --ledger '<ids>'`; mark each open gate finding with `"${CLAUDE_SKILL_DIR}/bin/record" gate mark '<facts.reference>' --k G<k> --state <fixed | user-decided>`; close each issue in `close_by_hand` now, with a note naming the PR (`#P`), not a commit, which a rebase replaces; and last, `"${CLAUDE_SKILL_DIR}/bin/record" tick '<facts.reference>' --issue-boxes <positions> --boxes-digest <facts.issue.boxes_digest>`, each only when it has some. Report the PR URL.
 
-**Then, with the signal,** run `Skill(skill: "copilot-check", args: "<P> chained")`, and stop if its `setup` doesn't name the PR target. Until it ends, its Scripts rule governs its own calls, the Visibility invariant covers its findings in code this PR didn't change, and its Phase 6 report ends the run.
+**Then, with the signal,** run `Skill(skill: "copilot-check", args: "<P> chained")`, leaving out `chained` unless this run opened the PR, so the repository's rules decide promotion, and stop if its `setup` doesn't name the PR target. Until it ends, its Scripts rule governs its own calls, the Visibility invariant covers its findings in code this PR didn't change, and its Phase 6 report ends the run.
 
 ## Rewinds (any step)
 
