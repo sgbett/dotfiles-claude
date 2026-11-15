@@ -136,12 +136,25 @@ RSpec.describe CopilotCheck::Setup do
                                    'head_repository' => 'sgbett/dotfiles-claude' })
     end
 
+    it 'stops on a checkout whose path holds a single quote, giving it in the session alone, before reading ' \
+       'anything there' do
+      quoted = sandbox.path("it's").tap { |path| FileUtils.mkdir_p(path) }
+      expect_resolution
+      expect_scripts_step
+      expect_listing_step([{ path: quoted, head: head, branch: branch }])
+
+      exit_code, output = run_setup(*arguments)
+
+      expect([exit_code, output.values_at('reason', 'message', 'session_only')])
+        .to eq([2, ['checkout_path_unsafe', CopilotCheck::Reasons::MESSAGES[:checkout_path_unsafe],
+                    { 'checkout' => quoted }]])
+      expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
+    end
+
     it 'stops when the checkout at the path git lists has moved on from the commit git listed, naming that one' do
       expect_resolution
       expect_scripts_step
-      fake_runner.expect_call(['git', 'check-ref-format', '--branch', branch], stdout: "#{branch}\n")
-      fake_runner.expect_call(CopilotCheck::Testing::CheckoutCalls::WORKTREE_LIST,
-                              stdout: worktree_list({ path: sandbox.work_directory, head: head, branch: branch }))
+      expect_listing_step([{ path: sandbox.work_directory, head: head, branch: branch }])
       expect_identity_step(sandbox.work_directory, head, resolves_to: other)
 
       exit_code, output = run_setup(*arguments)

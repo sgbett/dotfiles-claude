@@ -12,6 +12,7 @@ module CopilotCheck
     CHAINED_WITHOUT_NUMBER = :chained_without_number
     PULL_REQUEST_NOT_OPEN = :pull_request_not_open
     NO_PULL_REQUEST_CHECKOUT = :no_pull_request_checkout
+    CHECKOUT_PATH_UNSAFE = :checkout_path_unsafe
     CHECKOUT_MISMATCH = :checkout_mismatch
     CHECKOUT_RUNS_SCRIPTS = :checkout_runs_scripts
     NO_UPSTREAM = :no_upstream
@@ -35,8 +36,9 @@ module CopilotCheck
     # not be the reviewed ones, and Copilot's latest review under another
     # id.
     SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, NO_PULL_REQUEST_CHECKOUT,
-             CHECKOUT_MISMATCH, CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM, PUSH_REMOTE_NOT_HEAD_REPOSITORY,
-             CHECKOUT_NOT_AT_HEAD, FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED, COPILOT_ID_CHANGED].freeze
+             CHECKOUT_PATH_UNSAFE, CHECKOUT_MISMATCH, CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM,
+             PUSH_REMOTE_NOT_HEAD_REPOSITORY, CHECKOUT_NOT_AT_HEAD, FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED,
+             COPILOT_ID_CHANGED].freeze
     # threads': `fetch` and `resolve` stop only where the thread fetch does.
     THREADS = THREAD_STOPS
     # rereview's: `request` never stops, and `watch` stops on Copilot's

@@ -6,8 +6,9 @@ RSpec.describe CopilotCheck::Reasons do
   it "is each script's whole enum of stops and asks, apart from the reasons promote-check's verdict holds for" do
     expect(described_class::SETUP)
       .to eq(%i[not_a_pull_request_number chained_without_number pull_request_not_open no_pull_request_checkout
-                checkout_mismatch checkout_runs_scripts no_upstream push_remote_not_head_repository
-                checkout_not_at_head fork_pull_request scripts_unreviewed copilot_id_changed])
+                checkout_path_unsafe checkout_mismatch checkout_runs_scripts no_upstream
+                push_remote_not_head_repository checkout_not_at_head fork_pull_request scripts_unreviewed
+                copilot_id_changed])
     expect(described_class::THREADS).to eq(%i[copilot_id_changed copilot_unrecognised threads_overflow])
     expect(described_class::REREVIEW).to eq(%i[copilot_id_changed copilot_timeout])
     expect(described_class::PROMOTE_CHECK)
@@ -36,6 +37,7 @@ RSpec.describe CopilotCheck::Reasons do
   it "tells the lead what the user does about each checkout the run can't work in, and to run it again" do
     {
       no_pull_request_checkout: 'Tell the user to check it out in one',
+      checkout_path_unsafe: 'Tell the user to move that checkout to a path without either',
       checkout_mismatch: 'Tell the user to check what is at that path and fix the worktree',
       checkout_runs_scripts: "Tell the user to switch that checkout to another branch and check the pull request's " \
                              'branch out in a worktree of it',

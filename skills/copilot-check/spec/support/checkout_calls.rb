@@ -41,8 +41,7 @@ module CopilotCheck
       # (expect_push_url_step).
       def expect_checkout_step(checkout: pull_request_checkout, upstream: ORIGIN_UPSTREAM, pushes_to: GateCalls::HERE,
                                worktrees: [{ path: checkout, head: GateCalls::HEAD, branch: HEAD_BRANCH }])
-        fake_runner.expect_call(['git', 'check-ref-format', '--branch', HEAD_BRANCH], stdout: "#{HEAD_BRANCH}\n")
-        fake_runner.expect_call(WORKTREE_LIST, stdout: worktree_list(*worktrees))
+        expect_listing_step(worktrees)
         listed = worktrees.find { |worktree| worktree[:branch] == HEAD_BRANCH }
         return unless listed
 
@@ -52,6 +51,12 @@ module CopilotCheck
         fake_runner.expect_call(['git', '-C', checkout, 'for-each-ref', UPSTREAM_FORMAT, "refs/heads/#{HEAD_BRANCH}"],
                                 stdout: upstream)
         expect_push_url_step(checkout, pushes_to) if pushes_to
+      end
+
+      # The check of #18's branch, then the worktrees git lists, +worktrees+.
+      def expect_listing_step(worktrees)
+        fake_runner.expect_call(['git', 'check-ref-format', '--branch', HEAD_BRANCH], stdout: "#{HEAD_BRANCH}\n")
+        fake_runner.expect_call(WORKTREE_LIST, stdout: worktree_list(*worktrees))
       end
 
       # The checks that +checkout+ is the worktree git listed with #18's

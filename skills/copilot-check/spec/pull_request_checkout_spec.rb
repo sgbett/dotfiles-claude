@@ -76,6 +76,17 @@ RSpec.describe CopilotCheck::PullRequestCheckout do
     expect(assess(head).to_h).to eq(top_level: nil, head: nil, push_remote: nil, stop_reason: :no_pull_request_checkout)
   end
 
+  it "stops on a worktree whose path holds a single quote or a control character, which the lead's command " \
+     'lines single-quote' do
+    head = repository_with_branch
+    [sandbox.path("it's"), sandbox.path("line\nbreak")].each do |path|
+      git('worktree', 'add', '--quiet', path, branch)
+
+      expect(assess(head).to_h).to eq(top_level: path, head: head, push_remote: nil, stop_reason: :checkout_path_unsafe)
+      git('worktree', 'remove', path)
+    end
+  end
+
   describe 'when the directory at the listed path is no longer that worktree' do
     # Puts a link to +target+ where the linked worktree's directory was,
     # which git goes on listing with the branch checked out.

@@ -21,6 +21,11 @@ module CopilotCheck
                                 "has the pull request's branch (pull_request.head_branch) checked out, so the run " \
                                 'has nowhere to make its fixes. Tell the user to check it out in one, then run ' \
                                 '/copilot-check again.',
+      checkout_path_unsafe: "The path of the checkout with the pull request's branch checked out " \
+                            '(session_only.checkout) holds a single quote or a control character, so the ' \
+                            "run's command lines, which single-quote it, can't name it safely. Tell the user to " \
+                            'move that checkout to a path without either, as git worktree move does for a linked ' \
+                            'worktree, then run /copilot-check again.',
       checkout_mismatch: "The path git lists for the worktree with the pull request's branch checked out doesn't " \
                          "hold that worktree now: it resolves to session_only.checkout, which isn't a checkout of " \
                          'this repository with that branch at the commit git lists (local_head), as when the ' \

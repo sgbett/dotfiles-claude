@@ -12,16 +12,21 @@ module CopilotCheck
   # through Worktrees so that /do's worktree counts. Claude Code resets the
   # shell's working directory to the session's after each command, so a run
   # chained from /do's worktree can't cd there, and a run from another
-  # branch would commit and push there. The run stops unless the directory
-  # at the checkout's listed path is that checkout still
-  # (WorktreeIdentity), it isn't the one the scripts run from, whose
-  # scripts its fixes would change, its branch's upstream is the pull
-  # request's branch on a remote that pushes to the head repository alone
-  # (PushRemote), where the run pushes, and its HEAD is the pull request's
-  # head, the code Copilot reviews.
+  # branch would commit and push there. The run stops unless the checkout's
+  # path can go on the lead's command lines, the directory at its listed
+  # path is that checkout still (WorktreeIdentity), it isn't the one the
+  # scripts run from, whose scripts its fixes would change, its branch's
+  # upstream is the pull request's branch on a remote that pushes to the
+  # head repository alone (PushRemote), where the run pushes, and its HEAD
+  # is the pull request's head, the code Copilot reviews.
   class PullRequestCheckout
     # branch.<name>.remote "." tracks a branch of this same repository.
     THIS_REPOSITORY = '.'
+    # The lead single-quotes the checkout's path on its command lines, as
+    # git -C '{checkout}' and cd '{checkout}' &&, where a quote in it ends
+    # the quoting and a control character can break the line or hide what
+    # follows. Every other value there is validated already.
+    UNSAFE_PATH = /['[:cntrl:]]/
 
     # +top_level+ is the checkout's top level, symlinks resolved, and +head+
     # its HEAD's commit, both nil when no checkout has the branch;
@@ -61,6 +66,7 @@ module CopilotCheck
 
     # +local_head+ is the commit git listed the checkout's HEAD at.
     def checkout_stop_reason(top_level, branch, local_head)
+      return Reasons::CHECKOUT_PATH_UNSAFE if UNSAFE_PATH.match?(top_level)
       return Reasons::CHECKOUT_MISMATCH unless WorktreeIdentity.new(@runner).confirmed?(top_level, branch, local_head)
 
       Reasons::CHECKOUT_RUNS_SCRIPTS if top_level == @scripts_top_level
