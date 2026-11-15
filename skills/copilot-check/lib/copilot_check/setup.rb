@@ -11,20 +11,22 @@ require_relative 'reasons'
 require_relative 'setup_arguments'
 require_relative 'stop'
 require_relative 'timestamp'
+require_relative 'viewer'
 
 module CopilotCheck
   # skills/copilot-check/bin/setup: Phase 0. Reads what the run starts from
   # before it writes anything: the pull request, which must be open; the
   # checkout with its branch checked out, which the run works in, stopping
   # when it can't (PullRequestCheckout); then, asking first when the pull
-  # request comes from a fork or when the checkout these scripts run from
-  # may not hold the reviewed ones (SkillSupport::ScriptsCheckout), what
-  # stands on the base branch, which the pull request can't change: the
-  # rubric, .github/copilot-instructions.md, where only a 404 means there is
-  # none, and the repository's security focus (SkillSupport::SecurityFocus),
-  # which the security gate reviews Copilot's fixes against; and the
-  # high-water mark, the submittedAt of Copilot's latest review, or the epoch
-  # before its first. Then it writes the start file, which promote-check
+  # request comes from a fork someone else owns (Viewer) or when the
+  # checkout these scripts run from may not hold the reviewed ones
+  # (SkillSupport::ScriptsCheckout), what stands on the base branch, which
+  # the pull request can't change: the rubric,
+  # .github/copilot-instructions.md, where only a 404 means there is none,
+  # and the repository's security focus (SkillSupport::SecurityFocus), which
+  # the security gate reviews Copilot's fixes against; and the high-water
+  # mark, the submittedAt of Copilot's latest review, or the epoch before its
+  # first. Then it writes the start file, which promote-check
   # reads, with the checkout and whether /do chained the run, and the rubric
   # and focus files, each empty when there is none, never printing either.
   # A checkout's path is machine-local, so only session_only names it.
@@ -57,8 +59,9 @@ module CopilotCheck
     private
 
     # Stops on a checkout the run can't work in, then asks before anything
-    # is written when the pull request comes from a fork or the scripts may
-    # not be the reviewed ones, and starts once nothing is left to ask.
+    # is written when the pull request comes from a fork someone else owns
+    # or the scripts may not be the reviewed ones, and starts once nothing
+    # is left to ask.
     def ask_or_start
       scripts = examine_scripts
       @checkout = assess_checkout(scripts.top_level)
@@ -69,7 +72,6 @@ module CopilotCheck
     end
 
     def start(base)
-      github = SkillSupport::Gh.new(host: @repository.host, runner: @runner)
       rubric = rubric(github, base)
       focus = SkillSupport::SecurityFocus.new(SkillSupport::RepositoryFiles.new(github))
                                          .read(@repository.name_with_owner, base)
@@ -115,10 +117,18 @@ module CopilotCheck
     end
 
     # A yes holds only while the head is the commit the user was asked about.
+    # A fork the viewer owns isn't asked about: only they, and whoever they
+    # let, can push to it, and the checkout, found at the pull request's
+    # head, ties the head to theirs.
     def fork_ask
       return unless @pull_request.cross_repository && @options.accept_fork != @pull_request.head
+      return if Viewer.new(github).owns_head?(@pull_request)
 
       Reasons.ask(Reasons::FORK_PULL_REQUEST, accept_with: [ACCEPT_FORK, @pull_request.head])
+    end
+
+    def github
+      @github ||= SkillSupport::Gh.new(host: @repository.host, runner: @runner)
     end
 
     # The scripts' checkout and its changes are named in the session alone.

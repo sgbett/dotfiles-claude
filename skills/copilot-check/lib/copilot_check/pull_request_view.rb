@@ -9,15 +9,17 @@ module CopilotCheck
   # resolves itself. Its URL must name the checkout's repository, so that
   # every later call targets the same one.
   class PullRequestView
-    FIELDS = %w[number baseRefName headRefName isCrossRepository isDraft headRefOid state url].freeze
+    FIELDS = %w[number baseRefName headRefName isCrossRepository headRepositoryOwner isDraft headRefOid state
+                url].freeze
     URL = %r{\Ahttps://(?<host>[^/]+)/(?<path>[^/]+/[^/]+)/pull/(?<number>[1-9][0-9]*)\z}
     OPEN = 'OPEN'
     STATES = [OPEN, 'CLOSED', 'MERGED'].freeze
 
     # +base+ is the base branch's name and +head_branch+ the head branch's,
-    # as GitHub gives them; +head+ the head commit's oid; +state+ one of
-    # STATES.
-    PullRequest = Struct.new(:number, :base, :head_branch, :draft, :cross_repository, :head, :state,
+    # as GitHub gives them; +head_owner+ the login of the head repository's
+    # owner, nil when gh gives none; +head+ the head commit's oid; +state+
+    # one of STATES.
+    PullRequest = Struct.new(:number, :base, :head_branch, :draft, :cross_repository, :head_owner, :head, :state,
                              keyword_init: true) do
       def open?
         state == OPEN
@@ -69,7 +71,8 @@ module CopilotCheck
 
       PullRequest.new(number: number, base: branch(view, 'baseRefName'), head_branch: branch(view, 'headRefName'),
                       draft: flag(view, 'isDraft'), cross_repository: flag(view, 'isCrossRepository'),
-                      head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']), state: state(view))
+                      head_owner: head_owner(view), head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']),
+                      state: state(view))
     end
 
     def this_repository?(url, number)
@@ -83,6 +86,14 @@ module CopilotCheck
       return branch if branch.is_a?(String) && !branch.empty?
 
       raise SkillSupport::UnexpectedResponse, "gh pr view gave no #{name}"
+    end
+
+    # Nil rather than a failure when gh names no owner: the viewer isn't its
+    # owner then, so the fork guards hold.
+    def head_owner(view)
+      owner = view['headRepositoryOwner']
+      login = owner['login'] if owner.is_a?(Hash)
+      login if login.is_a?(String) && !login.empty?
     end
 
     def flag(view, name)

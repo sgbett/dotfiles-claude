@@ -41,8 +41,8 @@ module CopilotCheck
       # +fields+ changed.
       def pull_request_response(viewer: 'sgbett', **fields)
         node = { 'state' => 'OPEN', 'isDraft' => true, 'isCrossRepository' => false, 'headRefOid' => HEAD,
-                 'mergeable' => 'MERGEABLE', 'changedFiles' => 2, 'author' => { 'login' => 'sgbett' },
-                 'autoMergeRequest' => nil }.merge(fields)
+                 'mergeable' => 'MERGEABLE', 'changedFiles' => 2, 'headRepositoryOwner' => { 'login' => 'sgbett' },
+                 'author' => { 'login' => 'sgbett' }, 'autoMergeRequest' => nil }.merge(fields)
         { 'data' => { 'viewer' => { 'login' => viewer }, 'repository' => { 'pullRequest' => node } } }
       end
 

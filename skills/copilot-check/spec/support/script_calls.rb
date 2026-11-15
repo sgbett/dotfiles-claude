@@ -19,9 +19,11 @@ module CopilotCheck
       include GateCalls
       include ScriptRuns
 
-      PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,isDraft,headRefOid,state,url'
+      PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,headRepositoryOwner,isDraft,headRefOid,' \
+                       'state,url'
       RUBRIC = ['gh', 'api', '--hostname', 'github.com', '-X', 'GET',
                 "repos/#{GateCalls::HERE}/contents/.github/copilot-instructions.md", '-f', 'ref=master'].freeze
+      VIEWER = %w[gh api --hostname github.com -X GET user].freeze
       BRANCH_CHECK = %w[git check-ref-format --branch master].freeze
       # #18's node id, as recorded.
       PULL_REQUEST_ID = 'PR_kwDOQzoXSs8AAAABOt1xEA'
@@ -43,6 +45,21 @@ module CopilotCheck
       # #18 as recorded but open, as a run needs it, with +fields+ changed.
       def open_pr_view_response(**fields)
         pr_view_response(state: 'OPEN', **fields)
+      end
+
+      # #18 open, but from a fork +owner+ owns.
+      def fork_pr_view_response(owner)
+        open_pr_view_response(isCrossRepository: true, headRepositoryOwner: { 'login' => owner })
+      end
+
+      # gh api user's answer, cut to the login: the rest holds the account's
+      # private details, so it is synthesised rather than recorded.
+      def viewer_response(login = 'sgbett')
+        { 'login' => login }
+      end
+
+      def expect_viewer(login = 'sgbett')
+        fake_runner.expect_call(VIEWER, stdout: as_json(viewer_response(login)))
       end
 
       def expect_repo_view

@@ -44,7 +44,7 @@ gh api graphql --hostname github.com --input $F/graphql/review-thread-14.request
 
 gh repo view --json nameWithOwner,url > $F/repo-view/checkout.json
 gh pr view 18 -R github.com/sgbett/dotfiles-claude \
-  --json number,baseRefName,headRefName,isCrossRepository,isDraft,headRefOid,state,url \
+  --json number,baseRefName,headRefName,isCrossRepository,headRepositoryOwner,isDraft,headRefOid,state,url \
   > $F/pr-view/pull-request-18.json
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/contents/.github/copilot-instructions.md -f ref=master \
   > $F/contents/rubric-not-found.json 2> $F/contents/rubric-not-found.stderr
@@ -58,4 +58,4 @@ gh pr checks 43381 -R github.com/twbs/bootstrap --json name,bucket,link > $F/pr-
 
 ## Synthesised
 
-The specs build every other case in Ruby (`spec/support/gate_calls.rb` and `spec/support/script_calls.rb`) and in the specs themselves: an open draft that passes every condition, threads and reviews changed from the recorded ones, more files than a page, failed checks and their annotations, the rules and start files the lead writes, a rubric, a pull request from a fork or open, an outdated thread's file as it stood, and every write's answer, as no mutation is ever recorded: a review request, its "already" error, and a resolved thread. A repository they add is an `example-` one. No annotation is recorded, as the public ones found carry text naming repositories off the allowlist.
+The specs build every other case in Ruby (`spec/support/gate_calls.rb` and `spec/support/script_calls.rb`) and in the specs themselves: an open draft that passes every condition, threads and reviews changed from the recorded ones, more files than a page, failed checks and their annotations, the rules and start files the lead writes, a rubric, an open pull request and one from the viewer's fork or another owner's, the viewer's login, which `gh api user` gives beside the account's private details, an outdated thread's file as it stood, and every write's answer, as no mutation is ever recorded: a review request, its "already" error, and a resolved thread. A repository they add is an `example-` one. No annotation is recorded, as the public ones found carry text naming repositories off the allowlist.

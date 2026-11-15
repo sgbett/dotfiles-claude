@@ -7,13 +7,14 @@ module CopilotCheck
     QUERY = File.read(File.join(__dir__, 'pull_request.graphql'))
     FLAGS = %w[isDraft isCrossRepository].freeze
 
-    # +state+ is OPEN, CLOSED or MERGED; +head+ the head commit's oid;
-    # +mergeable+ MERGEABLE, CONFLICTING or UNKNOWN; +changed_files+ how many
-    # files it changes; +author+ its author's login, nil for a deleted
-    # account; +auto_merge+ whether auto-merge is on; +viewer+ the
-    # authenticated user's login.
-    PullRequest = Struct.new(:state, :draft, :cross_repository, :head, :mergeable, :changed_files, :author,
-                             :auto_merge, :viewer, keyword_init: true)
+    # +state+ is OPEN, CLOSED or MERGED; +head_owner+ the login of the head
+    # repository's owner, nil when GitHub gives none; +head+ the head
+    # commit's oid; +mergeable+ MERGEABLE, CONFLICTING or UNKNOWN;
+    # +changed_files+ how many files it changes; +author+ its author's login,
+    # nil for a deleted account; +auto_merge+ whether auto-merge is on;
+    # +viewer+ the authenticated user's login.
+    PullRequest = Struct.new(:state, :draft, :cross_repository, :head_owner, :head, :mergeable, :changed_files,
+                             :author, :auto_merge, :viewer, keyword_init: true)
 
     def self.variables(repository, number)
       owner, name = SkillSupport::Identifiers.repository!(repository).split('/')
@@ -39,6 +40,7 @@ module CopilotCheck
     def record(node, viewer)
       check_types(node)
       PullRequest.new(state: node['state'], draft: node['isDraft'], cross_repository: node['isCrossRepository'],
+                      head_owner: node.dig('headRepositoryOwner', 'login'),
                       head: SkillSupport::Identifiers.commit_sha!(node['headRefOid']), mergeable: node['mergeable'],
                       changed_files: node['changedFiles'], author: node.dig('author', 'login'),
                       auto_merge: !node['autoMergeRequest'].nil?, viewer: viewer)

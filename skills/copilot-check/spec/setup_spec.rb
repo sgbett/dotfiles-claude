@@ -29,10 +29,13 @@ RSpec.describe CopilotCheck::Setup do
   # case changes the rubric, CLAUDE.md, whose +claude_md+ holds any focus,
   # or the latest review, the checkout found at #18's head and tracking
   # origin's copy of its branch unless +checkout+ says otherwise
-  # (expect_checkout_step).
-  def expect_start(rubric: nil, claude_md: nil, latest: fixture('graphql/latest-review-18.json'), **checkout)
+  # (expect_checkout_step), and, given a +viewer+, the read of that login a
+  # fork needs.
+  def expect_start(rubric: nil, claude_md: nil, latest: fixture('graphql/latest-review-18.json'), viewer: nil,
+                   **checkout)
     expect_scripts_step
     expect_checkout_step(**checkout)
+    expect_viewer(viewer) if viewer
     fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
     expect_rubric(rubric)
     expect_focus(claude_md)
@@ -252,13 +255,14 @@ RSpec.describe CopilotCheck::Setup do
   end
 
   describe 'on a pull request from a fork' do
-    let(:fork) { open_pr_view_response(isCrossRepository: true) }
+    let(:fork) { fork_pr_view_response('example-stranger') }
 
-    it 'asks, once it has found its checkout, before anything else is read or written, with the yes tied to its ' \
-       'head' do
+    it 'asks when someone else owns it, once it has found its checkout and read the viewer, before anything else ' \
+       'is read or written, with the yes tied to its head' do
       expect_resolution(response: fork)
       expect_scripts_step
       expect_checkout_step
+      expect_viewer
 
       exit_code, output = run_setup(*arguments)
 
@@ -269,7 +273,28 @@ RSpec.describe CopilotCheck::Setup do
       expect(File.exist?(start_file)).to be(false)
     end
 
-    it 'goes on once the user says yes for its head, and asks again once the head has moved' do
+    it "asks without reading the viewer when gh names no owner, who can't be the viewer" do
+      expect_resolution(response: fork.merge('headRepositoryOwner' => nil))
+      expect_scripts_step
+      expect_checkout_step
+
+      expect(run_setup(*arguments).last['asks'].map { |ask| ask['reason'] }).to eq(%w[fork_pull_request])
+    end
+
+    it "goes on without asking when the viewer owns it, whatever the case of the owner's login" do
+      %w[sgbett SGBett].each do |owner|
+        expect_resolution(response: fork_pr_view_response(owner))
+        expect_start(viewer: 'sgbett')
+
+        exit_code, output = run_setup(*arguments)
+
+        expect([exit_code, output['status'], output['pull_request']['is_cross_repository']])
+          .to eq([0, 'proceed', true]), owner
+      end
+    end
+
+    it 'goes on once the user says yes for its head, without reading the viewer, and asks again once the head ' \
+       'has moved' do
       moved = CopilotCheck::Testing::GateCalls::OTHER_COMMIT
       expect_resolution(response: fork)
       expect_start
@@ -280,7 +305,17 @@ RSpec.describe CopilotCheck::Setup do
       expect_scripts_step
       expect_checkout_step(worktrees: [{ path: pull_request_checkout, head: moved,
                                          branch: CopilotCheck::Testing::CheckoutCalls::HEAD_BRANCH }])
+      expect_viewer
       expect(run_setup(*arguments('18', '--accept-fork', head)).first).to eq(3)
+    end
+
+    it "fails as a tool when GitHub gives no viewer's login" do
+      expect_resolution(response: fork)
+      expect_scripts_step
+      expect_checkout_step
+      expect_viewer(nil)
+
+      expect { run_setup(*arguments) }.to raise_error(SkillSupport::UnexpectedResponse, 'gh api user gave no login')
     end
   end
 
@@ -425,8 +460,12 @@ RSpec.describe 'skills/copilot-check/bin/setup' do
     expect(accepted.values_at(0, 2)).to eq([0, ''])
   end
 
-  it "asks about a fork's head and the scripts at once, and asks again about scripts changed since the yes" do
-    install_gh_shim(shim_entries(check_out_pull_request.merge('isCrossRepository' => true)))
+  it "asks about the head of someone else's fork and the scripts at once, and asks again about scripts changed " \
+     'since the yes' do
+    fork = check_out_pull_request.merge('isCrossRepository' => true,
+                                        'headRepositoryOwner' => { 'login' => 'example-stranger' })
+    viewer = { args: CopilotCheck::Testing::ScriptCalls::VIEWER.drop(1), stdout: as_json(viewer_response) }
+    install_gh_shim([*shim_entries(fork), viewer])
     File.write(File.join(clone, 'lib', 'unreviewed.rb'), "# not reviewed\n")
 
     first = run_script('setup', *arguments(argument), skill: clone)

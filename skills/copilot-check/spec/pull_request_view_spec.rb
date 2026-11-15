@@ -18,10 +18,18 @@ RSpec.describe CopilotCheck::PullRequestView do
 
     expect([pull_request.to_h, pull_request.open?])
       .to eq([{ number: 18, base: 'master', head_branch: 'feat/17-do-qa-records-the-work-as', draft: false,
-                cross_repository: false, head: CopilotCheck::Testing::GateCalls::HEAD, state: 'MERGED' }, false])
+                cross_repository: false, head_owner: 'sgbett', head: CopilotCheck::Testing::GateCalls::HEAD,
+                state: 'MERGED' }, false])
     expect(pull_request.start_state(repository, checkout: '/work/dotfiles-27', chained: true))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
              'isCrossRepository' => false, 'isDraft' => false, 'checkout' => '/work/dotfiles-27', 'chained' => true)
+  end
+
+  it "gives no head owner when gh names none, so that it can't be the viewer" do
+    [nil, {}, { 'login' => '' }].each do |owner|
+      expect_pr_view(response: pr_view_response(headRepositoryOwner: owner))
+      expect(view.fetch(18).head_owner).to be_nil, owner.inspect
+    end
   end
 
   it 'tells an open pull request from a closed or merged one' do

@@ -31,10 +31,11 @@ module CopilotCheck
                             "request's head: its HEAD is local_head, the head pull_request.head, so the run's " \
                             "fixes wouldn't build on what Copilot reviews. Tell the user to push or pull first, so " \
                             'the two match, then run /copilot-check again.',
-      fork_pull_request: "The pull request comes from a fork: its author isn't trusted, yet controls the code the " \
-                         "verifiers read and the fixes would build on, and a yes means Phase 4 runs the fork's specs " \
-                         'and linter as the owner. Ask the user whether to go on, saying so; on a yes, run setup ' \
-                         'again with accept_with added, which holds while pull_request.head is the head.',
+      fork_pull_request: "The pull request comes from a fork someone else owns: they aren't trusted, yet control " \
+                         'the code the verifiers read and the fixes would build on, and a yes means Phase 4 runs ' \
+                         "the fork's specs and linter as the owner. Ask the user whether to go on, saying so; on a " \
+                         'yes, run setup again with accept_with added, which holds while pull_request.head is the ' \
+                         'head.',
       scripts_unreviewed: 'The checkout these scripts run from has changes under skills/copilot-check or ' \
                           "skills/_support or to the files that pick their Ruby, or its HEAD isn't in its default " \
                           'branch, so they may not be the reviewed scripts (session_only.scripts_changes). Ask the ' \
@@ -75,7 +76,7 @@ module CopilotCheck
       review_bodies_unread: 'A review given as free of findings has no review-<id>.md in the bodies directory that ' \
                             'is its body now (copilot.unread_reviews).',
       not_viewers_own: "The pull request's author isn't the authenticated user.",
-      from_fork: 'The pull request comes from a fork.',
+      from_fork: "The pull request comes from a fork the authenticated user doesn't own.",
       files_unlisted: "The pull request's changed files could not all be listed, as GitHub lists at most 3,000, so " \
                       'changes to workflows or rules files cannot be ruled out.',
       protected_paths_changed: 'The pull request changes a path under .github/workflows/ or .github/actions/, ' \

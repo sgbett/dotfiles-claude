@@ -75,7 +75,13 @@ module CopilotCheck
 
     def author_reasons
       [(:not_viewers_own unless !pull_request.author.nil? && pull_request.author == pull_request.viewer),
-       (:from_fork if pull_request.cross_repository)].compact
+       (:from_fork if pull_request.cross_repository && !viewers_fork?)].compact
+    end
+
+    # Only the viewer, and whoever they let, can push to a fork they own, and
+    # local_head_differs ties the head to their checkout.
+    def viewers_fork?
+      !pull_request.viewer.nil? && pull_request.head_owner&.casecmp?(pull_request.viewer)
     end
 
     def files_reasons
