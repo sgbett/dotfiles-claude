@@ -34,18 +34,38 @@ module CopilotCheck
 
       # setup's look for the checkout with #18's branch checked out: the
       # branch's check, then the worktrees git lists, by default the one
-      # +checkout+ with that branch at #18's head, then, unless nil, the
-      # +upstream+ its branch tracks, as for-each-ref prints it, and then,
-      # unless nil, where origin pushes (expect_push_url_step).
+      # +checkout+ with that branch at #18's head; then, if one has the
+      # branch, the checks that +checkout+ is still that one
+      # (expect_identity_step), unless nil the +upstream+ its branch tracks,
+      # as for-each-ref prints it, and unless nil where origin pushes
+      # (expect_push_url_step).
       def expect_checkout_step(checkout: pull_request_checkout, upstream: ORIGIN_UPSTREAM, pushes_to: GateCalls::HERE,
                                worktrees: [{ path: checkout, head: GateCalls::HEAD, branch: HEAD_BRANCH }])
         fake_runner.expect_call(['git', 'check-ref-format', '--branch', HEAD_BRANCH], stdout: "#{HEAD_BRANCH}\n")
         fake_runner.expect_call(WORKTREE_LIST, stdout: worktree_list(*worktrees))
+        listed = worktrees.find { |worktree| worktree[:branch] == HEAD_BRANCH }
+        return unless listed
+
+        expect_identity_step(checkout, listed[:head])
         return unless upstream
 
         fake_runner.expect_call(['git', '-C', checkout, 'for-each-ref', UPSTREAM_FORMAT, "refs/heads/#{HEAD_BRANCH}"],
                                 stdout: upstream)
         expect_push_url_step(checkout, pushes_to) if pushes_to
+      end
+
+      # The checks that +checkout+ is the worktree git listed with #18's
+      # branch at +head+: of the sandbox's repository, with that branch
+      # checked out, its HEAD at +resolves_to+, +head+ unless given.
+      def expect_identity_step(checkout, head, resolves_to: head)
+        common_directory = "#{File.join(sandbox.work_directory, '.git')}\n"
+        fake_runner.expect_call(%w[git rev-parse --path-format=absolute --git-common-dir], stdout: common_directory)
+        fake_runner.expect_call(['git', '-C', checkout, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+                                stdout: common_directory)
+        fake_runner.expect_call(['git', '-C', checkout, 'symbolic-ref', '--quiet', 'HEAD'],
+                                stdout: "refs/heads/#{HEAD_BRANCH}\n")
+        fake_runner.expect_call(['git', '-C', checkout, 'rev-parse', '--verify', '--quiet', 'HEAD'],
+                                stdout: "#{resolves_to}\n")
       end
 
       # The read of origin's push URL in +checkout+, and gh resolving it to

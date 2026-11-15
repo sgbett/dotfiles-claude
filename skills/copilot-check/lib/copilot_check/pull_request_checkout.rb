@@ -3,6 +3,7 @@
 require_relative 'branch_upstream'
 require_relative 'push_remote'
 require_relative 'reasons'
+require_relative 'worktree_identity'
 require_relative 'worktrees'
 
 module CopilotCheck
@@ -11,12 +12,13 @@ module CopilotCheck
   # through Worktrees so that /do's worktree counts. Claude Code resets the
   # shell's working directory to the session's after each command, so a run
   # chained from /do's worktree can't cd there, and a run from another
-  # branch would commit and push there. The run stops unless the checkout
-  # isn't the one its scripts run from, whose scripts its fixes would
-  # change, its branch's upstream is the pull request's branch on a remote
-  # that pushes to the head repository alone (PushRemote), where the run
-  # pushes, and its HEAD is the pull request's head, the code Copilot
-  # reviews.
+  # branch would commit and push there. The run stops unless the directory
+  # at the checkout's listed path is that checkout still
+  # (WorktreeIdentity), it isn't the one the scripts run from, whose
+  # scripts its fixes would change, its branch's upstream is the pull
+  # request's branch on a remote that pushes to the head repository alone
+  # (PushRemote), where the run pushes, and its HEAD is the pull request's
+  # head, the code Copilot reviews.
   class PullRequestCheckout
     # branch.<name>.remote "." tracks a branch of this same repository.
     THIS_REPOSITORY = '.'
@@ -49,7 +51,7 @@ module CopilotCheck
 
       top_level = top_level(worktree.path)
       local_head = SkillSupport::Identifiers.commit_sha!(worktree.head)
-      stop_reason = checkout_stop_reason(top_level)
+      stop_reason = checkout_stop_reason(top_level, branch, local_head)
       remote, stop_reason = push_remote(top_level, branch, head_repository) unless stop_reason
       Assessment.new(top_level: top_level, head: local_head, push_remote: remote,
                      stop_reason: stop_reason || (Reasons::CHECKOUT_NOT_AT_HEAD unless local_head == head))
@@ -57,7 +59,10 @@ module CopilotCheck
 
     private
 
-    def checkout_stop_reason(top_level)
+    # +local_head+ is the commit git listed the checkout's HEAD at.
+    def checkout_stop_reason(top_level, branch, local_head)
+      return Reasons::CHECKOUT_MISMATCH unless WorktreeIdentity.new(@runner).confirmed?(top_level, branch, local_head)
+
       Reasons::CHECKOUT_RUNS_SCRIPTS if top_level == @scripts_top_level
     end
 

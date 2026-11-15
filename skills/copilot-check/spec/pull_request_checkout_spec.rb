@@ -76,6 +76,36 @@ RSpec.describe CopilotCheck::PullRequestCheckout do
     expect(assess(head).to_h).to eq(top_level: nil, head: nil, push_remote: nil, stop_reason: :no_pull_request_checkout)
   end
 
+  describe 'when the directory at the listed path is no longer that worktree' do
+    # Puts a link to +target+ where the linked worktree's directory was,
+    # which git goes on listing with the branch checked out.
+    def swap_linked_for(target)
+      FileUtils.rm_rf(linked)
+      File.symlink(target, linked)
+    end
+
+    it "stops on a link to another repository's checkout of the branch at its head, before reading where it " \
+       'pushes' do
+      head = repository_with_branch
+      git('worktree', 'add', '--quiet', linked, branch)
+      other = sandbox.path('other')
+      git('clone', '--quiet', sandbox.work_directory, other)
+      git('checkout', '--quiet', branch, directory: other)
+      git('remote', 'set-url', 'origin', origin_url, directory: other)
+      swap_linked_for(other)
+
+      expect(assess(head).to_h).to eq(top_level: other, head: head, push_remote: nil, stop_reason: :checkout_mismatch)
+    end
+
+    it "stops on a link to this repository's checkout of another branch" do
+      head = repository_with_branch
+      git('worktree', 'add', '--quiet', linked, branch)
+      swap_linked_for(sandbox.work_directory)
+
+      expect(assess(head).to_h.values_at(:top_level, :stop_reason)).to eq([sandbox.work_directory, :checkout_mismatch])
+    end
+  end
+
   it 'stops on the checkout the scripts run from, as their fixes would change them, whatever it pushes to' do
     head = repository_with_branch
     git('checkout', '--quiet', branch)

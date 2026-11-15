@@ -136,6 +136,22 @@ RSpec.describe CopilotCheck::Setup do
                                    'head_repository' => 'sgbett/dotfiles-claude' })
     end
 
+    it 'stops when the checkout at the path git lists has moved on from the commit git listed, naming that one' do
+      expect_resolution
+      expect_scripts_step
+      fake_runner.expect_call(['git', 'check-ref-format', '--branch', branch], stdout: "#{branch}\n")
+      fake_runner.expect_call(CopilotCheck::Testing::CheckoutCalls::WORKTREE_LIST,
+                              stdout: worktree_list({ path: sandbox.work_directory, head: head, branch: branch }))
+      expect_identity_step(sandbox.work_directory, head, resolves_to: other)
+
+      exit_code, output = run_setup(*arguments)
+
+      expect([exit_code, output.values_at('reason', 'message', 'local_head', 'session_only')])
+        .to eq([2, ['checkout_mismatch', CopilotCheck::Reasons::MESSAGES[:checkout_mismatch], head,
+                    { 'checkout' => sandbox.work_directory }]])
+      expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
+    end
+
     it "stops when the branch doesn't track #18's branch on a remote, giving the checkout in the session alone" do
       ["\0\n", "origin\0refs/heads/master\n", ".\0refs/heads/#{branch}\n"].each do |upstream|
         exit_code, output = stop_on_checkout(upstream: upstream, pushes_to: nil)

@@ -21,6 +21,12 @@ module CopilotCheck
                                 "has the pull request's branch (pull_request.head_branch) checked out, so the run " \
                                 'has nowhere to make its fixes. Tell the user to check it out in one, then run ' \
                                 '/copilot-check again.',
+      checkout_mismatch: "The path git lists for the worktree with the pull request's branch checked out doesn't " \
+                         "hold that worktree now: it resolves to session_only.checkout, which isn't a checkout of " \
+                         'this repository with that branch at the commit git lists (local_head), as when the ' \
+                         'directory has been replaced or swapped for a link. Tell the user to check what is at ' \
+                         'that path and fix the worktree, as git worktree list and git worktree repair help to, ' \
+                         'then run /copilot-check again.',
       checkout_runs_scripts: "The pull request's branch is checked out where these scripts run from " \
                              "(session_only.checkout), so the run's fixes would change the scripts as they run. " \
                              'Tell the user to switch that checkout to another branch and check the pull ' \
