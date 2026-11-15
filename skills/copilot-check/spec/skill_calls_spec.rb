@@ -16,7 +16,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       'rereview' => CopilotCheck::RereviewArguments, 'promote-check' => CopilotCheck::PromoteCheckArguments }
   end
   let(:values) do
-    { '{pr}' => '18', '{scratch}' => '/scratch', '{n}' => '1', '{mark}' => '2026-11-12T20:23:51Z',
+    { '{pr}' => '18', '{arg}' => '18', '{scratch}' => '/scratch', '{n}' => '1', '{mark}' => '2026-11-12T20:23:51Z',
       '{outcome}' => 'converged', '{review_ids}' => '5881418347,5881467821',
       '{pull_request.head}' => CopilotCheck::Testing::GateCalls::HEAD }
   end
@@ -62,7 +62,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
     check, = parsed('promote-check')
 
     expect(check.to_h.values_at(:rules_file, :reviews_without_findings, :bodies_dir))
-      .to eq(['/scratch/promotion-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/pr-18-round-1'])
+      .to eq(['/scratch/pr-18-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/pr-18-round-1'])
   end
 
   it "hands threads fetch and check the same round's bodies directory, and puts no thread's path on a command line" do
