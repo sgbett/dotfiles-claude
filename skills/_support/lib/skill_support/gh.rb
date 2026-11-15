@@ -9,6 +9,7 @@ module SkillSupport
   class Gh
     HTTP_METHODS = %w[GET POST PATCH PUT DELETE].freeze
     API_PATH = %r{\A[A-Za-z0-9_.~%][A-Za-z0-9_.~%-]*(?:/[A-Za-z0-9_.~%-]+)*\z}
+    RESERVED_BYTE = /[^A-Za-z0-9._~-]/n
     DOT_SEGMENTS = %w[. ..].freeze
     FIELD_NAME = /\A[A-Za-z_][A-Za-z0-9_]*\z/
     JSON_FIELD = /\A[a-z][A-Za-z]*\z/
@@ -16,6 +17,12 @@ module SkillSupport
     REPOSITORY_URL = %r{\A(?:(?:https?|ssh|git|git\+ssh|git\+https)://|git@)[^[:space:][:cntrl:]]+\z}
 
     attr_reader :host
+
+    # +value+ as one segment of an #api path: every byte outside the
+    # unreserved characters as %XX, so a "/" in it can't start another.
+    def self.path_segment(value)
+      value.b.gsub(RESERVED_BYTE) { |byte| format('%%%02X', byte.ord) }
+    end
 
     def initialize(host:, runner: CommandRunner.new)
       @host = Identifiers.host!(host)

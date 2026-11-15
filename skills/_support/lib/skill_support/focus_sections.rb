@@ -2,7 +2,7 @@
 
 require_relative 'markdown'
 
-module Do
+module SkillSupport
   # The "## Security focus" sections of a Markdown document, each from its
   # heading to the next heading of level one or two, read as GitHub renders
   # it: a heading inside a fenced code block is code.

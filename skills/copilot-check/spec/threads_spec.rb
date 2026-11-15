@@ -45,12 +45,29 @@ RSpec.describe CopilotCheck::Threads do
     end
   end
 
-  it "reads #14 as recorded: Copilot's latest review, no thread to do, and the one review no comment marks" do
+  it "reads #14 as recorded: its head, Copilot's latest review of it, no thread to do, and the one review no " \
+     'comment marks' do
     result = fetch(threads_response('threads-14'))
 
+    expect(result.head).to eq(CopilotCheck::Testing::GateCalls::OTHER_COMMIT)
     expect(result.latest_review.to_h).to eq(submitted_at: '2026-10-27T16:03:42Z', comments: 0,
-                                            commit: '56b92d3c76c8d5f09feb05ca05af160e8838d8cf')
+                                            commit: CopilotCheck::Testing::GateCalls::OTHER_COMMIT)
+    expect(result.copilot_on_head?).to be(true)
     expect([result.todo_threads, result.todo_reviews.map(&:review_id)]).to eq([[], [5_670_324_332]])
+  end
+
+  it "says Copilot's latest review isn't on the head when it is of another commit, as after a push" do
+    response = changed_threads do |pull_request|
+      pull_request['latest']['nodes'].first['commit']['oid'] = CopilotCheck::Testing::GateCalls::HEAD
+    end
+
+    expect(fetch(response).copilot_on_head?).to be(false)
+  end
+
+  it "fails rather than guess when the pull request's head is missing" do
+    response = changed_threads { |pull_request| pull_request.delete('headRefOid') }
+
+    expect { fetch(response) }.to raise_error(SkillSupport::InvalidIdentifier, 'invalid commit_sha')
   end
 
   it "reads #18 as recorded: both of Copilot's reviews still to do, as no comment answers them" do
@@ -67,7 +84,9 @@ RSpec.describe CopilotCheck::Threads do
       pull_request['reviewThreads']['nodes'] = []
     end
 
-    expect(fetch(response).to_h.values_at(:latest_review, :todo_reviews)).to eq([nil, []])
+    result = fetch(response)
+
+    expect([result.latest_review, result.todo_reviews, result.copilot_on_head?]).to eq([nil, [], false])
   end
 
   describe 'a thread to do' do

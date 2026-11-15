@@ -73,6 +73,16 @@ F=skills/do/spec/fixtures
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/issues/24 > $F/rest/issue-24.json
 ```
 
+`CopilotSignal`'s two recordings are the rules for a base branch, which `check` and `record closes` read, recorded the same way after also checking that `gh repo view sgbett/bsv-ruby-sdk --json visibility` prints `PUBLIC`: `branch-rules-copilot.json` holds a `copilot_code_review` rule beside a status-check rule, and `branch-rules-none.json` is this repository's empty list. A contents 404 reads the same for any path, so an absent `.github/copilot-instructions.md` is `rules-not-found.json` again.
+
+```sh
+F=skills/do/spec/fixtures
+gh api --hostname github.com -X GET repos/sgbett/bsv-ruby-sdk/rules/branches/master -f per_page=100 \
+  > $F/rest/branch-rules-copilot.json
+gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/rules/branches/master -f per_page=100 \
+  > $F/rest/branch-rules-none.json
+```
+
 `Checklist`'s recordings are GitHub's renders of five synthetic bodies through its stateless Markdown endpoint, which reads no repository: `markdown/<name>.md` is the body sent and `markdown/<name>.html` what GitHub returned, and `checklist_renders_spec.rb` holds the boxes `Checklist` counts against the checkboxes GitHub rendered. `lists` holds nested, quoted and ordered boxes, `footnotes` boxes in a referenced and an unreferenced footnote, `html-and-bom` a byte order mark and `<!x` beside `<!X`, `not-boxes` boxes GitHub renders only in some contexts, and `encoded` boxes GitHub finds only once it decodes an escape or a character reference or reads a non-ASCII space or a form feed as a space, beside lines with a vertical tab, which GitHub writes as U+FFFD, and items that start with a link or a bracketed word. A footnote's id carries a hash that changes with every render, so `footnotes.html` records again with other ids.
 
 ```sh
@@ -87,5 +97,7 @@ done
 The specs build every other case in Ruby (`spec/support/issue_responses.rb`) by changing the recorded #24 answer: untrusted authors, parents and sub-issues, other branches and pull requests, cut-off pages and gate lines. Any repository they add is an `example-` one, as no public repository has the sub-issue links they need.
 
 `check`'s other cases are built in `spec/support/check_responses.rb` and the specs themselves: other remotes and forks, pull requests open on the branch, files with a security focus, and the git answers its unit specs expect. Its git layer is tested against real repositories made in each example's sandbox instead; an end-to-end `check` reaches its push URL, `git@github.com:sgbett/dotfiles-claude.git`, through a `GIT_SSH_COMMAND` that serves one of them, never the network.
+
+`CopilotSignal`'s other cases are built in `spec/support/copilot_signal_calls.rb` and its spec: rules of other types, or set by an organisation or an enterprise, a full page, a 404 and a 403, and the instructions present or a directory.
 
 `record`'s other cases are built in `spec/support/record_calls.rb` and the specs themselves: other ledgers, issue bodies and sub-issues, and every write, whose answers are synthesised rather than recorded. Its gate file and lock are written in each example's sandbox.

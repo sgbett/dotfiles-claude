@@ -162,6 +162,13 @@ RSpec.describe SkillSupport::Gh do
     end
   end
 
+  describe '.path_segment' do
+    it 'percent-encodes every byte outside the unreserved characters, so the value stays one segment' do
+      expect(described_class.path_segment('project/#7_skills+x~1.0-é'))
+        .to eq('project%2F%237_skills%2Bx~1.0-%C3%A9')
+    end
+  end
+
   describe '#logged_in?' do
     it "asks gh auth status about the host's active account alone, true only when it exits 0" do
       expect_gh_login('ghe.example.com')

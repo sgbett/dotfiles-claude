@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../lib/do/record'
+require_relative 'copilot_signal_calls'
 require_relative 'issue_responses'
 
 module Do
@@ -9,11 +10,12 @@ module Do
     # own checkout, which is none here, the recorded #24 answer to the issue
     # query, changed where a spec needs another ledger, issue body or
     # sub-issue, then REST reads and writes of the issue body and the ledger
-    # comment, and the git calls for the base and the common git directory
-    # the lock and the gate file live in. Every write is synthesised; none
-    # was recorded.
+    # comment, the Copilot signal `closes` reads, and the git calls for the
+    # base and the common git directory the lock and the gate file live in.
+    # Every write is synthesised; none was recorded.
     module RecordCalls
       include IssueResponses
+      include CopilotSignalCalls
 
       ISSUE_PATH = 'repos/sgbett/dotfiles-claude/issues/24'
       LEDGER_PATH = 'repos/sgbett/dotfiles-claude/issues/comments/6867069660'

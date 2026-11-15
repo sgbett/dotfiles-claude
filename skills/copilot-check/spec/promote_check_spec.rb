@@ -42,23 +42,45 @@ RSpec.describe 'skills/copilot-check/bin/promote-check' do
     { 'RUBYOPT' => '-rbundler/setup', 'BUNDLE_GEMFILE' => File.expand_path('Gemfile') }
   end
 
+  # The calls of a check that passes every condition on +head+, Copilot's
+  # latest review of it included.
+  def passing_entries(head)
+    [repo_view,
+     { args: graphql, stdin: recorded_request('pull-request-18'),
+       stdout: JSON.generate(pull_request_response('headRefOid' => head)) },
+     { args: graphql, stdin: recorded_request('threads-18'), stdout: JSON.generate(threads_reviewing(head)) },
+     files, { args: checks_args, stdout: JSON.generate([check_entry('test', 'pass')]) }]
+  end
+
+  # #18's recorded thread fetch, with Copilot's latest review of +head+.
+  def threads_reviewing(head)
+    threads_response.tap do |threads|
+      threads_pull_request(threads)['latest']['nodes'].first['commit']['oid'] = head
+    end
+  end
+
   it 'promotes a draft whose every condition holds, whatever RUBYOPT says' do
     head = local_commit
-    threads = threads_response
-    threads_pull_request(threads)['latest']['nodes'].first['commit']['oid'] = head
-    shim = install_gh_shim(
-      [repo_view,
-       { args: graphql, stdin: recorded_request('pull-request-18'),
-         stdout: JSON.generate(pull_request_response('headRefOid' => head)) },
-       { args: graphql, stdin: recorded_request('threads-18'), stdout: JSON.generate(threads) },
-       files, { args: checks_args, stdout: JSON.generate([check_entry('test', 'pass')]) }]
-    )
+    shim = install_gh_shim(passing_entries(head))
 
     exit_code, stdout, stderr = run(*gate_arguments, environment: hostile_environment)
 
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
     expect(JSON.parse(stdout).values_at('status', 'verdict', 'reasons', 'local_head'))
       .to eq(['proceed', 'PROMOTE', [], head])
+  end
+
+  it "reads HEAD in the checkout the start file records, /do's linked worktree, not the working directory's" do
+    local_commit
+    worktree = sandbox.path('pr-worktree')
+    system('git', 'worktree', 'add', '--quiet', '-b', 'feat/x', worktree, exception: true)
+    system('git', '-C', worktree, 'commit', '--quiet', '--allow-empty', '-m', 'Head', exception: true)
+    head = Open3.capture2('git', '-C', worktree, 'rev-parse', 'HEAD').first.chomp
+    install_gh_shim(passing_entries(head))
+
+    exit_code, stdout, stderr = run(*gate_arguments(start: start_file(checkout: worktree)))
+
+    expect([exit_code, stderr, JSON.parse(stdout).values_at('verdict', 'local_head')]).to eq([0, '', ['PROMOTE', head]])
   end
 
   it 'holds #18 as recorded, merged and never a draft, for every reason the live run gave' do

@@ -82,7 +82,8 @@ RSpec.describe 'skills/do/bin/preflight' do
     install_gh_shim([login, recorded_graphql('check-issue-24'),
                      { args: ['repo', 'view', push_url, '--json', 'nameWithOwner,parent,viewerPermission'],
                        stdout_file: fixture_path('repo-view/push-origin.json') },
-                     recorded_graphql('base-master'), recorded_graphql('pull-requests-24'), *no_security_focus])
+                     recorded_graphql('base-master'), recorded_graphql('pull-requests-24'), *no_security_focus,
+                     *no_copilot_signal])
   end
 
   def recorded_graphql(name)
@@ -95,6 +96,16 @@ RSpec.describe 'skills/do/bin/preflight' do
     [{ args: contents_call('CLAUDE.md'), stdout: JSON.generate(claude_md) },
      { args: contents_call('.claude/rules'), exit: 1, stdout_file: fixture_path('contents/rules-not-found.json'),
        stderr: fixture('contents/rules-not-found.stderr') }]
+  end
+
+  # No rules for the base, whose path segment is +base_segment+, as
+  # recorded, and no .github/copilot-instructions.md.
+  def no_copilot_signal(base_segment = 'master')
+    [{ args: ['api', '--hostname', 'github.com', '-X', 'GET',
+              "repos/sgbett/dotfiles-claude/rules/branches/#{base_segment}", '-f', 'per_page=100'],
+       stdout_file: fixture_path('rest/branch-rules-none.json') },
+     { args: contents_call('.github/copilot-instructions.md'), exit: 1,
+       stdout_file: fixture_path('contents/rules-not-found.json'), stderr: fixture('contents/rules-not-found.stderr') }]
   end
 
   def contents_call(path)
@@ -163,7 +174,8 @@ RSpec.describe 'skills/do/bin/preflight' do
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
     expect(output.values_at('status', 'push_remote_is_fork', 'scripts_in_work_tree', 'working_tree_clean'))
       .to eq(['proceed', false, false, false])
-    expect([output['branch']['state'], output['security_focus']['found']]).to eq(['new', false])
+    expect([output['branch']['state'], output['security_focus']['found'], output['copilot_review']['signal']])
+      .to eq(['new', false, false])
     expect(output['session_only']).to include('push_urls' => [ssh_push_url], 'changed_paths' => ['?? Gemfile'])
   end
 
@@ -220,7 +232,7 @@ RSpec.describe 'skills/do/bin/preflight' do
          stdout: JSON.generate('data' => { 'repository' => base_ref }) },
        { args: graphql, stdin: request.call(Do::CheckQuery::PULL_REQUESTS_QUERY, 'branch' => work),
          stdout: JSON.generate('data' => { 'repository' => none_open }) },
-       *no_security_focus]
+       *no_security_focus, *no_copilot_signal('project%2F%237_skills%2Fmaster')]
     )
     arguments = ['check', 'sgbett/dotfiles-claude#24', '--push-remote', 'origin', '--pr-target',
                  'sgbett/dotfiles-claude', '--base', base, '--branch', work]

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../lib/do/focus_sections'
-
-RSpec.describe Do::FocusSections do
+RSpec.describe SkillSupport::FocusSections do
   def extract(text)
     described_class.extract(text)
   end

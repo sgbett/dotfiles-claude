@@ -8,12 +8,13 @@ require_relative 'stop'
 require_relative 'threads'
 
 module CopilotCheck
-  # `threads fetch --pr N --bodies-dir DIR`: Phase 2a. What of Copilot's
-  # review is still to do, from one fresh fetch with every stop 2a makes
-  # (Threads): its threads, by their ids and location, and its reviews, by
-  # id. Each one's body, Copilot's text, goes to a file in DIR for the
-  # verifiers, never to stdout, as does an outdated thread's file as it
-  # stood at the commit Copilot commented on, read through GitHub so that
+  # `threads fetch --pr N --bodies-dir DIR`: Phase 2a. Whether Copilot's
+  # latest review is of the head, without which 2a can't converge, and what
+  # of its review is still to do, from one fresh fetch with every stop 2a
+  # makes (Threads): its threads, by their ids and location, and its
+  # reviews, by id. Each one's body, Copilot's text, goes to a file in DIR
+  # for the verifiers, never to stdout, as does an outdated thread's file as
+  # it stood at the commit Copilot commented on, read through GitHub so that
   # no path reaches a command line; a thread's path is printed only as
   # GitHub text.
   class ThreadFetch
@@ -26,7 +27,7 @@ module CopilotCheck
     def call
       result = fetch
       @directory = OutputFile.directory(@options.bodies_dir)
-      SkillSupport::Outcome.proceed(pull_request: { number: @options.pr },
+      SkillSupport::Outcome.proceed(pull_request: { number: @options.pr }, copilot_on_head: result.copilot_on_head?,
                                     todo_threads: result.todo_threads.map { |thread| thread_entry(thread) },
                                     todo_reviews: result.todo_reviews.map { |review| review_entry(review) })
     rescue Stop => e

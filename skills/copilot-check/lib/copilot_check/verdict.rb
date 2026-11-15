@@ -14,16 +14,16 @@ module CopilotCheck
     CANCELLED = 'cancel'
 
     # +rules+ a PromotionRules; +started_as_draft+ whether the pull request
-    # was a draft when the run began; +outcome+ the run's; +pull_request+ a
-    # PullRequestQuery::PullRequest, with +mergeable+ re-read once if it was
-    # UNKNOWN; +local_head+ the checkout's HEAD; +threads+ a fresh
-    # Threads::Result, of which the reviews in +reviews_without_findings+
-    # (ids) the run says it read and found no finding in, and those in
-    # +reviews_read+ (ids) have a body file the run read that is still
-    # their body; +files+ a ChangedFiles::Result; +checks+ the
-    # Checks::Checks on the head.
-    Facts = Struct.new(:rules, :started_as_draft, :outcome, :pull_request, :mergeable, :local_head, :threads,
-                       :reviews_without_findings, :reviews_read, :files, :checks, keyword_init: true)
+    # was a draft when the run began; +chained+ whether /do chained the run;
+    # +outcome+ the run's; +pull_request+ a PullRequestQuery::PullRequest,
+    # with +mergeable+ re-read once if it was UNKNOWN; +local_head+ the
+    # checkout's HEAD; +threads+ a fresh Threads::Result, of which the
+    # reviews in +reviews_without_findings+ (ids) the run says it read and
+    # found no finding in, and those in +reviews_read+ (ids) have a body
+    # file the run read that is still their body; +files+ a
+    # ChangedFiles::Result; +checks+ the Checks::Checks on the head.
+    Facts = Struct.new(:rules, :started_as_draft, :chained, :outcome, :pull_request, :mergeable, :local_head,
+                       :threads, :reviews_without_findings, :reviews_read, :files, :checks, keyword_init: true)
 
     attr_reader :facts
 
@@ -52,9 +52,14 @@ module CopilotCheck
       [(:not_open unless pull_request.state == OPEN), (:not_a_draft unless pull_request.draft)].compact
     end
 
+    # A chained run's draft is one /do opened, by its own conventions, for
+    # the loop, and the owner's own rules make merging their call in every
+    # repository, so the chain makes both true whatever the repository's
+    # rules say. A repository whose own automation merges a pull request
+    # once it is ready is an accepted risk.
     def rules_reasons
-      [(:no_draft_flow unless @facts.rules.draft_flow?),
-       (:merge_not_owners_step unless @facts.rules.merge_is_owners_step?),
+      [(:no_draft_flow unless @facts.rules.draft_flow? || @facts.chained),
+       (:merge_not_owners_step unless @facts.rules.merge_is_owners_step? || @facts.chained),
        (:not_draft_at_start unless @facts.started_as_draft)].compact
     end
 
@@ -72,7 +77,13 @@ module CopilotCheck
 
     def author_reasons
       [(:not_viewers_own unless !pull_request.author.nil? && pull_request.author == pull_request.viewer),
-       (:from_fork if pull_request.cross_repository)].compact
+       (:from_fork if pull_request.cross_repository && !viewers_fork?)].compact
+    end
+
+    # Only the viewer, and whoever they let, can push to a fork they own, and
+    # local_head_differs ties the head to their checkout.
+    def viewers_fork?
+      !pull_request.viewer.nil? && pull_request.head_owner&.casecmp?(pull_request.viewer)
     end
 
     def files_reasons

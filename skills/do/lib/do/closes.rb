@@ -2,6 +2,7 @@
 
 require_relative 'checklist'
 require_relative 'closing'
+require_relative 'copilot_signal'
 require_relative 'reasons'
 require_relative 'record_issue'
 
@@ -16,6 +17,7 @@ module Do
   # digest is D. When the body's boxes no longer have it, or a line of the
   # body or the ledger reads like a box Checklist can't place, nothing
   # closes, and the issue is held open for it rather than the run stopped.
+  # Beside them it gives the Copilot signal for B (CopilotSignal).
   class Closes
     # +options+ are RecordArguments' Options.
     def initialize(options, runner:)
@@ -38,8 +40,8 @@ module Do
       items, verified_boxes, missing = unplaced.empty? ? verified(issue.ledger, boxes) : [[], [], []]
       return Reasons.stop(Reasons::BOX_MISSING, missing: missing) unless missing.empty?
 
-      report(issue.view, Closing.new(issue.view, boxes: boxes, verified_items: items, verified_boxes: verified_boxes,
-                                                 unplaced: unplaced))
+      report(issue, Closing.new(issue.view, boxes: boxes, verified_items: items, verified_boxes: verified_boxes,
+                                            unplaced: unplaced))
     end
 
     # The issue body's boxes, nil where its criteria live in the ledger, and
@@ -67,11 +69,20 @@ module Do
       [items, found, missing_items + missing_boxes]
     end
 
-    def report(view, closing)
+    def report(issue, closing)
+      view = issue.view
       nameable, hidden = closing.held.partition { |held| view.nameable?(held.record) }
       SkillSupport::Outcome.proceed(**closing_fields(view.query.default_branch_ref, closing),
                                     criteria: closing.criteria, held: listed(view, nameable),
+                                    copilot_review: copilot_review(issue),
                                     session_only: { held: listed(view, hidden) })
+    end
+
+    # Read again, not taken from pre-flight, whose output compaction may
+    # have dropped by the time the lead decides on a draft and the chain;
+    # the instructions at B's tip, as closes has no base commit.
+    def copilot_review(issue)
+      CopilotSignal.new(issue.github).read(issue.repository, branch: @options.base, ref: @options.base).to_h
     end
 
     # GitHub acts on closing keywords only in a pull request into the

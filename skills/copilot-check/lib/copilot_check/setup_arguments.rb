@@ -7,10 +7,11 @@ module CopilotCheck
   # The arguments of setup, every one validated before anything else runs:
   # its flags, each with its value, in any order.
   module SetupArguments
-    SPEC = { required: %w[--argument-file --start-file --rubric-file],
+    SPEC = { required: %w[--argument-file --start-file --rubric-file --focus-file],
              optional: ['--accept-fork', SkillSupport::ScriptsCheckout::ACCEPT_FLAG] }.freeze
 
-    Options = Struct.new(:argument_file, :start_file, :rubric_file, :accept_fork, :accept_scripts, keyword_init: true)
+    Options = Struct.new(:argument_file, :start_file, :rubric_file, :focus_file, :accept_fork, :accept_scripts,
+                         keyword_init: true)
 
     module_function
 

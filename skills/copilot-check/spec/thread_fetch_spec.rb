@@ -55,6 +55,7 @@ RSpec.describe CopilotCheck::ThreadFetch do
     exit_code, output = fetch
 
     expect([exit_code, output['status'], output['pull_request']]).to eq([0, 'proceed', { 'number' => 3 }])
+    expect(output.keys).to eq(%w[status pull_request copilot_on_head todo_threads todo_reviews])
     expect(output['todo_threads'].map { |thread| thread['comment_id'] }).to eq(todo_comments)
     expect(output['todo_threads'].first)
       .to eq('thread_id' => 'PRRT_kwDOQzoXSs6OWG23', 'comment_id' => 3_523_393_698, 'outdated' => false, 'line' => 109,
@@ -125,6 +126,33 @@ RSpec.describe CopilotCheck::ThreadFetch do
     exit_code, output = fetch(response, number: 14)
 
     expect([exit_code, output['todo_threads'], output['todo_reviews']]).to eq([0, [], []])
+  end
+
+  describe "whether Copilot's latest review is of the head, without which 2a can't converge" do
+    def copilot_on_head(response)
+      fetch(response).last['copilot_on_head']
+    end
+
+    # #3 as recorded, with Copilot's latest review changed by the block.
+    def latest_review_changed
+      threads_response('threads-3').tap { |response| yield threads_pull_request(response)['latest']['nodes'] }
+    end
+
+    it "is true for a review of the head, as #3's latest was recorded" do
+      expect(copilot_on_head(threads_response('threads-3'))).to be(true)
+    end
+
+    it 'is false for a review of an older commit, as after a push' do
+      older = latest_review_changed { |(latest)| latest['commit']['oid'] = outdated_commit }
+
+      expect(copilot_on_head(older)).to be(false)
+    end
+
+    it 'is false when Copilot has made no review' do
+      none = latest_review_changed(&:clear)
+
+      expect(copilot_on_head(none)).to be(false)
+    end
   end
 
   describe 'where Phase 2a stops' do

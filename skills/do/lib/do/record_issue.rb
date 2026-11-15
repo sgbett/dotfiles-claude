@@ -21,7 +21,8 @@ module Do
     # choose between a fix in the open and a private security advisory.
     NOT_PUBLIC = %w[PRIVATE INTERNAL].freeze
 
-    attr_reader :view
+    # +github+ is the SkillSupport::Gh for the issue's host.
+    attr_reader :view, :github
 
     # Yields the RecordIssue for +argument+, the issue as the user gave it,
     # with its lock held if the call +writes+, and returns what the block
@@ -124,8 +125,7 @@ module Do
       GateFile.path(@common_directory, issue.id)
     end
 
-    private
-
+    # This repository's nameWithOwner, as GitHub gives it now.
     def repository
       view.query.repository.name_with_owner
     end

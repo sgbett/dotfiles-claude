@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-module Do
-  # Reads Markdown line by line, telling fenced code blocks apart, so a
-  # heading or answer line quoted in one is never taken for a real one: in
-  # the gate file, and in CLAUDE.md. GitHub-rendered checklists go through
-  # BlockReader, which knows list items and HTML blocks too.
+module SkillSupport
+  # Reads Markdown line by line, telling fenced code blocks apart, so a line
+  # quoted in one, such as a heading, is never taken for a real one. Fences
+  # are all it knows: reading a checklist as GitHub renders it takes list
+  # items and HTML blocks too.
   module Markdown
     # CommonMark: up to three spaces of indentation, then three or more
     # backticks or tildes; a backtick fence's info string holds no backtick.
@@ -12,14 +12,9 @@ module Do
 
     module_function
 
-    # The lines of +text+ outside fenced code blocks, without line endings.
-    # A fence left open runs to the end, as GitHub renders it.
-    def unfenced_lines(text)
-      lines_with_fences(text).reject(&:last).map(&:first)
-    end
-
     # Each line of +text+, without its line ending, paired with whether it
-    # belongs to a fenced code block, its fences included.
+    # belongs to a fenced code block, its fences included. A fence left open
+    # runs to the end, as GitHub renders it.
     def lines_with_fences(text)
       fence = nil
       text.to_s.each_line(chomp: true).map do |line|

@@ -3,14 +3,16 @@
 require 'digest'
 require_relative '../../lib/do/scripts_checkout'
 require_relative 'check_responses'
+require_relative 'copilot_signal_calls'
 
 module Do
   module Testing
     # The calls of `preflight check`'s last steps, expected on the fake
-    # runner: the scripts' own checkout, the security focus and the working
-    # tree. See CheckCalls.
+    # runner: the scripts' own checkout, the security focus, the Copilot
+    # signal and the working tree. See CheckCalls.
     module CheckFinishCalls
       include CheckResponses
+      include CopilotSignalCalls
 
       SCRIPTS_DEFAULTS = { status: '', ruby_status: '', default: 'refs/remotes/origin/master', ancestor: true,
                            head: BASE_SHA, diff: '' }.freeze
@@ -55,6 +57,12 @@ module Do
 
         fake_runner.expect_call(call, exit_status: 1, stdout: fixture('contents/rules-not-found.json'),
                                       stderr: fixture('contents/rules-not-found.stderr'))
+      end
+
+      # The base branch's rules, and the instructions at its commit; +signal+
+      # as for CopilotSignalCalls#expect_copilot_signal.
+      def expect_copilot_step(ref: BASE_SHA, repository: HERE, **signal)
+        expect_copilot_signal(ref: ref, repository: repository, **signal)
       end
 
       def expect_changes_step(status: '')

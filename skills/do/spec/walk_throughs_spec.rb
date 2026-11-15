@@ -97,7 +97,8 @@ RSpec.describe "/do pre-flight, #21's walk-throughs" do
     expect_check(arguments: { base: 'main' }, issue: { response: issue, repository: upstream, number: 7 },
                  remote: { urls: [fork_url], views: { fork_url => fixture('repo-view/fork.json') } },
                  base: { response: base, base: 'main', repository: upstream },
-                 pull_requests: { nodes: [], repository: upstream }, focus: { claude_md: nil, repository: upstream })
+                 pull_requests: { nodes: [], repository: upstream }, focus: { claude_md: nil, repository: upstream },
+                 copilot: { repository: upstream, branch: 'main' })
     exit_code, output = run_check(check_arguments("#{upstream}#7", pr_target: upstream, base: 'main'))
 
     expect([exit_code, output['push_remote_is_fork'], output['summary']['push_remote']])

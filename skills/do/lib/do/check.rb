@@ -7,12 +7,12 @@ require_relative 'check_arguments'
 require_relative 'check_query'
 require_relative 'check_report'
 require_relative 'checkout'
+require_relative 'copilot_signal'
 require_relative 'issue_locator'
 require_relative 'push_remote'
 require_relative 'reasons'
 require_relative 'records'
 require_relative 'scripts_checkout'
-require_relative 'security_focus'
 require_relative 'trust'
 
 module Do
@@ -102,6 +102,7 @@ module Do
     def finish
       asks = [@branch.ask, examine_scripts.ask].compact
       read_security_focus
+      read_copilot_signal
       @report.changes = @checkout.changes
       fields = @report.fields
       asks.empty? ? SkillSupport::Outcome.proceed(**fields) : SkillSupport::Outcome.ask(asks, **fields)
@@ -114,8 +115,15 @@ module Do
 
     # At the base branch's commit, so every file comes from one snapshot.
     def read_security_focus
-      @report.focus = SecurityFocus.new(SkillSupport::RepositoryFiles.new(@github))
-                                   .read(@issue.repository, @base_commit)
+      @report.focus = SkillSupport::SecurityFocus.new(SkillSupport::RepositoryFiles.new(@github))
+                                                 .read(@issue.repository, @base_commit)
+    end
+
+    # The instructions at the base branch's commit too, the snapshot the
+    # focus comes from.
+    def read_copilot_signal
+      @report.copilot_signal = CopilotSignal.new(@github).read(@issue.repository, branch: @options.base,
+                                                                                  ref: @base_commit)
     end
 
     # Pull requests into this repository were written in it.

@@ -14,7 +14,7 @@ RSpec.describe CopilotCheck::Verdict do
 
   def pull_request(**fields)
     CopilotCheck::PullRequestQuery::PullRequest.new(
-      state: 'OPEN', draft: true, cross_repository: false, head: head,
+      state: 'OPEN', draft: true, cross_repository: false, head_owner: 'sgbett', head: head,
       mergeable: 'MERGEABLE', changed_files: 2, author: 'sgbett', auto_merge: false, viewer: 'sgbett', **fields
     )
   end
@@ -44,7 +44,7 @@ RSpec.describe CopilotCheck::Verdict do
   end
 
   def facts(**overrides)
-    CopilotCheck::Verdict::Facts.new(rules: rules, started_as_draft: true, outcome: 'converged',
+    CopilotCheck::Verdict::Facts.new(rules: rules, started_as_draft: true, chained: false, outcome: 'converged',
                                      pull_request: pull_request, mergeable: 'MERGEABLE', local_head: head,
                                      threads: threads, reviews_without_findings: [], reviews_read: [], files: files,
                                      checks: [check('pass')], **overrides)
@@ -68,7 +68,7 @@ RSpec.describe CopilotCheck::Verdict do
     unanswered_reviews: -> { { threads: threads(todo_reviews: [7]) } },
     review_bodies_unread: -> { { threads: threads(todo_reviews: [7]), reviews_without_findings: [7] } },
     not_viewers_own: -> { { pull_request: pull_request(author: 'example-stranger') } },
-    from_fork: -> { { pull_request: pull_request(cross_repository: true) } },
+    from_fork: -> { { pull_request: pull_request(cross_repository: true, head_owner: 'example-stranger') } },
     files_unlisted: -> { { files: files(complete: false) } },
     protected_paths_changed: -> { { files: files(paths: %w[skills/do/SKILL.md CLAUDE.md]) } },
     no_checks: -> { { checks: [] } },
@@ -97,7 +97,7 @@ RSpec.describe CopilotCheck::Verdict do
   it 'lists every failing condition, in Phase 6 order, when several fail together' do
     combined = {
       pull_request: pull_request(state: 'MERGED', draft: false, author: 'example-stranger', cross_repository: true,
-                                 auto_merge: true),
+                                 head_owner: 'example-stranger', auto_merge: true),
       rules: rules(draft_flow: false, merge_is_owners_step: false), started_as_draft: false, outcome: 'stop',
       local_head: other, threads: threads(commit: other, todo_threads: [todo_thread], todo_reviews: [7, 8]),
       reviews_without_findings: [8],
@@ -110,6 +110,23 @@ RSpec.describe CopilotCheck::Verdict do
       .to eq(CopilotCheck::Reasons::HOLD - %i[checks_pending checks_cancelled undocumented_failures])
   end
 
+  describe 'a run /do chained' do
+    let(:silent) { rules(draft_flow: false, merge_is_owners_step: false) }
+
+    it "counts as a draft flow and as merging being the owner's step where the rules say neither" do
+      expect(verdict(rules: silent, chained: true).reasons).to eq([])
+      expect(verdict(rules: silent).reasons).to eq(%i[no_draft_flow merge_not_owners_step])
+    end
+
+    it 'stands in for nothing else' do
+      chained = { rules: silent, chained: true }
+
+      expect(verdict(**chained, started_as_draft: false).reasons).to eq([:not_draft_at_start])
+      expect(verdict(**chained, pull_request: pull_request(draft: false)).reasons).to eq([:not_a_draft])
+      expect(verdict(**chained, outcome: 'halted').reasons).to eq([:not_converged])
+    end
+  end
+
   it 'holds for every outcome but converged' do
     %w[halted timeout stop push-failed].each do |outcome|
       expect(verdict(outcome: outcome).reasons).to eq([:not_converged]), outcome
@@ -118,6 +135,13 @@ RSpec.describe CopilotCheck::Verdict do
 
   it "holds when Copilot hasn't reviewed the pull request at all" do
     expect(verdict(threads: threads(commit: nil)).reasons).to eq([:copilot_not_on_head])
+  end
+
+  it "counts a fork the viewer owns as theirs, whatever the case of the owner's login, and no other fork" do
+    reasons_for = ->(owner) { verdict(pull_request: pull_request(cross_repository: true, head_owner: owner)).reasons }
+
+    expect(%w[sgbett SGBett].map(&reasons_for)).to eq([[], []])
+    expect([reasons_for.call('example-stranger'), reasons_for.call(nil)]).to eq([[:from_fork], [:from_fork]])
   end
 
   it 'holds for a deleted author, whom nobody is, and for a conflicting merge' do

@@ -44,9 +44,10 @@ RSpec.describe "/copilot-check's calls of its scripts" do
                             %w[rereview watch], %w[promote-check check], %w[promote-check verify]])
   end
 
-  it 'puts $ARGUMENTS on no call: setup reads it from the file the lead writes it to' do
+  it 'puts $ARGUMENTS on no call, nor a name made from it: setup reads it from the file the lead writes it to' do
     expect(skill).to include('Write `$ARGUMENTS` (empty if none) with the Write tool to `{scratch}/argument.txt`')
-    expect(parsed('setup').first.argument_file).to eq('/scratch/argument.txt')
+    expect(parsed('setup').first.to_h.values_at(:argument_file, :start_file, :rubric_file, :focus_file))
+      .to eq(%w[/scratch/argument.txt /scratch/pr0.json /scratch/rubric.md /scratch/security-focus.md])
     expect(calls.map(&:last).grep(/\$ARGUMENTS/)).to be_empty
   end
 
@@ -62,7 +63,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
     check, = parsed('promote-check')
 
     expect(check.to_h.values_at(:rules_file, :reviews_without_findings, :bodies_dir))
-      .to eq(['/scratch/promotion-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/round-1'])
+      .to eq(['/scratch/pr-18-rules.json', [5_881_418_347, 5_881_467_821], '/scratch/pr-18-round-1'])
   end
 
   it "hands threads fetch and check the same round's bodies directory, and puts no thread's path on a command line" do
@@ -86,8 +87,8 @@ RSpec.describe "/copilot-check's calls of its scripts" do
   end
 
   it "says in Phase 0 that setup stops on a pull request that isn't open, and asks about its own scripts" do
-    expect(skill).to include("stops on a PR that isn't open, and asks before going on with a PR from a fork or with " \
-                             'scripts that may not be the reviewed ones.')
+    expect(skill).to include("stops on a PR that isn't open, and asks before going on with a PR from someone else's " \
+                             'fork or with scripts that may not be the reviewed ones.')
   end
 
   it 'names every outcome check takes, and the rules file by its keys' do
@@ -122,16 +123,19 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       expect_repo_view
       expect_pr_view
       expect_scripts_step
+      expect_checkout_step
       fake_runner.expect_call(CopilotCheck::Testing::ScriptCalls::BRANCH_CHECK, stdout: "master\n")
       expect_rubric
+      expect_focus
       expect_latest_review
       argument = sandbox.path('argument.txt').tap { |path| File.write(path, '18') }
       outcome = CopilotCheck::Setup.call(['--argument-file', argument, '--start-file', sandbox.path('pr0.json'),
-                                          '--rubric-file', sandbox.path('rubric.md')],
+                                          '--rubric-file', sandbox.path('rubric.md'),
+                                          '--focus-file', sandbox.path('security-focus.md')],
                                          runner: fake_runner, skill_directory: scripts_skill_directory)
       output = JSON.parse(outcome.to_json)
-      fields = %w[pull_request.number repository.name_with_owner repository.host pull_request.base high_water_mark
-                  rubric_found]
+      fields = %w[pull_request.number repository.name_with_owner repository.host pull_request.base
+                  pull_request.head_branch push_remote session_only.checkout high_water_mark rubric_found]
 
       expect(fields.reject { |field| named?(field) && !output.dig(*field.split('.')).nil? }).to be_empty
     end
@@ -148,6 +152,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       expect(%w[thread_id comment_id line original_line original_commit original_file body_file github_text]
                .reject { |field| named?(field) && thread.key?(field) }).to be_empty
       expect([named?('todo_reviews'), fetched['todo_reviews'].first.key?('body_file')]).to eq([true, true])
+      expect([named?('copilot_on_head'), fetched.key?('copilot_on_head')]).to eq([true, true])
       expect([named?('review_request'), requested.key?('review_request')]).to eq([true, true])
     end
 

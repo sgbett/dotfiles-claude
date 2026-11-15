@@ -30,12 +30,14 @@ RSpec.describe Do::Check do
 
       expect([exit_code, output.keys])
         .to eq([0, %w[status summary repository push_remote push_remote_is_fork pr_target base branch
-                      scripts_in_work_tree security_focus working_tree_clean read session_only]])
+                      scripts_in_work_tree security_focus copilot_review working_tree_clean read session_only]])
       expect(output['summary']).to eq('push_remote' => 'origin, this repository', 'pr_target' => here,
                                       'base' => 'master', 'branch' => branch,
-                                      'resume_point' => 'none: the branch is new', 'security_focus' => 'none')
+                                      'resume_point' => 'none: the branch is new', 'security_focus' => 'none',
+                                      'copilot_review' => 'none')
       expect(output['branch']).to eq('name' => branch, 'state' => 'new', 'accepted' => false,
                                      'fresh_worktree' => false, 'pull_requests' => [])
+      expect(output['copilot_review']).to eq('ruleset' => false, 'instructions' => false, 'signal' => false)
       expect(output.values_at('repository', 'push_remote_is_fork', 'scripts_in_work_tree', 'working_tree_clean',
                               'read'))
         .to eq([{ 'name_with_owner' => here, 'host' => 'github.com' }, false, false, true, []])
@@ -96,6 +98,29 @@ RSpec.describe Do::Check do
 
       expect(output['working_tree_clean']).to be(false)
       expect(output['session_only']['changed_paths']).to eq([' M README.md', '?? notes/plan.md', 'R  old.md -> new.md'])
+    end
+  end
+
+  describe 'the Copilot signal' do
+    let(:copilot_rules) { fixture('rest/branch-rules-copilot.json') }
+    let(:instructions) { "# Review\n\nFlag input that reaches a shell.\n" }
+
+    it 'names in the summary, after the security focus, which halves of the signal the base has' do
+      [[{ rules: copilot_rules, instructions: instructions }, [true, true, true],
+        "present: a ruleset asks for Copilot's review, and .github/copilot-instructions.md is on the base"],
+       [{ rules: copilot_rules }, [true, false, false],
+        "absent: a ruleset asks for Copilot's review, but .github/copilot-instructions.md isn't on the base"],
+       [{ instructions: instructions }, [false, true, false],
+        "absent: .github/copilot-instructions.md is on the base, but no ruleset asks for Copilot's review"],
+       [{}, [false, false, false], 'none']].each do |copilot, review, summary|
+        expect_check(copilot: copilot)
+        output = run_check.last
+
+        expect([output['copilot_review'].values_at('ruleset', 'instructions', 'signal'),
+                output['summary']['copilot_review']]).to eq([review, summary]), copilot.keys.inspect
+        expect(output['summary'].keys.last(2)).to eq(%w[security_focus copilot_review])
+        expect(JSON.generate(output)).not_to include('bsv-ruby-sdk')
+      end
     end
   end
 
@@ -330,6 +355,7 @@ RSpec.describe Do::Check do
       expect_check(through: :pull_requests)
       expect_scripts_step(top: sandbox.work_directory, skill_directory: skill_directory)
       expect_focus_step
+      expect_copilot_step
       expect_changes_step
       exit_code, output = run_check(skill_directory: skill_directory)
 

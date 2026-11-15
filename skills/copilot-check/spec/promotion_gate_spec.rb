@@ -48,6 +48,28 @@ RSpec.describe CopilotCheck::PromotionGate do
     expect(output['files']['github_text']['protected_paths']).to eq(%w[CLAUDE.md .github/workflows/x])
   end
 
+  it "promotes a chained run's draft where the rules say neither that drafts open nor that merging is the " \
+     "owner's, and holds one that wasn't chained" do
+    silent = rules_file(draft_flow: false, merge_is_owners_step: false)
+    expect_gate
+    chained = run_promote_check(gate_arguments(rules: silent, start: start_file(chained: true))).last
+    expect_gate
+    unchained = run_promote_check(gate_arguments(rules: silent, start: start_file(chained: false))).last
+
+    expect([chained['verdict'], chained['reasons']]).to eq(['PROMOTE', []])
+    expect([unchained['verdict'], unchained['reasons'].map { |reason| reason['reason'] }])
+      .to eq(['HOLD', %w[no_draft_flow merge_not_owners_step]])
+  end
+
+  it 'reads HEAD in the checkout the start file records, which the run pushed from, not the working directory' do
+    checkout = sandbox.path('pr-worktree')
+    expect_gate(local_head: { checkout: checkout })
+
+    output = run_promote_check(gate_arguments(start: start_file(checkout: checkout))).last
+
+    expect([output['verdict'], output['local_head']]).to eq(['PROMOTE', head])
+  end
+
   it 'reads mergeable once more after the checks when it was UNKNOWN, and only once' do
     expect_gate(pull_request: { response: pull_request_response('mergeable' => 'UNKNOWN') },
                 mergeable: { reread: pull_request_response })
@@ -102,6 +124,18 @@ RSpec.describe CopilotCheck::PromotionGate do
 
     expect([output['reasons'].map { |reason| reason['reason'] }, output['files']['github_text']['protected_paths']])
       .to eq([%w[protected_paths_changed], %w[docs/CLAUDE.local.md .mcp.json]])
+  end
+
+  it "holds a change to Copilot's rubric, or a rename away from it, for the owner" do
+    files = [{ 'filename' => '.github/copilot-instructions.md' },
+             { 'filename' => 'docs/old-rubric.md', 'previous_filename' => '.github/copilot-instructions.md' }]
+    expect_gate(files: { pages: [files] })
+
+    output = run_promote_check(gate_arguments).last
+
+    expect([output['verdict'], output['reasons'].map { |reason| reason['reason'] }])
+      .to eq(['HOLD', %w[protected_paths_changed]])
+    expect(output['files']['github_text']['protected_paths']).to eq(%w[.github/copilot-instructions.md])
   end
 
   it "holds a documented failure beside a failure annotation the rules don't give, and passes it once they do" do
