@@ -16,6 +16,7 @@ skills/
   _support/           no SKILL.md, so not a skill
     bin/ruby-launch   runs an entry on this repository's Ruby
     lib/              the shared library, SkillSupport
+    references/       references more than one skill reads
     templates/        bin_stub and entry_preamble.rb
     spec/             the spec harness, with the library's specs
   <skill>/
@@ -90,7 +91,7 @@ Exit 1 is a tool failure: no stdout, and `<name>: tool failure: <why>` on stderr
 
 ## Writes
 
-On GitHub, a script only changes what already exists, in place: a ticked box, a ledger line added or rewritten, a review thread resolved, or Copilot asked to review again. It makes an edit or a resolve from one read, reads again just before writing and writes only if nothing changed in between (else an edit stops with `body_changed`, and a thread is left for the next round), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
+On GitHub, a script only changes what already exists, in place: a ticked box, a ledger line added or rewritten, a review thread resolved, or Copilot asked to review. It makes an edit or a resolve from one read, reads again just before writing and writes only if nothing changed in between (else an edit stops with `body_changed`, and a thread is left for the next round), then reads the result back. Each subcommand that writes there takes `--dry-run`. Creating anything on GitHub stays with the lead. A local record, such as `/do`'s gate file, is written `0600`, by rename, never through a symlink, and `/do`'s `record` holds an exclusive lock on the issue while it reads and writes one, so concurrent calls run in turn.
 
 ## Calling a script
 
@@ -109,8 +110,9 @@ A branch most runs never take goes in `references/<topic>.md`:
 - `SKILL.md` names each directly where it applies, "before X, read `references/Y.md`", and a script's `read` lists the ones that apply now.
 - A rule for the whole run stays in `SKILL.md`, however rarely it fires: `/do` states there that nothing on GitHub describes an open security finding.
 - A reference over 100 lines opens with `## Contents`.
+- A reference more than one skill reads, such as the security gate's triggers and brief, goes in `_support/references/`, named from each skill as `${CLAUDE_SKILL_DIR}/../_support/references/<topic>.md`.
 
-`/do`'s `references_spec.rb` checks that each is named in `SKILL.md`, that every path named or in `read` exists, that none uses either substitution, and the contents rule.
+`/do`'s `references_spec.rb` checks that each is named in `SKILL.md`, that every path named or in `read` exists, that none uses either substitution, and the contents rule; `_support`'s `shared_references_spec.rb` checks that each shared one is named and uses neither substitution, and that no `SKILL.md` restates the gate's triggers.
 
 ## Tests
 
@@ -130,7 +132,7 @@ Whenever `skills/_support/` changes, QA runs every consumer's specs: the whole s
 
 Each review round finds a gap, and each fix adds a clause. Two limits push back:
 
-- **A word budget.** QA reports each changed skill's net change in words (`wc -w`, front matter included, at the PR's head against its base), for `SKILL.md` alone and with its `references/`. An increase over 100 in either needs offsetting cuts, or the owner's explicit agreement in the session. Every rule has a cost: instructions are mostly lost by omission, and earlier ones take priority.
+- **A word budget.** QA reports each changed skill's net change in words (`wc -w`, front matter included, at the PR's head against its base), for `SKILL.md` alone and with its `references/`; a shared reference under `_support/references/` counts against each skill that names it. An increase over 100 in either needs offsetting cuts, or the owner's explicit agreement in the session. Every rule has a cost: instructions are mostly lost by omission, and earlier ones take priority.
 - **A character ceiling.** `_support/spec/skill_size_spec.rb` fails any `SKILL.md` over 19,000 characters. After compaction, Claude Code (2.1.287) re-attaches an invoked skill cut to 5,000 tokens, about 20,000 characters, keeping its start, so whatever follows the cut is gone for the rest of the run. An exception listed in the spec fails once its skill is within the ceiling. `rspec skills/_support/spec/skill_size_spec.rb -f d` lists each skill's count.
 
 ## Evaluation
