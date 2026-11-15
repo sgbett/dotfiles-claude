@@ -6,13 +6,13 @@ require_relative 'stop'
 require_relative 'todo_selection'
 
 module CopilotCheck
-  # Phase 2a's fetch, in one query with Copilot's latest review (Phase 0's):
-  # a pull request's review threads, Copilot's reviews and the pull request's
-  # comments, what of them is still to do, and which threads an answer of
-  # ours has left to resolve (TodoSelection). Where 2a stops, this raises
-  # Stop rather than guess: a list longer than its one page, or a sign that
-  # the filters no longer recognise Copilot. GraphQL errors raise too, even
-  # beside data.
+  # Phase 2a's fetch, in one query with Copilot's latest review (Phase 0's)
+  # and the head it must be of for 2a to converge: a pull request's review
+  # threads, Copilot's reviews and the pull request's comments, what of them
+  # is still to do, and which threads an answer of ours has left to resolve
+  # (TodoSelection). Where 2a stops, this raises Stop rather than guess: a
+  # list longer than its one page, or a sign that the filters no longer
+  # recognise Copilot. GraphQL errors raise too, even beside data.
   class Threads
     QUERY = File.read(File.join(__dir__, 'threads.graphql'))
     PAGED_LISTS = %w[reviews comments reviewThreads].freeze
@@ -20,10 +20,17 @@ module CopilotCheck
     # +comments+ counts the review's inline comments; +commit+ is the oid of
     # the commit it reviewed.
     LatestReview = Struct.new(:submitted_at, :comments, :commit, keyword_init: true)
-    # +latest_review+ is nil when Copilot hasn't reviewed the pull request;
-    # +todo_threads+, +todo_reviews+ and +resolvable_threads+ are
-    # TodoSelection's.
-    Result = Struct.new(:latest_review, :todo_threads, :todo_reviews, :resolvable_threads, keyword_init: true)
+    # +head+ is the oid of the pull request's head commit; +latest_review+
+    # is nil when Copilot hasn't reviewed the pull request; +todo_threads+,
+    # +todo_reviews+ and +resolvable_threads+ are TodoSelection's.
+    Result = Struct.new(:head, :latest_review, :todo_threads, :todo_reviews, :resolvable_threads,
+                        keyword_init: true) do
+      # Whether Copilot's latest review is of the head; false when it hasn't
+      # reviewed.
+      def copilot_on_head?
+        !latest_review.nil? && latest_review.commit == head
+      end
+    end
 
     def self.variables(repository, number)
       owner, name = SkillSupport::Identifiers.repository!(repository).split('/')
@@ -44,7 +51,8 @@ module CopilotCheck
       latest = latest_review(pull_request)
       copilot_ids!(reviews, threads)
       guard!(latest, threads)
-      Result.new(latest_review: latest, todo_threads: TodoSelection.threads(threads),
+      Result.new(head: SkillSupport::Identifiers.commit_sha!(pull_request['headRefOid']), latest_review: latest,
+                 todo_threads: TodoSelection.threads(threads),
                  todo_reviews: TodoSelection.reviews(reviews, nodes(pull_request, 'comments')),
                  resolvable_threads: TodoSelection.resolvable(threads))
     end
