@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 RSpec.describe SkillSupport::Markdown do
+  # The lines lines_with_fences leaves outside fenced code blocks.
   def unfenced(text)
-    described_class.unfenced_lines(text)
+    described_class.lines_with_fences(text).reject(&:last).map(&:first)
   end
 
   it 'returns every line without its line ending, CRLF included' do

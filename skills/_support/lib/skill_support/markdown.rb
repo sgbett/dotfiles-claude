@@ -12,14 +12,9 @@ module SkillSupport
 
     module_function
 
-    # The lines of +text+ outside fenced code blocks, without line endings.
-    # A fence left open runs to the end, as GitHub renders it.
-    def unfenced_lines(text)
-      lines_with_fences(text).reject(&:last).map(&:first)
-    end
-
     # Each line of +text+, without its line ending, paired with whether it
-    # belongs to a fenced code block, its fences included.
+    # belongs to a fenced code block, its fences included. A fence left open
+    # runs to the end, as GitHub renders it.
     def lines_with_fences(text)
       fence = nil
       text.to_s.each_line(chomp: true).map do |line|

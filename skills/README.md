@@ -60,7 +60,7 @@ What every script needs is in `_support/lib/`:
 | `Git#run`, `#output`, `#line_or_nil` | git through the runner, raising `GitError` on an exit status the caller doesn't allow |
 | `Porcelain.entries` | `git status --porcelain=v1 -z` as entries |
 | `ScriptsCheckout#examine` | Whether the checkout a skill's scripts run from may hold unreviewed scripts, and the `scripts_unreviewed` ask, in the skill's words, whose yes `--accept-scripts <digest>` names that state |
-| `Markdown.lines_with_fences`, `.unfenced_lines` | Markdown's lines, each paired with whether a fenced code block holds it, so a heading quoted in one is never taken for a real one |
+| `Markdown.lines_with_fences` | Markdown's lines, each paired with whether a fenced code block holds it, so a heading quoted in one is never taken for a real one |
 | `FocusSections.extract` | A Markdown document's `## Security focus` sections, each to the next heading of level one or two, as GitHub renders it |
 | `SecurityFocus#read` | A repository's security focus at a commit: the `## Security focus` sections of its `CLAUDE.md` and of each file under `.claude/rules/`, read through GitHub so the change under review can't alter it |
 | `Identifiers` | Checks for every identifier a script takes; none accepts a leading `-`, a branch name only `[A-Za-z0-9._/+#-]`, and a remote's only `[A-Za-z0-9._-]` |
