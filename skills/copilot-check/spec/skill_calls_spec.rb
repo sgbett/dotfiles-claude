@@ -133,8 +133,8 @@ RSpec.describe "/copilot-check's calls of its scripts" do
                                           '--focus-file', sandbox.path('security-focus.md')],
                                          runner: fake_runner, skill_directory: scripts_skill_directory)
       output = JSON.parse(outcome.to_json)
-      fields = %w[pull_request.number repository.name_with_owner repository.host pull_request.base high_water_mark
-                  rubric_found]
+      fields = %w[pull_request.number repository.name_with_owner repository.host pull_request.base
+                  pull_request.head_branch push_remote session_only.checkout high_water_mark rubric_found]
 
       expect(fields.reject { |field| named?(field) && !output.dig(*field.split('.')).nil? }).to be_empty
     end
@@ -151,6 +151,7 @@ RSpec.describe "/copilot-check's calls of its scripts" do
       expect(%w[thread_id comment_id line original_line original_commit original_file body_file github_text]
                .reject { |field| named?(field) && thread.key?(field) }).to be_empty
       expect([named?('todo_reviews'), fetched['todo_reviews'].first.key?('body_file')]).to eq([true, true])
+      expect([named?('copilot_on_head'), fetched.key?('copilot_on_head')]).to eq([true, true])
       expect([named?('review_request'), requested.key?('review_request')]).to eq([true, true])
     end
 
