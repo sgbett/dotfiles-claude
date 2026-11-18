@@ -191,6 +191,7 @@ Run it exactly as written, unpiped. It prints one JSON object. On `proceed`, `su
 | `rule present: required_linear_history` | In force on the default branch, where it bans merge commits |
 | `ruleset "Git workflow" missing` | No ruleset carries the template's name: applying creates one; otherwise it updates the existing one |
 | `ruleset "<name>" grants a bypass` | Its bypass actors exempt the account the agent pushes as, which the rule exists to bind (a bare id stands for a name that isn't plain text) |
+| `ruleset "<name>" bypass actors unreadable` | GitHub leaves bypass actors out of a ruleset's detail for a caller without admin rights, so the audit cannot see whether it grants one: have an admin run the audit, or check the ruleset in the repository's settings |
 | `allow_squash_merge on`, `allow_rebase_merge on`, `allow_merge_commit off`, `allow_update_branch on` | A repository flag differs from `repository.json` |
 | `classic protection present, redundant` | A classic branch protection carries nothing the template lacks, so it can go once the ruleset is in force |
 | `classic protection present, adds: <fields>` | It carries required reviews, status checks or push restrictions the template doesn't: keep or move them before removing it |

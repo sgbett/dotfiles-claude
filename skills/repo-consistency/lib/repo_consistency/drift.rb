@@ -15,6 +15,7 @@ module RepoConsistency
     LINEAR_HISTORY = 'required_linear_history'
     PLAN = 'rulesets unavailable on this plan'
     EXTRA_APPROVAL = 'pull_request requires extra approval for unattributed changes'
+    BYPASS = { granted: 'grants a bypass', unreadable: 'bypass actors unreadable' }.freeze
     PERSONAL_WITH_RULES = "tier line says personal but the default branch has #{Template::PULL_REQUEST} rules".freeze
     # A ruleset's name is GitHub's text, so only a plain one reaches a line;
     # any other ruleset is named by its id.
@@ -60,7 +61,7 @@ module RepoConsistency
 
     def ruleset_lines(expected, actual)
       missing = (expected.ruleset_names - actual.ruleset_names).map { |name| "ruleset \"#{name}\" missing" }
-      missing + actual.bypassing_rulesets.map { |id, name| "ruleset #{label(id, name)} grants a bypass" }
+      missing + actual.ruleset_bypasses.map { |id, name, bypass| "ruleset #{label(id, name)} #{BYPASS.fetch(bypass)}" }
     end
 
     def label(id, name)

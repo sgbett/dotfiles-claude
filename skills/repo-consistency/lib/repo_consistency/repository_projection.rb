@@ -15,6 +15,7 @@ module RepoConsistency
     MERGE_METHOD = /\A[a-z_]+\z/
     HEADER_MARK = 'vendored from sgbett/dotfiles-claude'
     HEADER_LINES = 2
+    BYPASS_ACTORS = 'bypass_actors'
     REVIEWS = 'required_pull_request_reviews'
     # What a classic protection can carry that the template lacks.
     PROTECTION_ADDITIONS = [REVIEWS, 'required_status_checks', 'restrictions'].freeze
@@ -61,9 +62,19 @@ module RepoConsistency
     end
 
     def ruleset_fields
-      bypassing = @state.rulesets.reject { |ruleset| Array(ruleset['bypass_actors']).empty? }
       { ruleset_names: @state.rulesets.map { |ruleset| ruleset['name'] },
-        bypassing_rulesets: bypassing.map { |ruleset| [Integer(ruleset['id']), ruleset['name']] } }
+        ruleset_bypasses: @state.rulesets.filter_map { |ruleset| bypass_entry(ruleset) } }
+    end
+
+    # A ruleset's bypass, by id and name: granted when its detail lists
+    # actors, unreadable when the detail leaves the key out, as GitHub does
+    # for a caller without admin rights, so that the audit never reports
+    # clean where it cannot see; nothing for an empty list.
+    def bypass_entry(ruleset)
+      bypass = if !ruleset.key?(BYPASS_ACTORS) then :unreadable
+               elsif !Array(ruleset[BYPASS_ACTORS]).empty? then :granted
+               end
+      [Integer(ruleset['id']), ruleset['name'], bypass] if bypass
     end
 
     def protection_additions

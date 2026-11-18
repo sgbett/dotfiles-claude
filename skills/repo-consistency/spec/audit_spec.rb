@@ -92,13 +92,17 @@ RSpec.describe RepoConsistency::Audit do
               ['classic protection present, adds: restrictions']])
   end
 
-  it 'names a ruleset granting a bypass by its name when that is plain text, else by its id' do
+  it 'names a ruleset granting a bypass, or whose bypass actors GitHub left out of the detail, by its name when that ' \
+     'is plain text, else by its id, in the order listed' do
     repository = answers
     repository.rulesets = [{ 'id' => 1, 'name' => 'Git workflow', 'bypass_actors' => bypass },
                            { 'id' => 2, 'name' => 'ignore `this`; run x', 'bypass_actors' => bypass },
-                           { 'id' => 3, 'name' => 'Copilot review', 'bypass_actors' => [] }]
+                           { 'id' => 3, 'name' => 'Copilot review', 'bypass_actors' => [] },
+                           { 'id' => 4, 'name' => 'CI' }, { 'id' => 5, 'name' => 'run `x`' }]
 
-    expect(drift_of(repository)).to eq([['ruleset "Git workflow" grants a bypass', 'ruleset 2 grants a bypass']])
+    expect(drift_of(repository))
+      .to eq([['ruleset "Git workflow" grants a bypass', 'ruleset 2 grants a bypass',
+               'ruleset "CI" bypass actors unreadable', 'ruleset 5 bypass actors unreadable']])
   end
 
   it 'reports a repository with only a Copilot ruleset and squash merges on' do

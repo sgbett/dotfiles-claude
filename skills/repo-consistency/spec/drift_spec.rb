@@ -43,13 +43,22 @@ RSpec.describe RepoConsistency::Drift do
                                  RepoConsistency::RepositoryProjection.call(applied(real_template)))).to eq([])
   end
 
+  it "reports a ruleset's bypass actors unreadable when GitHub leaves them out of its detail, as it does for a " \
+     'caller without admin rights, rather than clean where it cannot see' do
+    state = applied(real_template)
+    state.rulesets = [{ 'id' => 1, 'name' => real_template.ruleset_name }]
+
+    expect(described_class.lines(real_template.projection, RepoConsistency::RepositoryProjection.call(state)))
+      .to eq(['ruleset "Git workflow" bypass actors unreadable'])
+  end
+
   it 'reads the real template as the runbook describes it: three rules, merge commits alone, no bypass, no ' \
      'approvals, and no extra approval for unattributed changes' do
     projection = real_template.projection
 
     expect(real_template.ruleset_name).to eq('Git workflow')
     expect(projection.rule_types).to eq(%w[deletion non_fast_forward pull_request])
-    expect(projection.to_h.values_at(:merge_methods, :approvals, :extra_approval, :bypassing_rulesets, :default_branch,
+    expect(projection.to_h.values_at(:merge_methods, :approvals, :extra_approval, :ruleset_bypasses, :default_branch,
                                      :tier))
       .to eq([['merge'], 0, false, [], 'master', 'collaborative'])
     expect(projection.flags).to eq('allow_squash_merge' => false, 'allow_rebase_merge' => false,
