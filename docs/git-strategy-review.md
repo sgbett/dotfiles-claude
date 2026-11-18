@@ -1,7 +1,7 @@
 # Git strategy review
 
 **Date:** 2026-11-17
-**Status:** Review complete. Tier 1 delivered under #30 (this repository's PR and bettison-org/portfoliobuilder's vendoring PR); Tiers 2 and 3 open on the issue.
+**Status:** Review complete. Tier 1 is this repository's PR and bettison-org/portfoliobuilder's vendoring PR, with #30 tracking acceptance; Tiers 2 and 3 open on the issue.
 **Tracking:** [sgbett/dotfiles-claude#30](https://github.com/sgbett/dotfiles-claude/issues/30)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` mechanism this review builds on.
 
@@ -17,7 +17,7 @@ Method: a scan of this repository's precedence hierarchy (global `CLAUDE.md`, im
 
 **Indecision?** No. "Rebase" appears in the prompt history every month from December 2025 to November 2026, with no gap. The only axis that moved was landing: squash to merge commit, decided once on 2026-03-22 and never revisited.
 
-**Decided but not propagated?** Yes, exactly this. On 2026-03-22: "this is going to be my global preference going forwards… make sure that nothing in ~/.claude/* contravenes this", and in the same hour, "I would mitigate that by doing a lot of rebasing on the feature branch before merging and that still remains an option." The landing rule reached the global profile on 2026-06-21. The upkeep rule only ever reached portfoliobuilder's project file (2026-02-17, sharpened 2026-11-11 and 12). Every other repository and the profile said nothing about upkeep.
+**Decided but not propagated?** Yes, exactly this. On 2026-03-22: "this is going to be my global preference going forwards… make sure that nothing in ~/.claude/* contravenes this", and in the same hour, "I would mitigate that by doing a lot of rebasing on the feature branch before merging and that still remains an option." The landing rule reached the global `CLAUDE.md` on 2026-06-21 and the profile when it was extracted on 2026-08-18. The upkeep rule only ever reached portfoliobuilder's project file (2026-02-17, sharpened 2026-11-11 and 12). Every other repository and the profile said nothing about upkeep.
 
 **Relitigating a rejected relic?** No. The relic was squash, the old "keep master clean" strategy. Rebase was explicitly retained the day squash was dropped, and the first-parent view is what made the landing choice stop mattering.
 
@@ -29,7 +29,7 @@ Six, of which 1 and 2 are one problem (a vacuum in the global rule, filled by a 
 2. **`profiles/git-workflow.md` was silent on branch upkeep.** It said how PRs land and never how a branch is kept current. The stated principle of 2026-06-20, "I don't want to have to configure git per project… per project stuff goes stale", was right; this axis never got its global line.
 3. **The 13 to 17 November bsv-ruby-sdk session was internally inconsistent.** It rebased and force-pushed with a lease on three PRs, and merged master into two others by hand during a `/do` pre-flight, unannounced, plus one more on a fork for an advisory. The justification cited "the git-workflow rules and `/do`"; the profile had no force-push line. That repository had no back-merges before November.
 4. **"Merge commits, not squash" was prose-only everywhere except bsv-wallet.** Every other repository left GitHub's default merge methods enabled; secp256k1-native rebase-merged all four of its PRs since August. `settings.json`'s force-push `ask` is also leaky (`git push origin --force`, `+ref` and `gh api` ref updates fall through to the broad `git *` allow), a breadth kept deliberately in #12.
-5. **The personal-repo carve-out was declared four different ways** across the personal workspaces and not at all in several repositories. amanuensimus, which is public, cited a stale rationale ("pending the per-project profiles feature"). All three gems' `/release` commands push straight to master against the rule, and bsv-wallet's protection now rejects that.
+5. **The personal-repo carve-out was declared four different ways** across the personal workspaces and not at all in several repositories. amanuensimus, which is public, cited a stale rationale ("pending the per-project profiles feature"). All four gems' `/release` commands (bsv-ruby-sdk, bsv-wallet, secp256k1-native, x402-rack) push straight to master against the rule, and bsv-wallet's protection now rejects that.
 6. **Stale text:** portfoliobuilder `docs/worktree-setup.md` "Use merge (not rebase)" (January 2026, never updated); its ADR-002 lists `git revert` as a rollback option; one private repository defaults to `main`.
 
 ## 4. The position over time
@@ -71,12 +71,12 @@ Close to the mark; defensible mainstream. The only outlier was the blanket ban, 
 
 The principle decomposes into three enforcement layers that need almost no prose, plus one judgement call.
 
-- **Server side, rulesets.** On master: pull request required, `allowed_merge_methods` set to merge only, `non_fast_forward`, `deletion`, strict status checks off, `allow_update_branch` on, `allow_squash_merge` off at repository level. On work branches: `required_linear_history`, which rejects any push containing a merge commit, so a back-merge becomes impossible and rebase is the only way to update. That one rule makes the principle enforced rather than described. It must exclude master, `project/*` and `releases/*`, and it needs a check on a scratch repository first. Never `required_linear_history` on master: on GitHub that bans merge commits.
-- **Local side, a hook.** Permission patterns can't express "allow with-lease, ask on bare force": `Bash(git push --force*)` is a prefix glob that matches `--force-with-lease` too, which is why every with-lease push prompts today. A repository-committed `PreToolUse` hook can: exit 2 on bare `--force`, `-f` or `+ref`; on any force to the base; and on a force to a branch whose log has another committer. Everything else is a silent allow.
+- **Server side, rulesets.** On master: pull request required, `allowed_merge_methods` set to merge only, `non_fast_forward`, `deletion`, strict status checks off, `allow_update_branch` off (the button's default is a merge from the base, with rebase a second click; `gh pr update-branch --rebase` works without it), `allow_squash_merge` off at repository level. On work branches: `required_linear_history`, which rejects any push containing a merge commit, so a back-merge becomes impossible and rebase is the only way to update. That one rule makes the principle enforced rather than described. It must exclude master, `project/*` and `releases/*`, and it needs a check on a scratch repository first. Never `required_linear_history` on master: on GitHub that bans merge commits.
+- **Local side, a hook.** Permission patterns can't express "allow with-lease, ask on bare force": `Bash(git push --force*)` is a prefix glob that matches `--force-with-lease` too, which is why every with-lease push prompts today. A repository-committed `PreToolUse` hook can: exit 2 on bare `--force`, `-f` or `+ref`; on any force to the base; and ask on a force to a branch whose log has another committer. Everything else is a silent allow.
 - **Local side, git config.** `pull.rebase=true`, `push.useForceIfIncludes=true`, `rebase.autoStash=true`. The global config currently sets none of these.
 - **`/do`.** Read the live ruleset rather than parse prose: a `pull_request` rule on the base means collaborative, its `allowed_merge_methods` gives the merge flag, no rule means personal. The `CLAUDE.md` declaration is the fallback for offline or non-GitHub repositories, and `repo-consistency` flags any disagreement between the two.
 
-The remaining judgement is "is anyone else on this branch?", with the committer check as the deterministic proxy. The profile text then reduces to the rule and a pointer to what enforces it.
+The remaining judgement is "is anyone else on this branch?". A committer check only prompts it: it can't see `/do`'s developers, who commit under the lead's identity with a `Co-Authored-By` trailer, and can't tell a collaborator who has finished from one still working, so the hook asks rather than blocks, and `/do` answers from its own run state. The profile text then reduces to the rule and a pointer to what enforces it.
 
 ## 8. Profiles: distribution to collaborators
 
@@ -86,7 +86,7 @@ What Claude Code loads from any user's checkout, confirmed against the current d
 
 So the distribution model is:
 
-- **Rules text:** vendored verbatim into `.claude/rules/git-workflow.md`, with a header naming the source; repository-specific differences in a second file; `repo-consistency` diffs the copy against the source.
+- **Rules text:** vendored verbatim into `.claude/rules/git-workflow.md`, with a header naming the source; repository-specific differences in a second file; `repo-consistency` diffs the copy, header lines skipped, against the source.
 - **Enforcement:** the hook script and settings snippet committed in the repository, or later packaged as a plugin at the cost of one documented install command.
 - **Server rulesets:** the only lever that works regardless of the collaborator's tooling.
 - **Setup runbook:** `git config` lines, the trust dialog, the rebase procedure. The collaborator's own history shows pull-merges, so `pull.rebase` is the first line.
