@@ -3,6 +3,7 @@
 `/do`'s pre-flight steps 5 and 7, when the issue has a ledger or trusted work is already in flight.
 
 - **Start from the commit `check` read**, `branch.remote_tip`, which it fetched through the push URLs it checked; never pull, fetch or check out the branch through the remote's name, whose fetch URL can name another repository. Resuming from the push remote (`resume_push_remote`), start at that commit; on a local branch behind it (`resume_local`), fast-forward to it.
+- **A force-push before this run's first push** takes `--force-with-lease=refs/heads/<NAME>:<branch.remote_tip>`: fetching by URL sets no `refs/remotes/<R>/<NAME>` for a bare lease to compare, and `--force-if-includes` is a no-op beside an explicit lease.
 - **Beside a checked-out PR** (`branch.fresh_worktree`): the run never resumes on that local branch, so leave it untouched and build in a new worktree detached at `branch.remote_tip`, pushing `HEAD` to the branch.
 - **From a ledger,** skip pipeline steps 1–3 and continue from its first unticked item this run builds (`facts`' `ledger.first_unbuilt`). Edit the ledger comment (`ledger.comment_id`) rather than posting another.
 - **Unticked doesn't mean unbuilt.** Step 7 ticks only once the PR is open, so check the branch's commits before rebuilding an item, and send work already there straight to QA.
