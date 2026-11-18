@@ -75,8 +75,10 @@
       "Bash(git checkout -f*)",
       "Bash(git checkout .)",
       "Bash(git push * master*)",
-      "Bash(git push --force*)",
-      "Bash(git push -f*)",
+      "Bash(git push --force)",
+      "Bash(git push --force *)",
+      "Bash(git push -f)",
+      "Bash(git push -f *)",
       "Bash(git reset --hard*)",
       "Bash(gh issue delete *)",
       "Bash(gh pr close *)",
@@ -84,6 +86,20 @@
       "Bash(gh project item-delete *)",
       "Bash(gh run cancel *)",
       "Bash(gh run rerun *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/profiles/git-workflow/hooks/push-guard\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {

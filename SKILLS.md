@@ -115,7 +115,7 @@ Scans for security issues and automatically remediates them. Action-oriented com
 
 ### `/repo-consistency`
 
-Checks documentation consistency across the repository—ensures docs are aligned, references are valid, and nothing is stale.
+Checks documentation consistency across the repository, and each repository's git settings against the git profile.
 
 **Usage:**
 ```
@@ -123,6 +123,7 @@ Checks documentation consistency across the repository—ensures docs are aligne
 "check the consistency of the repo"
 "are the documents consistent"
 "is everything aligned"
+"audit git settings"
 ```
 
 **Checks:**
@@ -131,6 +132,7 @@ Checks documentation consistency across the repository—ensures docs are aligne
 - SETUP.md accurately reflects repo contents
 - No broken links or orphaned documentation
 - Naming conventions followed (kebab-case, British English)
+- Each repository's live rulesets, merge flags and vendored copies against `profiles/git-workflow/` (`bin/git-settings audit`, read-only, reported in the session alone)
 
 **Behaviour:**
 - Prefers fixing local docs over contributed files (ai-software-architect skills)
