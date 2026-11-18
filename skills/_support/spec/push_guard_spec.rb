@@ -72,6 +72,27 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     push_commit('mine')
   end
 
+  # The repository's configuration tells git log to verify signatures with a
+  # gpg that leaves a marker behind, whose path this returns: a git log that
+  # obeys that configuration runs it on a signed commit.
+  def recording_gpg
+    marker = sandbox.path('gpg-ran')
+    File.write(sandbox.path('gpg'), "#!/bin/sh\ntouch '#{marker}'\nexit 1\n")
+    File.chmod(0o755, sandbox.path('gpg'))
+    git('config', 'gpg.program', sandbox.path('gpg'))
+    git('config', 'log.showSignature', 'true')
+    marker
+  end
+
+  # origin/feat's tip gains a PGP signature block.
+  def sign_tip
+    tip, = Open3.capture2('git', 'cat-file', '-p', 'refs/remotes/origin/feat')
+    signature = "\ngpgsig -----BEGIN PGP SIGNATURE-----\n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n\n"
+    signed, = Open3.capture2('git', 'hash-object', '-t', 'commit', '-w', '--stdin',
+                             stdin_data: tip.sub("\n\n", signature))
+    git('update-ref', 'refs/remotes/origin/feat', signed.strip)
+  end
+
   # A PATH with what the sh entry itself needs and nothing else, ruby included.
   def path_without_ruby
     bin = sandbox.path('bin')
@@ -147,8 +168,11 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
   describe 'a bare force' do
     ['git push --force', 'git push -f', 'git push -fu origin x', 'git push -uf origin x',
-     'git push origin +HEAD:refs/heads/x', 'git push --mirror origin', 'git push origin x --force',
-     'cd x && git push -f', 'A=b git push -f', 'git push -f origin x 2>&1'].each do |command|
+     'git push origin +HEAD:refs/heads/x', 'git push --mirror origin', 'git push --mirr origin',
+     'git push origin x --force', 'cd x && git push -f', 'A=b git push -f', 'sudo git push -f',
+     'git push -f origin x 2>&1', '(git push -f)', 'git push -f &', 'if git push -f; then echo pushed; fi',
+     'git push --force-with-lease -f origin feat', 'git push --force-with-lease --force origin feat',
+     'git push --force-with-lease --no-force-with-lease -f origin feat'].each do |command|
       it "denies `#{command}`" do
         expect(guard(command)).to eq(['deny', bare_force])
       end
@@ -170,7 +194,8 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       'git push --delete origin master' => 'master',
       'git push -d origin releases/1' => 'releases/1',
       'git push origin :master' => 'master',
-      'git push origin :refs/heads/master' => 'master' }.each do |command, branch|
+      'git push origin :refs/heads/master' => 'master',
+      'git push origin :heads/master' => 'master' }.each do |command, branch|
       it "denies `#{command}`" do
         expect(guard(command))
           .to eq(['deny', "push-guard: #{branch} is a base branch; it is never rewritten or deleted"])
@@ -180,6 +205,10 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'denies a lease push from a checkout of master' do
       expect(guard('git push --force-with-lease'))
         .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    end
+
+    it 'reads --no-force-with-lease after a lease as clearing it, leaving a plain push' do
+      expect(guard('git push --force-with-lease --no-force-with-lease')).to be_nil
     end
   end
 
@@ -226,6 +255,17 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --all --force-with-lease'))
         .to eq(['ask', 'push-guard: --all with a lease may rewrite every branch, base branches included. Push anyway?'])
     end
+
+    it 'runs no program the repository’s configuration names while it reads the log' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      marker = recording_gpg
+      sign_tip
+      expect([guard('git push --force-with-lease origin feat').first, File.exist?(marker)]).to eq(['ask', false])
+
+      Open3.capture2e('git', 'log', '-1', 'refs/remotes/origin/feat')
+      expect(File.exist?(marker)).to be(true)
+    end
   end
 
   describe 'a command it cannot read' do
@@ -233,8 +273,10 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('echo "git push --force"')).to be_nil
     end
 
-    { "sh -c 'git push -f'" => 'sh -c', 'echo $(git push -f)' => '$(', 'echo `git push -f`' => '`',
-      'echo x | xargs -I{} git push -f {}' => 'xargs', 'eval "git push -f"' => 'eval' }.each do |command, construct|
+    { "sh -c 'git push -f'" => 'sh -c', "bash -lc 'git push -f'" => 'bash -lc', "zsh -ic 'git push -f'" => 'zsh -ic',
+      "dash -c 'git push -f'" => 'dash -c', "ksh -c 'git push -f'" => 'ksh -c', 'echo $(git push -f)' => '$(',
+      'echo `git push -f`' => '`', 'echo x | xargs -I{} git push -f {}' => 'xargs',
+      'eval "git push -f"' => 'eval' }.each do |command, construct|
       it "asks for `#{command}`, naming #{construct}" do
         expect(guard(command))
           .to eq(['ask', "push-guard: a push behind #{construct} cannot be read; run git push on its own command line"])
@@ -250,15 +292,58 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq(['ask', "push-guard: the command's quotes do not balance, so the push in it could not be read"])
     end
 
+    ['git push $REMOTE feat', 'git push origin $BRANCH', '$GIT push -f'].each do |command|
+      it "asks for `#{command}`, whose $ may stand for anything" do
+        expect(guard(command))
+          .to eq(['ask', 'push-guard: a push with an unexpanded $ cannot be read; write the remote and refspec out'])
+      end
+    end
+
+    { 'env -i git push -f' => '-i', 'nice -n 10 git push -f' => '-n', 'time -p git push' => '-p',
+      'command -p git push' => '-p', 'sudo -u deploy git push -f' => '-u' }.each do |command, option|
+      it "asks for `#{command}`, whose wrapper takes an option" do
+        reason = "push-guard: the option #{option} before the command is not understood, " \
+                 'so the push could not be checked'
+        expect(guard(command)).to eq(['ask', reason])
+      end
+    end
+
     it 'asks for a git option it does not know before a push' do
       expect(guard('git --weird push -f'))
         .to eq(['ask', 'push-guard: the git option --weird is not understood, so the push could not be checked'])
     end
+
+    { 'git -c alias.st=push st -f' => 'alias.st', 'git -c remote.origin.push=+refs/heads/*:refs/heads/* push' =>
+      'remote.origin.push', 'git -c remote.origin.mirror=true push' => 'remote.origin.mirror',
+      'git --config-env=alias.st=PUSH_ALIAS st && git push' => 'alias.st' }.each do |command, key|
+      it "asks for `#{command}`, whose configuration changes what push does" do
+        reason = "push-guard: setting #{key} on the command line changes what push does, " \
+                 'so the push could not be checked'
+        expect(guard(command)).to eq(['ask', reason])
+      end
+    end
+
+    ['git push --del origin feat', 'git push --weird origin feat', 'git push --forc origin feat'].each do |command|
+      it "asks for `#{command}`, whose push option it does not know" do
+        option = command.split[2]
+        expect(guard(command))
+          .to eq(['ask', "push-guard: the push option #{option} is not understood, so the push could not be checked"])
+      end
+    end
   end
 
   describe 'an event that is not a Bash command' do
-    it 'says nothing for stdin that is not JSON' do
-      expect(run_hook('git push --force')).to be_nil
+    it 'asks for stdin that is not JSON' do
+      expect(run_hook('git push --force')).to eq(['ask', 'push-guard: the hook input could not be read'])
+    end
+
+    it 'asks for JSON that is not a hook event' do
+      expect(run_hook('["git push --force"]')).to eq(['ask', 'push-guard: the hook input could not be read'])
+    end
+
+    it 'asks for a Bash event without a command' do
+      stdin = JSON.generate('tool_name' => 'Bash', 'tool_input' => 'git push --force', 'cwd' => Dir.pwd)
+      expect(run_hook(stdin)).to eq(['ask', 'push-guard: the hook input could not be read'])
     end
 
     it 'says nothing for another tool' do

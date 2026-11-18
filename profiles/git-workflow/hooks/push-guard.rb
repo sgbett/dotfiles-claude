@@ -19,6 +19,8 @@ module PushGuard
   # Never rewritten or deleted. Matched with FNM_PATHNAME off, so project/x/y
   # matches project/* too.
   BASE_BRANCHES = ['master', 'project/*', 'releases/*'].freeze
+  # A destination may name a branch as refs/heads/x, heads/x or x.
+  BRANCH_PREFIX = %r{\A(?:refs/)?heads/}
 
   # Every reason the hook can give, so the texts live in one place.
   module Reasons
@@ -26,6 +28,8 @@ module PushGuard
                  'use git push --force-with-lease --force-if-includes on your own branch'
     EVERY_BRANCH = 'push-guard: --all with a lease may rewrite every branch, base branches included. Push anyway?'
     UNBALANCED_QUOTES = "push-guard: the command's quotes do not balance, so the push in it could not be read"
+    UNREADABLE_INPUT = 'push-guard: the hook input could not be read'
+    VARIABLE = 'push-guard: a push with an unexpanded $ cannot be read; write the remote and refspec out'
 
     def self.base_branch(branch)
       "push-guard: #{branch} is a base branch; it is never rewritten or deleted"
@@ -40,8 +44,20 @@ module PushGuard
       "push-guard: a push behind #{construct} cannot be read; run git push on its own command line"
     end
 
+    def self.prefix_option(option)
+      "push-guard: the option #{option} before the command is not understood, so the push could not be checked"
+    end
+
     def self.unknown_git_option(option)
       "push-guard: the git option #{option} is not understood, so the push could not be checked"
+    end
+
+    def self.unknown_push_option(option)
+      "push-guard: the push option #{option} is not understood, so the push could not be checked"
+    end
+
+    def self.config_override(key)
+      "push-guard: setting #{key} on the command line changes what push does, so the push could not be checked"
     end
 
     def self.failure(error)
@@ -87,7 +103,7 @@ module PushGuard
       @force = text.start_with?('+')
       source, destination = text.sub(/\A\+/, '').split(':', 2)
       @deletion = source.to_s.empty? && !destination.nil?
-      @destination = (destination || source).to_s.sub(%r{\Arefs/heads/}, '')
+      @destination = (destination || source).to_s.sub(BRANCH_PREFIX, '')
     end
 
     def force?
@@ -105,12 +121,21 @@ module PushGuard
   end
 
   # A git push as its arguments describe it: the force forms, the remote and
-  # the refspecs, and the directory the command runs in.
+  # the refspecs, and the directory the command runs in. git accepts any
+  # unambiguous abbreviation of a long option, so a long option that is not
+  # known here is not understood rather than ignored.
   class Push
+    FLAGS = %w[--verbose --quiet --tags --no-tags --dry-run --porcelain --thin --no-thin --set-upstream --progress
+               --no-progress --prune --no-prune --verify --no-verify --follow-tags --no-follow-tags --atomic
+               --no-atomic --ipv4 --ipv6 --signed --no-signed --recurse-submodules --no-recurse-submodules
+               --force-if-includes --no-force-if-includes].freeze
     WITH_ARGUMENT = %w[-o --push-option --repo --receive-pack --exec].freeze
-    SHORT_BUNDLE = /\A-[A-Za-z]+\z/
+    WITH_INLINE_ARGUMENT = /\A--(?:push-option|repo|receive-pack|exec|recurse-submodules|signed)=/
+    # --m onwards is unambiguous: no other push option starts with m.
+    MIRROR_FORMS = (3..8).map { |length| '--mirror'[0, length] }.freeze
+    SHORT_BUNDLE = /\A-[A-Za-z46]+\z/
 
-    attr_reader :remote, :refspecs, :lease_ref, :directory
+    attr_reader :remote, :refspecs, :lease_ref, :directory, :unknown_option
 
     def initialize(arguments, directory)
       @directory = directory
@@ -121,10 +146,11 @@ module PushGuard
       @refspecs = positionals.drop(1).map { |text| Refspec.new(text) }
     end
 
-    # --mirror, --force or -f without a lease, or a + refspec: nothing checks
-    # what the remote holds before it is overwritten.
+    # --mirror, --force or -f, or a + refspec: nothing checks what the remote
+    # holds before it is overwritten. A lease beside --force does not help,
+    # since --force overrides a stale lease.
     def bare_force?
-      @mirror || (@force && !@lease) || refspecs.any?(&:force?)
+      @mirror || @force || refspecs.any?(&:force?)
     end
 
     # The remote's refs are force-updated or removed, not merely advanced.
@@ -160,17 +186,25 @@ module PushGuard
       when '--force' then @force = true
       when '--force-with-lease' then @lease = true
       when /\A--force-with-lease=([^:]*)/ then lease_on(Regexp.last_match(1))
-      when '--mirror' then @mirror = true
+      when '--no-force-with-lease' then clear_lease
+      when *MIRROR_FORMS then @mirror = true
       when '--delete' then @delete = true
       when '--all', '--branches' then @all = true
       when *WITH_ARGUMENT then rest.shift
       when SHORT_BUNDLE then short_options(word, rest)
+      when *FLAGS, WITH_INLINE_ARGUMENT then nil
+      else @unknown_option ||= word
       end
     end
 
     def lease_on(ref)
       @lease = true
-      @lease_ref = ref.sub(%r{\Arefs/heads/}, '') unless ref.empty?
+      @lease_ref = ref.sub(BRANCH_PREFIX, '') unless ref.empty?
+    end
+
+    def clear_lease
+      @lease = false
+      @lease_ref = nil
     end
 
     # Letters bundled after one dash, as in -fu: f forces, d deletes, and a
@@ -185,9 +219,10 @@ module PushGuard
 
   # One simple command of the Bash text, read from its command word: what
   # precedes it without changing it (shell keywords, wrappers, NAME=value
-  # assignments) and redirections are dropped first.
+  # assignments) and redirections are dropped first. An option after a
+  # wrapper is not understood, since it may change what runs.
   class Segment
-    PREFIX_WORDS = %w[command env exec nice time if then else elif while until do { !].freeze
+    PREFIX_WORDS = %w[command env exec nice time sudo doas if then else elif while until do { !].freeze
     ASSIGNMENT = /\A[A-Za-z_][A-Za-z0-9_]*=/
     # `>`, `2>`, `>>`, `<` or `&>` on its own: the next word is the file.
     REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>)\z/
@@ -198,6 +233,11 @@ module PushGuard
 
     def initialize(words)
       @words = without_prefix(without_redirections(words))
+    end
+
+    # The option that follows a wrapper, as in env -i or nice -n 10.
+    def prefix_option
+      words.first if words.first.to_s.start_with?('-')
     end
 
     def change_directory?
@@ -243,15 +283,19 @@ module PushGuard
     end
   end
 
-  # git's own options before the subcommand; -C names the directory, and an
-  # option the hook does not know ends the reading.
+  # git's own options before the subcommand; -C names the directory, an
+  # option the hook does not know ends the reading, and a -c that changes
+  # what push does is remembered.
   class GitCommand
     FLAGS = %w[--no-pager -p --paginate -P --no-replace-objects --bare --literal-pathspecs --glob-pathspecs
                --noglob-pathspecs --icase-pathspecs --no-optional-locks --no-lazy-fetch].freeze
-    WITH_ARGUMENT = %w[-c --git-dir --work-tree --namespace --exec-path].freeze
+    WITH_ARGUMENT = %w[-c --git-dir --work-tree --namespace --exec-path --config-env].freeze
     INLINE_ARGUMENT = /\A--(?:git-dir|work-tree|namespace|exec-path|config-env|super-prefix)=/
+    # alias.* can rename push; remote.*, push.* and url.* change what, where
+    # and how it pushes.
+    PUSH_CONFIG = /\A(?:alias|remote|push|url)\./i
 
-    attr_reader :directory, :subcommand, :arguments, :unknown_option
+    attr_reader :directory, :subcommand, :arguments, :unknown_option, :config_override
 
     def initialize(arguments)
       @arguments = arguments.dup
@@ -279,20 +323,29 @@ module PushGuard
       if word == '-C'
         @directory = @arguments.shift
       elsif WITH_ARGUMENT.include?(word)
-        @arguments.shift
+        note_config(word, @arguments.shift)
+      elsif INLINE_ARGUMENT.match?(word)
+        note_config(word[/\A--[a-z-]+/], word.split('=', 2).last)
       else
-        return FLAGS.include?(word) || INLINE_ARGUMENT.match?(word)
+        return FLAGS.include?(word)
       end
       true
+    end
+
+    def note_config(option, value)
+      return unless %w[-c --config-env].include?(option)
+
+      key = value.to_s.split('=', 2).first.to_s
+      @config_override ||= key if PUSH_CONFIG.match?(key)
     end
   end
 
   # Reads the Bash text into the pushes it holds, following cd between
   # commands, and into asks for what it cannot read.
   class CommandReader
-    SEPARATORS = /\n|;|&&|\|\||\|/
+    SEPARATORS = /\n|;|&&|\|\||\||&/
     # Behind these the text no longer says what runs.
-    OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z)?sh\s+-c\b/].freeze
+    OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
     attr_reader :pushes, :decisions
 
@@ -308,7 +361,7 @@ module PushGuard
       if construct
         ask(Reasons.unreadable(construct)) if @command.include?('git') && @command.include?('push')
       else
-        @command.split(SEPARATORS).each { |text| read_segment(text) }
+        @command.split(SEPARATORS).each { |text| read_segment(text.delete('()')) }
       end
       self
     end
@@ -319,21 +372,36 @@ module PushGuard
       @decisions << Decision.ask(reason)
     end
 
-    def read_segment(text)
-      words = split(text)
-      return ask(Reasons::UNBALANCED_QUOTES) if words.nil? && text.include?('push')
-      return if words.nil?
+    # Asks only where the segment mentions push: the rest of a command is
+    # not the hook's business.
+    def ask_about_push(text, reason)
+      ask(reason) if text.include?('push')
+    end
 
-      segment = Segment.new(words)
+    def read_segment(text)
+      return ask_about_push(text, Reasons::VARIABLE) if text.include?('$')
+
+      words = split(text)
+      return ask_about_push(text, Reasons::UNBALANCED_QUOTES) if words.nil?
+
+      read_words(Segment.new(words), text)
+    end
+
+    def read_words(segment, text)
+      return ask_about_push(text, Reasons.prefix_option(segment.prefix_option)) if segment.prefix_option
       return follow(segment) if segment.change_directory?
       return unless segment.git?
 
       read_git(GitCommand.new(segment.git_arguments), text)
     end
 
+    # A push-shaping -c is asked about whether or not the segment says push:
+    # an alias can give push any name.
     def read_git(git, text)
       if git.unknown_option
-        ask(Reasons.unknown_git_option(git.unknown_option)) if text.include?('push')
+        ask_about_push(text, Reasons.unknown_git_option(git.unknown_option))
+      elsif git.config_override
+        ask(Reasons.config_override(git.config_override))
       elsif git.push?
         @pushes << Push.new(git.arguments, File.expand_path(git.directory || '.', @cwd))
       end
@@ -352,8 +420,11 @@ module PushGuard
   end
 
   # Read-only questions to git in one directory; nil where git has no answer.
+  # The repository's own configuration can name programs (a signature
+  # verifier, a file monitor, a pager), so those are switched off here.
   class Repository
     ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0' }.freeze
+    GIT = %w[git --no-pager -c core.fsmonitor=false -c log.showSignature=false].freeze
 
     def initialize(directory)
       @directory = directory
@@ -378,7 +449,7 @@ module PushGuard
 
     # [email, name] per commit in +range+.
     def authors(range)
-      output = git('log', '--format=%ae%x00%an', range)
+      output = git('log', '--no-show-signature', '--format=%ae%x00%an', range)
       return if output.nil?
 
       output.lines.map do |line|
@@ -390,8 +461,7 @@ module PushGuard
     private
 
     def git(*arguments)
-      stdout, _stderr, status = Open3.capture3(ENVIRONMENT, 'git', '-c', 'core.fsmonitor=false', *arguments,
-                                               chdir: @directory)
+      stdout, _stderr, status = Open3.capture3(ENVIRONMENT, *GIT, *arguments, chdir: @directory)
       status.success? ? stdout.chomp : nil
     end
   end
@@ -445,9 +515,9 @@ module PushGuard
   end
 
   # The decision table for one push, first match wins: a bare force is
-  # denied, a rewrite or deletion of a base branch is denied, a lease onto
-  # another author's commits is asked about, and the rest is left to the
-  # permission rules.
+  # denied, an option not understood is asked about, a rewrite or deletion
+  # of a base branch is denied, a lease onto another author's commits is
+  # asked about, and the rest is left to the permission rules.
   class Judge
     def initialize(push, repository = Repository.new(push.directory))
       @push = push
@@ -456,6 +526,7 @@ module PushGuard
 
     def decide
       return Decision.deny(Reasons::BARE_FORCE) if push.bare_force?
+      return Decision.ask(Reasons.unknown_push_option(push.unknown_option)) if push.unknown_option
       return unless push.rewrites? || push.refspecs.any?(&:deletion?)
       return Decision.ask(Reasons::EVERY_BRANCH) if push.all? && push.lease?
 
@@ -499,7 +570,9 @@ module PushGuard
     end
   end
 
-  # The entry: one event in, at most one decision out, and a failure is an ask.
+  # The entry: one event in, at most one decision out, and a failure is an
+  # ask. So is input that is not a hook event: the sh entry hands over any
+  # stdin that says push.
   class Hook
     def self.run(input, output)
       decision = new(input.read).decision
@@ -513,27 +586,23 @@ module PushGuard
     end
 
     def decision
-      event = bash_event
-      return unless event
+      event = JSON.parse(@event_json)
+      return Decision.ask(Reasons::UNREADABLE_INPUT) unless event.is_a?(Hash) && event['tool_name'].is_a?(String)
+      return unless event['tool_name'] == 'Bash'
 
-      reader = CommandReader.new(event['command'], event['cwd']).read
-      Decision.strictest(reader.decisions + reader.pushes.map { |push| Judge.new(push).decide })
+      command = event['tool_input'].is_a?(Hash) ? event['tool_input']['command'] : nil
+      return Decision.ask(Reasons::UNREADABLE_INPUT) unless command.is_a?(String)
+
+      decide(command, event['cwd'].is_a?(String) ? event['cwd'] : Dir.pwd)
+    rescue JSON::ParserError
+      Decision.ask(Reasons::UNREADABLE_INPUT)
     end
 
     private
 
-    # The Bash command and its directory, or nil for anything else: the sh
-    # entry hands over any stdin that says push.
-    def bash_event
-      event = JSON.parse(@event_json)
-      return unless event.is_a?(Hash) && event['tool_name'] == 'Bash' && event['tool_input'].is_a?(Hash)
-
-      command = event['tool_input']['command']
-      return unless command.is_a?(String)
-
-      { 'command' => command, 'cwd' => event['cwd'].is_a?(String) ? event['cwd'] : Dir.pwd }
-    rescue JSON::ParserError
-      nil
+    def decide(command, cwd)
+      reader = CommandReader.new(command, cwd).read
+      Decision.strictest(reader.decisions + reader.pushes.map { |push| Judge.new(push).decide })
     end
   end
 end
