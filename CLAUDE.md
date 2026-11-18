@@ -33,7 +33,7 @@ After creating one, write a plan only for work spanning several workstreams, or 
 
 - Project-specific plans: `<project>/.claude/plans/yyyymmdd-name.md`
 - **Exception — this dotfiles repo (`~/.claude`, `sgbett/dotfiles-claude`):** `plans/` is gitignored (scratch). Persisted plans that need tracking go in `docs/` (kebab name, no `plans/` subdir — that's ignored too).
-- **This dotfiles repo's tier:** `Git tier: personal; issue-tracked work goes by PR` (small edits straight to master; anything tracked by an issue, like this one, by branch and PR).
+- **This dotfiles repo's tier:** `Git tier: personal; issue-tracked work goes by PR` (small edits straight to master; anything tracked by an issue by branch and PR).
 - See `~/.claude/playbooks/workflow-guide.md` for full lifecycle
 
 ## Reviews

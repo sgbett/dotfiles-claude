@@ -76,7 +76,7 @@ The principle decomposes into three enforcement layers that need almost no prose
 - **Local side, git config.** `pull.rebase=true`, `push.useForceIfIncludes=true`, `rebase.autoStash=true`. Set globally on the owner's machine on 2026-11-18; the runbook gives collaborators the same lines.
 - **`/do`.** Read the live ruleset rather than parse prose: a `pull_request` rule on the base means collaborative, its `allowed_merge_methods` gives the merge flag, no rule means personal. The `CLAUDE.md` declaration is the fallback for offline or non-GitHub repositories, and `repo-consistency` flags any disagreement between the two.
 
-The remaining judgement is "is anyone else on this branch?". A committer check only prompts it: it can't see `/do`'s developers, who commit under the lead's identity with a `Co-Authored-By` trailer, and can't tell a collaborator who has finished from one still working, so the hook asks rather than blocks, and `/do` answers from its own run state. The profile text then reduces to the rule and a pointer to what enforces it.
+The remaining judgement is "is anyone else on this branch?". A committer check only prompts it: it can't see `/do`'s developers, who commit under the lead's identity with a `Co-Authored-By` trailer, and can't tell a collaborator who has finished from one still working, so the hook asks rather than blocks. The ask is a permission prompt the user answers, not `/do`: `/do` keeps out of the case by its own invariant, never rewriting the work branch while a developer is mid-task. The profile text then reduces to the rule and a pointer to what enforces it.
 
 ## 8. Profiles: distribution to collaborators
 
