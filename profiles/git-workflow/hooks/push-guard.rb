@@ -20,7 +20,7 @@ module PushGuard
   # matches project/* too.
   BASE_BRANCHES = ['master', 'project/*', 'releases/*'].freeze
   # A destination may name a branch as refs/heads/x, heads/x or x.
-  BRANCH_PREFIX = %r{\A(?:refs/)?heads/}
+  BRANCH_PREFIX = %r{\A(?:refs/)?heads/}.freeze
 
   # Every reason the hook can give, so the texts live in one place.
   module Reasons
@@ -130,17 +130,18 @@ module PushGuard
                --no-atomic --ipv4 --ipv6 --signed --no-signed --recurse-submodules --no-recurse-submodules
                --force-if-includes --no-force-if-includes].freeze
     WITH_ARGUMENT = %w[-o --push-option --repo --receive-pack --exec].freeze
-    WITH_INLINE_ARGUMENT = /\A--(?:push-option|repo|receive-pack|exec|recurse-submodules|signed)=/
+    WITH_INLINE_ARGUMENT = /\A--(?:push-option|repo|receive-pack|exec|recurse-submodules|signed)=/.freeze
     # --m onwards is unambiguous: no other push option starts with m.
     MIRROR_FORMS = (3..8).map { |length| '--mirror'[0, length] }.freeze
-    SHORT_BUNDLE = /\A-[A-Za-z46]+\z/
+    SHORT_BUNDLE = /\A-[A-Za-z46]+\z/.freeze
 
-    attr_reader :remote, :refspecs, :lease_ref, :directory, :unknown_option
+    attr_reader :remote, :refspecs, :lease_ref, :directory
 
     def initialize(arguments, directory)
       @directory = directory
       @force = @lease = @mirror = @delete = @all = false
       @lease_ref = nil
+      @unknown_options = []
       positionals = read(arguments)
       @remote = positionals.first
       @refspecs = positionals.drop(1).map { |text| Refspec.new(text) }
@@ -156,6 +157,16 @@ module PushGuard
     # The remote's refs are force-updated or removed, not merely advanced.
     def rewrites?
       @force || @lease || @delete
+    end
+
+    # Something on the remote may be rewritten or removed, so the targets
+    # matter; a plain push never needs git asked anything.
+    def destructive?
+      rewrites? || refspecs.any?(&:deletion?)
+    end
+
+    def unknown_option
+      @unknown_options.first
     end
 
     def lease?
@@ -182,18 +193,30 @@ module PushGuard
     end
 
     def option(word, rest)
+      return rest.shift if WITH_ARGUMENT.include?(word)
+      return short_options(word, rest) if SHORT_BUNDLE.match?(word)
+      return if FLAGS.include?(word) || WITH_INLINE_ARGUMENT.match?(word)
+
+      shape_option(word)
+    end
+
+    # The options that change what the push sends and where.
+    def shape_option(word)
+      case word
+      when *MIRROR_FORMS then @mirror = true
+      when '--delete' then @delete = true
+      when '--all', '--branches' then @all = true
+      else force_option(word)
+      end
+    end
+
+    def force_option(word)
       case word
       when '--force' then @force = true
       when '--force-with-lease' then @lease = true
       when /\A--force-with-lease=([^:]*)/ then lease_on(Regexp.last_match(1))
       when '--no-force-with-lease' then clear_lease
-      when *MIRROR_FORMS then @mirror = true
-      when '--delete' then @delete = true
-      when '--all', '--branches' then @all = true
-      when *WITH_ARGUMENT then rest.shift
-      when SHORT_BUNDLE then short_options(word, rest)
-      when *FLAGS, WITH_INLINE_ARGUMENT then nil
-      else @unknown_option ||= word
+      else @unknown_options << word
       end
     end
 
@@ -223,11 +246,11 @@ module PushGuard
   # wrapper is not understood, since it may change what runs.
   class Segment
     PREFIX_WORDS = %w[command env exec nice time sudo doas if then else elif while until do { !].freeze
-    ASSIGNMENT = /\A[A-Za-z_][A-Za-z0-9_]*=/
+    ASSIGNMENT = /\A[A-Za-z_][A-Za-z0-9_]*=/.freeze
     # `>`, `2>`, `>>`, `<` or `&>` on its own: the next word is the file.
-    REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>)\z/
+    REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>)\z/.freeze
     # `2>&1`, `>/dev/null`, `&>file`, or a trailing `&`.
-    REDIRECTION = /\A(?:\d*[<>]|&)/
+    REDIRECTION = /\A(?:\d*[<>]|&)/.freeze
 
     attr_reader :words
 
@@ -268,15 +291,12 @@ module PushGuard
     end
 
     def without_redirections(words)
+      rest = words.dup
       kept = []
-      skip_next = false
-      words.each do |word|
-        if skip_next
-          skip_next = false
-        elsif REDIRECTION_OPERATOR.match?(word)
-          skip_next = true
-        elsif !REDIRECTION.match?(word)
-          kept << word
+      until rest.empty?
+        word = rest.shift
+        if REDIRECTION_OPERATOR.match?(word) then rest.shift
+        elsif !REDIRECTION.match?(word) then kept << word
         end
       end
       kept
@@ -290,10 +310,10 @@ module PushGuard
     FLAGS = %w[--no-pager -p --paginate -P --no-replace-objects --bare --literal-pathspecs --glob-pathspecs
                --noglob-pathspecs --icase-pathspecs --no-optional-locks --no-lazy-fetch].freeze
     WITH_ARGUMENT = %w[-c --git-dir --work-tree --namespace --exec-path --config-env].freeze
-    INLINE_ARGUMENT = /\A--(?:git-dir|work-tree|namespace|exec-path|config-env|super-prefix)=/
+    INLINE_ARGUMENT = /\A--(?:git-dir|work-tree|namespace|exec-path|config-env|super-prefix)=/.freeze
     # alias.* can rename push; remote.*, push.* and url.* change what, where
     # and how it pushes.
-    PUSH_CONFIG = /\A(?:alias|remote|push|url)\./i
+    PUSH_CONFIG = /\A(?:alias|remote|push|url)\./i.freeze
 
     attr_reader :directory, :subcommand, :arguments, :unknown_option, :config_override
 
@@ -343,7 +363,7 @@ module PushGuard
   # Reads the Bash text into the pushes it holds, following cd between
   # commands, and into asks for what it cannot read.
   class CommandReader
-    SEPARATORS = /\n|;|&&|\|\||\||&/
+    SEPARATORS = /\n|;|&&|\|\||\||&/.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
@@ -469,8 +489,8 @@ module PushGuard
   # How many people other than the pusher have commits on the remote's copy
   # of the branch beyond its base; nil when git cannot say.
   class AuthorCheck
-    BOT_NAME = /\[bot\]\z/i
-    GITHUB_ACTIONS = /github-actions/i
+    BOT_NAME = /\[bot\]\z/i.freeze
+    GITHUB_ACTIONS = /github-actions/i.freeze
 
     def initialize(repository, remote, branch)
       @repository = repository
@@ -527,15 +547,20 @@ module PushGuard
     def decide
       return Decision.deny(Reasons::BARE_FORCE) if push.bare_force?
       return Decision.ask(Reasons.unknown_push_option(push.unknown_option)) if push.unknown_option
-      return unless push.rewrites? || push.refspecs.any?(&:deletion?)
-      return Decision.ask(Reasons::EVERY_BRANCH) if push.all? && push.lease?
+      return unless push.destructive?
 
-      Decision.strictest(targets.map { |branch, deleting| decide_target(branch, deleting) })
+      decide_targets
     end
 
     private
 
     attr_reader :push, :repository
+
+    def decide_targets
+      return Decision.ask(Reasons::EVERY_BRANCH) if push.all? && push.lease?
+
+      Decision.strictest(targets.map { |branch, deleting| decide_target(branch, deleting) })
+    end
 
     def decide_target(branch, deleting)
       return if branch.nil?
@@ -570,32 +595,58 @@ module PushGuard
     end
   end
 
+  # The hook event on stdin, as far as the hook reads it: which tool, and for
+  # Bash the command and the directory it runs in. The sh entry hands over
+  # any stdin that says push, so the event may be no event at all.
+  class Event
+    def initialize(json)
+      parsed = JSON.parse(json)
+      @fields = parsed.is_a?(Hash) ? parsed : {}
+      @readable = parsed.is_a?(Hash) && parsed['tool_name'].is_a?(String)
+    rescue JSON::ParserError
+      @fields = {}
+      @readable = false
+    end
+
+    def readable?
+      @readable
+    end
+
+    def bash?
+      @fields['tool_name'] == 'Bash'
+    end
+
+    # The Bash command, or nil where tool_input is not an object holding one.
+    def command
+      input = @fields['tool_input']
+      input['command'] if input.is_a?(Hash) && input['command'].is_a?(String)
+    end
+
+    def cwd
+      @fields['cwd'].is_a?(String) ? @fields['cwd'] : Dir.pwd
+    end
+  end
+
   # The entry: one event in, at most one decision out, and a failure is an
-  # ask. So is input that is not a hook event: the sh entry hands over any
-  # stdin that says push.
+  # ask. So is input that is not a hook event.
   class Hook
     def self.run(input, output)
-      decision = new(input.read).decision
+      decision = new(Event.new(input.read)).decision
       output.puts(decision.to_json) if decision
     rescue StandardError => e
       output.puts(Decision.ask(Reasons.failure(e)).to_json)
     end
 
-    def initialize(event_json)
-      @event_json = event_json
+    def initialize(event)
+      @event = event
     end
 
     def decision
-      event = JSON.parse(@event_json)
-      return Decision.ask(Reasons::UNREADABLE_INPUT) unless event.is_a?(Hash) && event['tool_name'].is_a?(String)
-      return unless event['tool_name'] == 'Bash'
+      return Decision.ask(Reasons::UNREADABLE_INPUT) unless @event.readable?
+      return unless @event.bash?
+      return Decision.ask(Reasons::UNREADABLE_INPUT) unless @event.command
 
-      command = event['tool_input'].is_a?(Hash) ? event['tool_input']['command'] : nil
-      return Decision.ask(Reasons::UNREADABLE_INPUT) unless command.is_a?(String)
-
-      decide(command, event['cwd'].is_a?(String) ? event['cwd'] : Dir.pwd)
-    rescue JSON::ParserError
-      Decision.ask(Reasons::UNREADABLE_INPUT)
+      decide(@event.command, @event.cwd)
     end
 
     private

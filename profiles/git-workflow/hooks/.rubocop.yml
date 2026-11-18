@@ -1,0 +1,12 @@
+# The hook runs under whatever ruby a collaborator has, macOS's 2.6 included,
+# so its syntax stays within 2.6.
+AllCops:
+  TargetRubyVersion: 2.6
+  NewCops: enable
+  SuggestExtensions: false
+
+# The decider is named after its sh entry, push-guard, which a hook command
+# invokes by that name.
+Naming/FileName:
+  Exclude:
+    - 'push-guard.rb'
