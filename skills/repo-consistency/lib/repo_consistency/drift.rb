@@ -14,6 +14,7 @@ module RepoConsistency
   module Drift
     LINEAR_HISTORY = 'required_linear_history'
     PLAN = 'rulesets unavailable on this plan'
+    EXTRA_APPROVAL = 'pull_request requires extra approval for unattributed changes'
     PERSONAL_WITH_RULES = "tier line says personal but the default branch has #{Template::PULL_REQUEST} rules".freeze
     # A ruleset's name is GitHub's text, so only a plain one reaches a line;
     # any other ruleset is named by its id.
@@ -49,6 +50,7 @@ module RepoConsistency
 
       lines = (actual.merge_methods - expected.merge_methods).sort.map { |method| "pull_request allows #{method}" }
       lines << "pull_request requires #{actual.approvals} approvals" unless actual.approvals == expected.approvals
+      lines << EXTRA_APPROVAL if actual.extra_approval == true && expected.extra_approval == false
       lines
     end
 

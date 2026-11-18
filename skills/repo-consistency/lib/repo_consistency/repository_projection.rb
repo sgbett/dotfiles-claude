@@ -43,7 +43,8 @@ module RepoConsistency
       parameters = pull_request_parameters
       { rulesets_available: @state.rulesets_available, rule_types: @state.rules.map { |rule| rule['type'] },
         merge_methods: parameters && merge_methods!(parameters[Template::MERGE_METHODS]),
-        approvals: parameters && Integer(parameters[Template::APPROVALS]) }
+        approvals: parameters && Integer(parameters[Template::APPROVALS]),
+        extra_approval: parameters && parameters[Template::EXTRA_APPROVAL] }
     end
 
     def pull_request_parameters

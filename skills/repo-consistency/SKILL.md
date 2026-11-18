@@ -187,6 +187,7 @@ Run it exactly as written, unpiped. It prints one JSON object. On `proceed`, `su
 | `rule missing: <type>` | The template's `deletion`, `non_fast_forward` or `pull_request` rule is not in force on the default branch |
 | `pull_request allows <method>` | The rule allows a merge method beyond `merge` |
 | `pull_request requires <n> approvals` | The approval count differs from the template's |
+| `pull_request requires extra approval for unattributed changes` | The rule demands an approval for changes without a GitHub author, which with no required approvals and a sole owner nobody can give; GitHub fills it in as true when a request omits it, so the template pins it false |
 | `rule present: required_linear_history` | In force on the default branch, where it bans merge commits |
 | `ruleset "Git workflow" missing` | No ruleset carries the template's name: applying creates one; otherwise it updates the existing one |
 | `ruleset "<name>" grants a bypass` | Its bypass actors exempt the account the agent pushes as, which the rule exists to bind (a bare id stands for a name that isn't plain text) |

@@ -8,7 +8,8 @@ module RepoConsistency
     # of its own (drift_spec.rb and the end-to-end run in audit_spec.rb).
     module TemplateFixture
       PULL_REQUEST_PARAMETERS = {
-        'required_approving_review_count' => 0, 'dismiss_stale_reviews_on_push' => false,
+        'required_approving_review_count' => 0, 'require_extra_approval_for_unattributed_changes' => false,
+        'dismiss_stale_reviews_on_push' => false,
         'require_code_owner_review' => false, 'require_last_push_approval' => false,
         'required_review_thread_resolution' => false, 'allowed_merge_methods' => ['merge']
       }.freeze

@@ -31,6 +31,10 @@ module RepoConsistency
     PULL_REQUEST = 'pull_request'
     MERGE_METHODS = 'allowed_merge_methods'
     APPROVALS = 'required_approving_review_count'
+    # GitHub fills this with true when a request omits it, which with no
+    # required approvals and a sole owner demands an approval nobody can
+    # give, so the template pins it and the audit compares it.
+    EXTRA_APPROVAL = 'require_extra_approval_for_unattributed_changes'
     # The profile's first rule. The ruleset targets ~DEFAULT_BRANCH, so a
     # repository still on main is covered by it and reported here.
     DEFAULT_BRANCH = 'master'
@@ -76,7 +80,8 @@ module RepoConsistency
       parameters = rules.find { |rule| rule['type'] == PULL_REQUEST }.fetch('parameters')
       Projection.new(default_branch: DEFAULT_BRANCH, tier: TierLine::COLLABORATIVE, difference: nil,
                      rulesets_available: true, rule_types: rule_types, merge_methods: parameters[MERGE_METHODS],
-                     approvals: parameters[APPROVALS], ruleset_names: [ruleset_name], bypassing_rulesets: [],
+                     approvals: parameters[APPROVALS], extra_approval: parameters[EXTRA_APPROVAL],
+                     ruleset_names: [ruleset_name], bypassing_rulesets: [],
                      flags: @repository_flags, protection_additions: nil, rules_header_ok: true,
                      rules_body: @profile, hooks: @hooks, hooks_entry: HooksEntry.of_settings(@hooks_settings))
     end

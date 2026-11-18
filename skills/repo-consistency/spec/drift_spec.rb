@@ -43,13 +43,15 @@ RSpec.describe RepoConsistency::Drift do
                                  RepoConsistency::RepositoryProjection.call(applied(real_template)))).to eq([])
   end
 
-  it 'reads the real template as the runbook describes it: three rules, merge commits alone, no bypass, no approvals' do
+  it 'reads the real template as the runbook describes it: three rules, merge commits alone, no bypass, no ' \
+     'approvals, and no extra approval for unattributed changes' do
     projection = real_template.projection
 
     expect(real_template.ruleset_name).to eq('Git workflow')
     expect(projection.rule_types).to eq(%w[deletion non_fast_forward pull_request])
-    expect(projection.to_h.values_at(:merge_methods, :approvals, :bypassing_rulesets, :default_branch, :tier))
-      .to eq([['merge'], 0, [], 'master', 'collaborative'])
+    expect(projection.to_h.values_at(:merge_methods, :approvals, :extra_approval, :bypassing_rulesets, :default_branch,
+                                     :tier))
+      .to eq([['merge'], 0, false, [], 'master', 'collaborative'])
     expect(projection.flags).to eq('allow_squash_merge' => false, 'allow_rebase_merge' => false,
                                    'allow_merge_commit' => true, 'allow_update_branch' => false)
     expect(projection.hooks.keys).to eq(%w[push-guard push-guard.rb])

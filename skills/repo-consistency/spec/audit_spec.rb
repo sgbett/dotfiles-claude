@@ -112,18 +112,33 @@ RSpec.describe RepoConsistency::Audit do
                'ruleset "Git workflow" missing', 'allow_squash_merge on']])
   end
 
-  it 'reports each merge method a pull_request rule allows beyond merge, sorted, and an approval count that ' \
-     'differs, and a linear-history rule in force on the default branch' do
+  it 'reports each merge method a pull_request rule allows beyond merge, sorted, an approval count that differs, ' \
+     'an extra approval for unattributed changes, and a linear-history rule in force on the default branch' do
     repository = answers
     repository.rules[2] = { 'type' => 'pull_request',
                             'parameters' => RepoConsistency::Testing::TemplateFixture::PULL_REQUEST_PARAMETERS
                                             .merge('allowed_merge_methods' => %w[squash merge rebase],
-                                                   'required_approving_review_count' => 2) }
+                                                   'required_approving_review_count' => 2,
+                                                   'require_extra_approval_for_unattributed_changes' => true) }
     repository.rules << { 'type' => 'required_linear_history' }
 
     expect(drift_of(repository))
       .to eq([['pull_request allows rebase', 'pull_request allows squash', 'pull_request requires 2 approvals',
+               'pull_request requires extra approval for unattributed changes',
                'rule present: required_linear_history']])
+  end
+
+  it 'reports the extra approval alone when it is all that differs, and not when the rule leaves it unsaid' do
+    demanding = answers('example-owner/demanding')
+    demanding.rules[2] = { 'type' => 'pull_request',
+                           'parameters' => RepoConsistency::Testing::TemplateFixture::PULL_REQUEST_PARAMETERS
+                                           .merge('require_extra_approval_for_unattributed_changes' => true) }
+    unsaid = answers('example-owner/unsaid')
+    unsaid.rules[2] = { 'type' => 'pull_request',
+                        'parameters' => RepoConsistency::Testing::TemplateFixture::PULL_REQUEST_PARAMETERS
+                                        .except('require_extra_approval_for_unattributed_changes') }
+
+    expect(drift_of(demanding, unsaid)).to eq([['pull_request requires extra approval for unattributed changes'], []])
   end
 
   it 'holds a personal repository to its declaration alone: pull_request rules on its default branch are drift, ' \
