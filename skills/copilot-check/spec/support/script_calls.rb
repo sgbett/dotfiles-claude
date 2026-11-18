@@ -20,7 +20,7 @@ module CopilotCheck
       include ScriptRuns
 
       PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,headRepository,headRepositoryOwner,isDraft,' \
-                       'headRefOid,state,url'
+                       'headRefOid,state,url,autoMergeRequest'
       RUBRIC = ['gh', 'api', '--hostname', 'github.com', '-X', 'GET',
                 "repos/#{GateCalls::HERE}/contents/.github/copilot-instructions.md", '-f', 'ref=master'].freeze
       VIEWER = %w[gh api --hostname github.com -X GET user].freeze

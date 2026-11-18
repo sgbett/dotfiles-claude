@@ -10,7 +10,7 @@ module CopilotCheck
   # every later call targets the same one.
   class PullRequestView
     FIELDS = %w[number baseRefName headRefName isCrossRepository headRepository headRepositoryOwner isDraft
-                headRefOid state url].freeze
+                headRefOid state url autoMergeRequest].freeze
     URL = %r{\Ahttps://(?<host>[^/]+)/(?<path>[^/]+/[^/]+)/pull/(?<number>[1-9][0-9]*)\z}
     OPEN = 'OPEN'
     STATES = [OPEN, 'CLOSED', 'MERGED'].freeze
@@ -19,9 +19,10 @@ module CopilotCheck
     # as GitHub gives them; +head_owner+ the login of the head repository's
     # owner, nil when gh gives none; +head_repository+ the head repository
     # as "owner/repo", nil when gh names no owner or no name; +head+ the head
-    # commit's oid; +state+ one of STATES.
+    # commit's oid; +state+ one of STATES; +auto_merge+ whether auto-merge is
+    # on.
     PullRequest = Struct.new(:number, :base, :head_branch, :draft, :cross_repository, :head_owner, :head_repository,
-                             :head, :state, keyword_init: true) do
+                             :head, :state, :auto_merge, keyword_init: true) do
       def open?
         state == OPEN
       end
@@ -66,14 +67,18 @@ module CopilotCheck
 
     def pull_request(view, asked)
       number = SkillSupport::Identifiers.issue_number!(view['number'])
-      unless (asked.nil? || number == asked) && this_repository?(view['url'], number)
-        raise SkillSupport::UnexpectedResponse, "gh pr view gave another pull request than this repository's asked for"
-      end
-
+      verify(number, view['url'], asked)
       PullRequest.new(number: number, base: branch(view, 'baseRefName'), head_branch: branch(view, 'headRefName'),
                       draft: flag(view, 'isDraft'), cross_repository: flag(view, 'isCrossRepository'),
                       head_owner: head_owner(view), head_repository: head_repository(view),
-                      head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']), state: state(view))
+                      head: SkillSupport::Identifiers.commit_sha!(view['headRefOid']), state: state(view),
+                      auto_merge: auto_merge(view))
+    end
+
+    def verify(number, url, asked)
+      return if (asked.nil? || number == asked) && this_repository?(url, number)
+
+      raise SkillSupport::UnexpectedResponse, "gh pr view gave another pull request than this repository's asked for"
     end
 
     def this_repository?(url, number)
@@ -118,6 +123,14 @@ module CopilotCheck
       return view['state'] if STATES.include?(view['state'])
 
       raise SkillSupport::UnexpectedResponse, 'gh pr view gave no state'
+    end
+
+    # Null from gh means auto-merge is off; the request means on.
+    def auto_merge(view)
+      request = view['autoMergeRequest']
+      return request.is_a?(Hash) if view.key?('autoMergeRequest') && (request.nil? || request.is_a?(Hash))
+
+      raise SkillSupport::UnexpectedResponse, 'gh pr view gave no autoMergeRequest'
     end
   end
 end

@@ -17,6 +17,9 @@ module CopilotCheck
                               "the user that /do's hand-off lacks the number.",
       pull_request_not_open: "The pull request isn't open: it has been merged or closed (pull_request.state), so " \
                              'there is nothing for /copilot-check to fix. Tell the user.',
+      pull_request_auto_merge: 'Auto-merge is on (pull_request.auto_merge), so a push would merge the pull request ' \
+                               'on green with nobody looking. Tell the user: gh pr merge --disable-auto turns it ' \
+                               'off, and /copilot-check then resumes.',
       no_pull_request_checkout: "No checkout of this repository, the working directory's or a worktree of it, " \
                                 "has the pull request's branch (pull_request.head_branch) checked out, so the run " \
                                 'has nowhere to make its fixes. Tell the user to check it out in one, then run ' \

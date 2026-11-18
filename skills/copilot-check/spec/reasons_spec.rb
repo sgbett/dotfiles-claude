@@ -5,8 +5,8 @@ require_relative '../lib/copilot_check/reasons'
 RSpec.describe CopilotCheck::Reasons do
   it "is each script's whole enum of stops and asks, apart from the reasons promote-check's verdict holds for" do
     expect(described_class::SETUP)
-      .to eq(%i[not_a_pull_request_number chained_without_number pull_request_not_open no_pull_request_checkout
-                checkout_path_unsafe checkout_mismatch checkout_runs_scripts no_upstream
+      .to eq(%i[not_a_pull_request_number chained_without_number pull_request_not_open pull_request_auto_merge
+                no_pull_request_checkout checkout_path_unsafe checkout_mismatch checkout_runs_scripts no_upstream
                 push_remote_not_head_repository checkout_not_at_head fork_pull_request scripts_unreviewed
                 copilot_id_changed])
     expect(described_class::THREADS).to eq(%i[copilot_id_changed copilot_unrecognised threads_overflow])
