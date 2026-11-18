@@ -36,7 +36,9 @@ Then the trust dialog: the first interactive Claude Code session in the checkout
 
 ## The push-guard hook, what it is and is not
 
-The hook reads the literal text of each Bash command the agent runs. It denies a bare force-push, and any force or deletion aimed at a base branch (`master`, `project/*`, `releases/*`); it asks before a lease push to a branch another author has commits on; otherwise it says nothing. It cannot see a push made inside a script, a Makefile or a git alias: the ruleset is the control, the hook guards habit. Collaborators review it as they would any code in the repository before trusting the workspace.
+The hook reads the literal text of each Bash command the agent runs. It denies a bare force-push, and any force or deletion aimed at a base branch (`master`, `project/*`, `releases/*`); it asks before a lease push to a branch another author has commits on; otherwise it says nothing. It reads only what the Bash tool is given: a push inside a script, a Makefile or a git alias, a ref update through the GitHub API, or a word it cannot see in the text (`pu''sh`, an escaped or quoted word) is invisible to it, so the hook guards habit and the default branch's ruleset is the server-side control. Project and release branches have the hook alone until a repository adds a ruleset for them.
+
+The hook runs code from the checkout on every Bash command, so collaborators review it as they would any code in the repository before trusting the workspace, and review the `.claude/` part of a pull request's diff before checking that branch out, since the next Bash command runs whatever `push-guard` the branch carries. A collaborator who prefers not to run code from the checkout can point a user-level `PreToolUse` hook at a copy of the two files kept outside it.
 
 ## Applying the template to a repository (admin)
 
@@ -76,6 +78,7 @@ gh api -X DELETE repos/OWNER/REPO/branches/master/protection
 Why the template is shaped as it is:
 
 - No bypass actors: an admin bypass exempts the account the agent pushes as, which is what the rule exists to bind.
+- `require_extra_approval_for_unattributed_changes` false, said outright: GitHub fills it with true when it is left out, and with no required approvals a commit whose author maps to no GitHub account would then need an approval a sole owner cannot give.
 - No `required_status_checks`: each repository's CI ruleset is its own.
 - Never `required_linear_history` on the default branch: on GitHub it bans merge commits.
 - `~DEFAULT_BRANCH` rather than a branch name: the rule survives a rename, and a repository still on `main` is covered.
@@ -84,4 +87,4 @@ Rulesets on a private repository need a paid plan. The `git-settings audit` scri
 
 ## Releases
 
-A version bump is a change like any other and lands by PR. The tag is pushed directly afterwards, since branch rules do not target tags.
+A version bump is a change like any other and lands by PR. The tag is pushed directly afterwards, since branch rules do not target tags; nothing here stops a tag being moved or deleted, which a tag ruleset would.
