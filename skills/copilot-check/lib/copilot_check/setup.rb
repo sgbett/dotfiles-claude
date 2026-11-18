@@ -51,7 +51,7 @@ module CopilotCheck
       number, @chained = PullRequestArgument.read(@options.argument_file)
       @repository = CheckoutRepository.resolve(@runner)
       @pull_request = PullRequestView.new(@runner, @repository).fetch(number)
-      @pull_request.open? ? ask_or_start : not_open
+      unworkable || ask_or_start
     rescue Stop => e
       Reasons.stop(e.reason, **{ repository: @repository&.to_h, pull_request: number_field }.compact)
     end
@@ -91,10 +91,18 @@ module CopilotCheck
                                     session_only: { checkout: @checkout.top_level })
     end
 
-    def not_open
-      Reasons.stop(Reasons::PULL_REQUEST_NOT_OPEN, repository: @repository.to_h,
-                                                   pull_request: { number: @pull_request.number,
-                                                                   state: @pull_request.state })
+    # A stop before anything is read or written, or nil: a pull request that
+    # isn't open, or one that auto-merge would merge on green with nobody
+    # looking at the first push, after Phase 4's replies had said the fixes
+    # were in.
+    def unworkable
+      return stop_on(Reasons::PULL_REQUEST_NOT_OPEN, state: @pull_request.state) unless @pull_request.open?
+
+      stop_on(Reasons::PULL_REQUEST_AUTO_MERGE, auto_merge: true) if @pull_request.auto_merge
+    end
+
+    def stop_on(reason, **fields)
+      Reasons.stop(reason, repository: @repository.to_h, pull_request: { number: @pull_request.number, **fields })
     end
 
     def examine_scripts

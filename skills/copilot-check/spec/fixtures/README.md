@@ -45,7 +45,7 @@ gh api graphql --hostname github.com --input $F/graphql/review-thread-14.request
 gh repo view --json nameWithOwner,url > $F/repo-view/checkout.json
 gh repo view https://github.com/sgbett/dotfiles-claude.git --json nameWithOwner > $F/repo-view/push-url.json
 gh pr view 18 -R github.com/sgbett/dotfiles-claude \
-  --json number,baseRefName,headRefName,isCrossRepository,headRepository,headRepositoryOwner,isDraft,headRefOid,state,url \
+  --json number,baseRefName,headRefName,isCrossRepository,headRepository,headRepositoryOwner,isDraft,headRefOid,state,url,autoMergeRequest \
   > $F/pr-view/pull-request-18.json
 gh api --hostname github.com -X GET repos/sgbett/dotfiles-claude/contents/.github/copilot-instructions.md -f ref=master \
   > $F/contents/rubric-not-found.json 2> $F/contents/rubric-not-found.stderr

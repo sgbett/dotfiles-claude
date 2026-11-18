@@ -285,6 +285,17 @@ RSpec.describe CopilotCheck::Setup do
     expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
   end
 
+  it 'stops on auto-merge, which a push would set off, reading and writing nothing more' do
+    expect_resolution(response: open_pr_view_response(autoMergeRequest: { 'mergeMethod' => 'MERGE' }))
+
+    exit_code, output = run_setup(*arguments)
+
+    expect([exit_code, output.values_at('status', 'reason', 'message', 'pull_request')])
+      .to eq([2, ['stop', 'pull_request_auto_merge', CopilotCheck::Reasons::MESSAGES[:pull_request_auto_merge],
+                  { 'number' => 18, 'auto_merge' => true }]])
+    expect([start_file, rubric_file, focus_file].map { |path| File.exist?(path) }).to eq([false, false, false])
+  end
+
   it "stops when Copilot's latest review carries another id, writing nothing" do
     expect_resolution
     expect_start(latest: latest_review_response('2026-11-13T09:00:00Z', author: 'BOT_kgDOOtherId'))

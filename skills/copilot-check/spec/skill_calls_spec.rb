@@ -86,9 +86,10 @@ RSpec.describe "/copilot-check's calls of its scripts" do
                              '`check` again.')
   end
 
-  it "says in Phase 0 that setup stops on a pull request that isn't open, and asks about its own scripts" do
-    expect(skill).to include("stops on a PR that isn't open, and asks before going on with a PR from someone else's " \
-                             'fork or with scripts that may not be the reviewed ones.')
+  it "says in Phase 0 that setup stops on a pull request that isn't open or has auto-merge on, and asks about its " \
+     'own scripts' do
+    expect(skill).to include("stops on a PR that isn't open or has auto-merge on, and asks before going on with a " \
+                             "PR from another's fork or with scripts that may not be the reviewed ones.")
   end
 
   it 'names every outcome check takes, and the rules file by its keys' do

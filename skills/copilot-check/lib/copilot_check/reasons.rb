@@ -11,6 +11,7 @@ module CopilotCheck
     NOT_A_PULL_REQUEST_NUMBER = :not_a_pull_request_number
     CHAINED_WITHOUT_NUMBER = :chained_without_number
     PULL_REQUEST_NOT_OPEN = :pull_request_not_open
+    PULL_REQUEST_AUTO_MERGE = :pull_request_auto_merge
     NO_PULL_REQUEST_CHECKOUT = :no_pull_request_checkout
     CHECKOUT_PATH_UNSAFE = :checkout_path_unsafe
     CHECKOUT_MISMATCH = :checkout_mismatch
@@ -31,12 +32,12 @@ module CopilotCheck
     # The thread fetch's stops (Threads), which leave nothing to judge.
     THREAD_STOPS = [COPILOT_ID_CHANGED, COPILOT_UNRECOGNISED, THREADS_OVERFLOW].freeze
     # setup's whole enum: an argument that names no pull request, chained
-    # alone, a pull request that isn't open, a checkout the run can't work
-    # in (PullRequestCheckout), the asks on a fork's and on scripts that may
-    # not be the reviewed ones, and Copilot's latest review under another
-    # id.
-    SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, NO_PULL_REQUEST_CHECKOUT,
-             CHECKOUT_PATH_UNSAFE, CHECKOUT_MISMATCH, CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM,
+    # alone, a pull request that isn't open or that auto-merge would merge on
+    # a push, a checkout the run can't work in (PullRequestCheckout), the
+    # asks on a fork's and on scripts that may not be the reviewed ones, and
+    # Copilot's latest review under another id.
+    SETUP = [NOT_A_PULL_REQUEST_NUMBER, CHAINED_WITHOUT_NUMBER, PULL_REQUEST_NOT_OPEN, PULL_REQUEST_AUTO_MERGE,
+             NO_PULL_REQUEST_CHECKOUT, CHECKOUT_PATH_UNSAFE, CHECKOUT_MISMATCH, CHECKOUT_RUNS_SCRIPTS, NO_UPSTREAM,
              PUSH_REMOTE_NOT_HEAD_REPOSITORY, CHECKOUT_NOT_AT_HEAD, FORK_PULL_REQUEST, SCRIPTS_UNREVIEWED,
              COPILOT_ID_CHANGED].freeze
     # threads': `fetch` and `resolve` stop only where the thread fetch does.

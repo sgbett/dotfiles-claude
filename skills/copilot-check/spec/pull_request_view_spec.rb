@@ -19,7 +19,7 @@ RSpec.describe CopilotCheck::PullRequestView do
     expect([pull_request.to_h, pull_request.open?])
       .to eq([{ number: 18, base: 'master', head_branch: 'feat/17-do-qa-records-the-work-as', draft: false,
                 cross_repository: false, head_owner: 'sgbett', head_repository: 'sgbett/dotfiles-claude',
-                head: CopilotCheck::Testing::GateCalls::HEAD, state: 'MERGED' }, false])
+                head: CopilotCheck::Testing::GateCalls::HEAD, state: 'MERGED', auto_merge: false }, false])
     expect(pull_request.start_state(repository, checkout: '/work/dotfiles-27', chained: true))
       .to eq('number' => 18, 'repository' => 'github.com/sgbett/dotfiles-claude', 'baseRefName' => 'master',
              'isCrossRepository' => false, 'isDraft' => false, 'checkout' => '/work/dotfiles-27', 'chained' => true)
@@ -61,6 +61,13 @@ RSpec.describe CopilotCheck::PullRequestView do
     end
   end
 
+  it 'reads whether auto-merge is on, from the request gh gives or null for none' do
+    { nil => false, { 'mergeMethod' => 'MERGE' } => true }.each do |request, on|
+      expect_pr_view(response: pr_view_response(autoMergeRequest: request))
+      expect(view.fetch(18).auto_merge).to be(on), request.inspect
+    end
+  end
+
   it "reads the current branch's pull request when given no number, as gh can't with -R" do
     branch = open_pr_view_response(number: 26, url: 'https://github.com/sgbett/dotfiles-claude/pull/26')
     expect_pr_view(nil, response: branch)
@@ -84,10 +91,12 @@ RSpec.describe CopilotCheck::PullRequestView do
     end
   end
 
-  it 'fails rather than guess when a flag, a branch, the state or the head is missing, or gh prints no JSON' do
+  it 'fails rather than guess when a flag, a branch, the state, the head or the auto-merge request is missing, ' \
+     'or gh prints no JSON' do
     unusable = [pr_view_response(isDraft: nil), pr_view_response(isCrossRepository: 'false'),
                 pr_view_response(baseRefName: ''), pr_view_response(headRefName: nil), pr_view_response(state: nil),
-                pr_view_response(state: 'open')]
+                pr_view_response(state: 'open'), pr_view_response.except('autoMergeRequest'),
+                pr_view_response(autoMergeRequest: 'MERGE')]
     unusable.each do |response|
       expect_pr_view(response: response)
       expect { view.fetch(18) }.to raise_error(SkillSupport::UnexpectedResponse), response.inspect
