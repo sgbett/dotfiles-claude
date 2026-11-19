@@ -128,6 +128,32 @@ RSpec.describe CopilotCheck::PromotionGate do
       .to eq([%w[protected_paths_changed], %w[docs/CLAUDE.local.md .mcp.json]])
   end
 
+  it "promotes a pull request whose only .claude paths are plans, which Claude Code doesn't load" do
+    files = [{ 'filename' => '.claude/plans/20261119-x.md' }, { 'filename' => 'apps/x/.claude/plans/y.md' }]
+    expect_gate(files: { pages: [files] })
+
+    output = run_promote_check(gate_arguments).last
+
+    expect([output['verdict'], output['reasons'], output['files']['github_text']['protected_paths']])
+      .to eq(['PROMOTE', [], []])
+  end
+
+  it 'holds plans beside a rules file or settings, a CLAUDE.md among them, or a rules file renamed into them' do
+    plan = { 'filename' => '.claude/plans/x.md' }
+    [[[plan, { 'filename' => '.claude/rules/x.md' }], %w[.claude/rules/x.md]],
+     [[plan, { 'filename' => '.claude/settings.json' }], %w[.claude/settings.json]],
+     [[plan, { 'filename' => '.claude/plans/CLAUDE.md' }], %w[.claude/plans/CLAUDE.md]],
+     [[{ 'filename' => 'docs/x.md' }, plan.merge('previous_filename' => '.claude/rules/x.md')],
+      %w[.claude/rules/x.md]]].each do |files, protected_paths|
+      expect_gate(files: { pages: [files] })
+
+      output = run_promote_check(gate_arguments).last
+
+      expect([output['reasons'].map { |reason| reason['reason'] }, output['files']['github_text']['protected_paths']])
+        .to eq([%w[protected_paths_changed], protected_paths])
+    end
+  end
+
   it "holds a change to Copilot's rubric, or a rename away from it, for the owner" do
     files = [{ 'filename' => '.github/copilot-instructions.md' },
              { 'filename' => 'docs/old-rubric.md', 'previous_filename' => '.github/copilot-instructions.md' }]

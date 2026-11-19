@@ -31,9 +31,9 @@ module CopilotCheck
                                "Copilot's rubric .github/copilot-instructions.md or a path at or under " \
                                '.github/instructions/, .github/skills/ or .agents/skills/, a file named CLAUDE.md, ' \
                                'CLAUDE.local.md, .mcp.json, AGENTS.md, GEMINI.md or REVIEW.md, or a path at or ' \
-                               'under a .claude directory (files.github_text.protected_paths), so what GitHub ' \
-                               'Actions runs, what Copilot reviews against or what Claude Code loads from the ' \
-                               "checkout may not be the base's.",
+                               'under a .claude directory other than a plan under .claude/plans/ ' \
+                               '(files.github_text.protected_paths), so what GitHub Actions runs, what Copilot ' \
+                               "reviews against or what Claude Code loads from the checkout may not be the base's.",
       no_checks: 'No check has run on the head.',
       checks_pending: 'A check on the head is pending.',
       checks_cancelled: 'A check on the head was cancelled.',

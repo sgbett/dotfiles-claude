@@ -21,14 +21,18 @@ module CopilotCheck
     INSTRUCTIONS_DIRECTORY = '.github/instructions/'
     # Where GitHub says a project keeps the agent skills Copilot code review
     # reads, each a directory holding a SKILL.md, besides .claude/skills/,
-    # which RULES_DIRECTORY covers.
+    # which CLAUDE_DIRECTORY covers.
     SKILLS_DIRECTORIES = %w[.github/skills/ .agents/skills/].freeze
     # What Claude Code loads from a checkout: its rules, local rules and
     # project MCP servers. Copilot code review reads CLAUDE.md too.
     CLAUDE_FILES = %w[CLAUDE.md CLAUDE.local.md .mcp.json].freeze
     # The other files Copilot code review takes instructions from.
     COPILOT_FILES = %w[AGENTS.md GEMINI.md REVIEW.md].freeze
-    RULES_DIRECTORY = '.claude'
+    CLAUDE_DIRECTORY = '.claude'
+    PLANS_DIRECTORY = 'plans'
+    # Segments git never records in a path, and that could make one resolve
+    # elsewhere than it reads.
+    UNRESOLVED_SEGMENTS = ['', '.', '..'].freeze
     PROTECTED_DIRECTORIES = [*WORKFLOW_DIRECTORIES, INSTRUCTIONS_DIRECTORY, *SKILLS_DIRECTORIES].freeze
     PROTECTED_NAMES = [*CLAUDE_FILES, *COPILOT_FILES].freeze
 
@@ -44,18 +48,39 @@ module CopilotCheck
     # .github/instructions/, .github/skills/ or .agents/skills/, is
     # .github/copilot-instructions.md, is a file named CLAUDE.md,
     # CLAUDE.local.md, .mcp.json, AGENTS.md, GEMINI.md or REVIEW.md, or is,
-    # or is under, a .claude directory, those last two at any depth, as
-    # Claude Code can start in any directory of a checkout and GitHub doesn't
-    # say where Copilot looks for each. A pull request's files are never
-    # directories, so one at a directory's own path is a symlink or submodule
-    # in its place. Case is ignored, as a case-insensitive file system
-    # ignores it.
+    # or is under, a .claude directory other than as a plan in its plans/,
+    # those last two at any depth, as Claude Code can start in any directory
+    # of a checkout and GitHub doesn't say where Copilot looks for each.
+    # Claude Code doesn't load a plan, so one steers nothing more than any
+    # other document the pull request changes (#33). A pull request's files
+    # are never directories, so one at a directory's own path is a symlink
+    # or submodule in its place. Case is ignored, as a case-insensitive file
+    # system ignores it.
     def self.protected?(path)
       name = File.basename(path)
       PROTECTED_DIRECTORIES.any? { |directory| "#{path.downcase}/".start_with?(directory) } ||
         path.casecmp?(RUBRIC) || PROTECTED_NAMES.any? { |protected_name| name.casecmp?(protected_name) } ||
-        path.split('/').any? { |part| part.casecmp?(RULES_DIRECTORY) }
+        under_claude_directory?(path)
     end
+
+    # Whether some .claude segment of +path+ isn't followed by a plans
+    # segment with more after it. A path with an empty, . or .. segment gets
+    # no plans exemption, as it may resolve to something other than a plan.
+    # Warning: the exemption assumes nothing Claude Code loads imports a
+    # plan, as @.claude/plans/x.md in a CLAUDE.md would.
+    def self.under_claude_directory?(path)
+      parts = path.split('/', -1)
+      exemptible = !parts.intersect?(UNRESOLVED_SEGMENTS)
+      parts.each_index.any? do |index|
+        parts[index].casecmp?(CLAUDE_DIRECTORY) && !(exemptible && plan_below?(parts, index))
+      end
+    end
+
+    def self.plan_below?(parts, index)
+      parts.length > index + 2 && parts[index + 1].casecmp?(PLANS_DIRECTORY)
+    end
+
+    private_class_method :under_claude_directory?, :plan_below?
 
     # +github+ is the SkillSupport::Gh for the repository's host.
     def initialize(github)
