@@ -17,6 +17,7 @@ module RepoConsistency
     SKILLS = '.claude/skills/'
     COMMANDS = '.claude/commands/'
     MARKDOWN = '.md'
+    SKILL_FILE = 'SKILL.md'
     # A link in place of one of these directories leaves the tree silent on
     # everything a checkout would find inside it.
     DIRECTORIES = %w[.claude .claude/rules .claude/skills .claude/commands].freeze
@@ -33,15 +34,20 @@ module RepoConsistency
       INSTRUCTION_FILES.include?(folded) || (folded.start_with?(RULES) && folded.end_with?(MARKDOWN))
     end
 
-    # The directory that ships +name+ as a skill.
-    def skill_directory(name)
-      "#{SKILLS}#{name}"
+    # The file that ships +name+ as a skill: a skill directory without one
+    # is no skill to Claude Code.
+    def skill_file(name)
+      "#{SKILLS}#{name}/#{SKILL_FILE}"
     end
 
     # The file that ships +name+ as a command, a colon standing for a
     # directory.
     def command_file(name)
       "#{COMMANDS}#{name.tr(':', '/')}#{MARKDOWN}"
+    end
+
+    def shipping_files(name)
+      [skill_file(name), command_file(name)]
     end
 
     # Whether a symlink, or with +submodule+ a submodule, at +path+ would

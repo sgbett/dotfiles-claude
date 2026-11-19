@@ -3,19 +3,22 @@
 require_relative '../lib/repo_consistency/skill_mentions'
 
 RSpec.describe RepoConsistency::SkillMentions do
-  it 'finds a name written as a command, in code, before a possessive or at the end of a sentence, and a ' \
+  it 'finds a name written as a command, in code, before a possessive, a colon or the end of a sentence, and a ' \
      'hyphenated one bare' do
     { '`/do`' => ['do'], "/do's breakdown" => ['do'], 'then run /do.' => ['do'], '(/zendesk)' => ['zendesk'],
       '/copilot-check' => ['copilot-check'], 'ask `specialist-review`' => ['specialist-review'],
-      'run /project:generate' => ['project:generate'], 'then create-adr.' => ['create-adr'] }.each do |text, names|
+      'run /project:generate' => ['project:generate'], 'then create-adr.' => ['create-adr'],
+      'run /do: then review' => ['do'], "finish with /copilot-check:\n" => ['copilot-check'] }.each do |text, names|
       expect(described_class.names_in(text)).to eq(names), text
     end
   end
 
-  it 'finds nothing in a path, a URL, an anchor, a file name, a longer word, another case or prose' do
+  it 'finds nothing in a path, a URL, an anchor, a file name, another colon-named command, a longer word, ' \
+     'another case or prose' do
     ['skills/do/', '~/.claude/skills/do', 'https://x/do', 'x:/do', '[x](docs/adr.md#create-adr)', '/docs', '/docs/',
-     '/doé', '/do-thing', '/do.md', '/DO', 'create-adr-template', 'create-adr.md', 'skills/create-adr', 'Do not',
-     'do it now', 'a zendesk ticket', 'the transcript', '.claude/commands/project:generate'].each do |text|
+     '/doé', '/do-thing', '/do.md', '/do:preview', '/project:generate:preview', '/DO', 'create-adr-template',
+     'create-adr.md', 'skills/create-adr', 'Do not', 'do it now', 'a zendesk ticket', 'the transcript',
+     '.claude/commands/project:generate'].each do |text|
       expect(described_class.names_in(text)).to eq([]), text
     end
   end

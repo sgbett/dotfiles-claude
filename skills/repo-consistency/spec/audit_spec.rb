@@ -282,8 +282,27 @@ RSpec.describe RepoConsistency::Audit do
       as_page = answers('example-owner/as-page')
       as_page.files['CLAUDE.md'] += "Run /do.\n"
       as_page.files['.claude/skills/do.md'] = "Not a skill: a skill is a directory.\n"
+      no_skill_file = answers('example-owner/no-skill-file')
+      no_skill_file.files['CLAUDE.md'] += "Run /do.\n"
+      no_skill_file.files['.claude/skills/do/README.md'] = "Notes on a skill that isn't here.\n"
 
-      expect(drift_of(as_skill, as_command, as_page)).to eq([[], [], ["#{unshipped} do"]])
+      expect(drift_of(as_skill, as_command, as_page, no_skill_file))
+        .to eq([[], [], ["#{unshipped} do"], ["#{unshipped} do"]])
+    end
+
+    it 'counts a shipping file that is a link only when the contents API resolves it to a file in the repository' do
+      resolved = answers('example-owner/resolved')
+      resolved.files['CLAUDE.md'] += "Run /do and /copilot-check.\n"
+      resolved.files['.claude/commands/do.md'] = "Work the issue.\n"
+      resolved.files['.claude/skills/copilot-check/SKILL.md'] = "---\nname: copilot-check\n---\n"
+      resolved.tree.symlinked = ['.claude/commands/do.md', '.claude/skills/copilot-check/SKILL.md']
+      dangling = answers('example-owner/dangling')
+      dangling.files['CLAUDE.md'] += "Run /do and /copilot-check.\n"
+      dangling.files['.claude/commands/do.md'] = ''
+      dangling.files['.claude/skills/copilot-check/SKILL.md'] = ''
+      dangling.tree.escaping = ['.claude/commands/do.md', '.claude/skills/copilot-check/SKILL.md']
+
+      expect(drift_of(resolved, dangling)).to eq([[], ["#{unshipped} copilot-check", "#{unshipped} do"]])
     end
 
     it 'scans instruction files whatever their case, as a case-insensitive file system loads them' do

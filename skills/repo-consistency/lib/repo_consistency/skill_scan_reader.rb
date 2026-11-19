@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
+require_relative 'shipped_skills'
 require_relative 'skill_paths'
 require_relative 'skill_scan'
 require_relative 'tier_line'
-require_relative 'user_skills'
+require_relative 'tree_entry'
 require_relative 'vendored_paths'
 
 module RepoConsistency
@@ -13,7 +14,9 @@ module RepoConsistency
   # .claude directory's, then each instruction file they list that
   # RepositoryReader hasn't read already, in path order. Only the root and
   # .claude are read, as a large repository's whole tree comes back
-  # truncated. A personal repository costs no read. A tree that can't show
+  # truncated. Then each shipping file that is a link (ShippedSkills), to
+  # see whether it resolves. A personal repository costs no read. A tree
+  # that can't show
   # everything, or a file the contents API refuses, leaves the check
   # unchecked rather than stopping the audit, as the repository's other
   # drift stands without it.
@@ -44,16 +47,12 @@ module RepoConsistency
       end
     end
 
-    SYMLINK_MODE = '120000'
-    SUBMODULE_TYPE = 'commit'
-    DIRECTORY_TYPE = 'tree'
-    FILE_TYPE = 'blob'
     # A git object id, SHA-1 or SHA-256. A tree's id comes from GitHub and
     # goes into an API path.
     OBJECT_ID = /\A(?:[0-9a-f]{40}|[0-9a-f]{64})\z/
-    # Each instruction file not already read costs a contents GET, from the
-    # rate limit the whole estate's audit shares, so a repository with more
-    # goes unchecked rather than spending it.
+    # Each instruction file not already read, and each shipping link, costs
+    # a contents GET from the rate limit the whole estate's audit shares, so
+    # a repository needing more goes unchecked rather than spending it.
     MAX_FILE_READS = 200
 
     # +files+ are RepositoryReader's texts by path, CLAUDE.md's among them.
@@ -76,7 +75,7 @@ module RepoConsistency
       return SkillScan.new(unchecked: :truncated) if entries.nil?
       return SkillScan.new(unchecked: :linked) if entries.any? { |entry| hides?(entry) }
 
-      scan(entries.to_h { |entry| entry.values_at('path', 'type') })
+      scan(entries.to_h { |entry| [entry['path'], entry] })
     end
 
     private
@@ -96,7 +95,7 @@ module RepoConsistency
     end
 
     def claude_directories(root)
-      root.select { |entry| entry['type'] == DIRECTORY_TYPE && SkillPaths.claude_directory?(entry['path']) }
+      root.select { |entry| TreeEntry.directory?(entry) && SkillPaths.claude_directory?(entry['path']) }
           .sort_by { |entry| entry['path'] }
     end
 
@@ -106,7 +105,7 @@ module RepoConsistency
       fields = recursive ? { 'recursive' => '1' } : {}
       answer = @github.api("repos/#{@repository}/git/trees/#{reference}", fields: fields)
       entries = answer['tree'] if answer.is_a?(Hash)
-      unless entries.is_a?(Array) && entries.all? { |entry| entry?(entry) }
+      unless entries.is_a?(Array) && entries.all? { |entry| TreeEntry.valid?(entry) }
         raise SkillSupport::UnexpectedResponse, "a tree of #{@repository} is not a list of entries"
       end
 
@@ -119,23 +118,37 @@ module RepoConsistency
       raise SkillSupport::UnexpectedResponse, "a tree of #{@repository} lists a directory without a valid object id"
     end
 
-    def entry?(entry)
-      entry.is_a?(Hash) && entry.values_at('path', 'mode', 'type').all?(String)
-    end
-
     def hides?(entry)
-      submodule = entry['type'] == SUBMODULE_TYPE
-      (submodule || entry['mode'] == SYMLINK_MODE) && SkillPaths.hides_from_tree?(entry['path'], submodule: submodule)
+      submodule = TreeEntry.submodule?(entry)
+      (submodule || TreeEntry.link?(entry)) && SkillPaths.hides_from_tree?(entry['path'], submodule: submodule)
     end
 
-    # +types+ maps each path of the tree to its type.
-    def scan(types)
-      paths = types.keys.select { |path| types[path] == FILE_TYPE && SkillPaths.instruction_file?(path) }.sort
-      return SkillScan.new(unchecked: :too_many) if paths.count { |path| !@files.key?(path) } > MAX_FILE_READS
+    # +entries+ maps each path of the tree to its entry.
+    def scan(entries)
+      paths = instruction_paths(entries)
+      shipping = ShippedSkills.new(entries)
+      links = shipping.links
+      return SkillScan.new(unchecked: :too_many) if reads(paths, links) > MAX_FILE_READS
 
-      SkillScan.new(texts: paths.map { |path| text(path) }, shipped: shipped(types))
+      texts = instruction_texts(paths)
+      return SkillScan.new(unchecked: :unreadable) unless texts
+
+      SkillScan.new(texts: texts, shipped: shipping.names(links.select { |path| resolves?(path) }))
+    end
+
+    def instruction_paths(entries)
+      entries.keys.select { |path| TreeEntry.file?(entries[path]) && SkillPaths.instruction_file?(path) }.sort
+    end
+
+    def reads(paths, links)
+      paths.count { |path| !@files.key?(path) } + links.length
+    end
+
+    # Nil when the contents API refuses one.
+    def instruction_texts(paths)
+      paths.map { |path| text(path) }
     rescue SkillSupport::UnexpectedResponse
-      SkillScan.new(unchecked: :unreadable)
+      nil
     end
 
     # RepositoryFiles raises UnexpectedResponse for a file it won't decode:
@@ -162,10 +175,13 @@ module RepoConsistency
       @files_reader ||= SkillSupport::RepositoryFiles.new(OutputGuard.new(@github, @repository))
     end
 
-    def shipped(types)
-      UserSkills::NAMES.select do |name|
-        types[SkillPaths.skill_directory(name)] == DIRECTORY_TYPE || types[SkillPaths.command_file(name)] == FILE_TYPE
-      end
+    # The contents API follows a link to a file in the repository, and
+    # answers any other, dangling or pointing out of it, as the link itself,
+    # which RepositoryFiles refuses.
+    def resolves?(path)
+      read_file(path).is_a?(String)
+    rescue SkillSupport::UnexpectedResponse
+      false
     end
   end
 end
