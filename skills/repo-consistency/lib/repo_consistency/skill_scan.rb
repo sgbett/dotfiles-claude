@@ -7,6 +7,7 @@ module RepoConsistency
   # :truncated, a tree came back cut off; :linked, a submodule, or a
   # symlink that could stand for a directory, is where SkillPaths looks;
   # :unreadable, the contents API refused an instruction file as too large
-  # or not a file.
+  # or not a file; :too_many, more than SkillScanReader::MAX_FILE_READS
+  # files would need reading.
   SkillScan = Struct.new(:texts, :shipped, :unchecked, keyword_init: true)
 end

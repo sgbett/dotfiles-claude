@@ -24,7 +24,8 @@ module RepoConsistency
     UNSHIPPED_SKILL = "names a skill it doesn't ship:"
     SKILLS_UNCHECKED = { truncated: 'skill names unchecked: tree truncated',
                          linked: 'skill names unchecked: symlink or submodule',
-                         unreadable: 'skill names unchecked: file too large or not a file' }.freeze
+                         unreadable: 'skill names unchecked: file too large or not a file',
+                         too_many: 'skill names unchecked: too many instruction files' }.freeze
 
     module_function
 

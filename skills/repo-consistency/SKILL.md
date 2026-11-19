@@ -202,7 +202,7 @@ Run it exactly as written, unpiped. It prints one JSON object. On `proceed`, `su
 | `vendored hook missing: <file>`, `vendored hook differs: <file>` | `.claude/hooks/<file>` is absent or differs byte for byte from the template's |
 | `hooks entry missing from .claude/settings.json`, `settings.json unreadable` | No `PreToolUse` entry runs `.claude/hooks/push-guard`, or the file isn't JSON |
 | `names a skill it doesn't ship: <name>` | `CLAUDE.md`, `.claude/CLAUDE.md` or a `.claude/rules/` file invokes a user-level skill or command, `/<name>` (a hyphenated one also bare), that the repository lacks as `.claude/skills/<name>/` or `.claude/commands/<name>.md` |
-| `skill names unchecked: <why>` | A truncated tree, a submodule or symlinked directory where those files or skills go, or a file the contents API refused: check by hand |
+| `skill names unchecked: <why>` | A truncated tree, a submodule or symlinked directory where those files or skills go, over 200 such files, or a file the contents API refused: check by hand |
 
 **Applying the template** is the runbook's procedure, `profiles/git-workflow/setup.md`, run by a person with admin access to the repository; this check never applies it, and never offers to.
 

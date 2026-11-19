@@ -307,6 +307,24 @@ RSpec.describe RepoConsistency::Audit do
       expect(drift_of(agents, shared)).to eq([[], ["#{unshipped} copilot-check"]])
     end
 
+    it 'reads up to 200 instruction files it has not read already, and none of more, reporting those unchecked' do
+      rules = ->(count) { (1..count).to_h { |index| [format('.claude/rules/rule-%03d.md', index), "A rule.\n"] } }
+      within = answers('example-owner/within')
+      within.files.merge!(rules.call(200), '.claude/rules/rule-200.md' => "Run /do.\n")
+      over = answers('example-owner/over')
+      over.files.merge!(rules.call(201), '.claude/rules/rule-201.md' => "Run /do.\n")
+      rule_read = ->(answer) { answer[:args].any? { |argument| argument.include?('/contents/.claude/rules/rule-') } }
+      expect_gh_login
+      expect_entries(within.entries)
+      expect_entries(over.entries.reject(&rule_read))
+
+      output = run_audit(within.repository, over.repository).last
+
+      expect(output['repositories'].map { |entry| entry['drift'] })
+        .to eq([["#{unshipped} do"], ['skill names unchecked: too many instruction files']])
+      expect(fake_runner.calls.count { |call| rule_read.call(args: call[:argv].drop(1)) }).to eq(200)
+    end
+
     it 'neither reads nor reports anything more of a personal repository' do
       repository = answers
       repository.files = { 'CLAUDE.md' => "Git tier: personal\n\nRun /do, then specialist-review.\n" }

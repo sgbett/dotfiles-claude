@@ -51,6 +51,10 @@ module RepoConsistency
     # A git object id, SHA-1 or SHA-256. A tree's id comes from GitHub and
     # goes into an API path.
     OBJECT_ID = /\A(?:[0-9a-f]{40}|[0-9a-f]{64})\z/
+    # Each instruction file not already read costs a contents GET, from the
+    # rate limit the whole estate's audit shares, so a repository with more
+    # goes unchecked rather than spending it.
+    MAX_FILE_READS = 200
 
     # +files+ are RepositoryReader's texts by path, CLAUDE.md's among them.
     def self.read(github, repository, branch:, files:)
@@ -127,6 +131,8 @@ module RepoConsistency
     # +types+ maps each path of the tree to its type.
     def scan(types)
       paths = types.keys.select { |path| types[path] == FILE_TYPE && SkillPaths.instruction_file?(path) }.sort
+      return SkillScan.new(unchecked: :too_many) if paths.count { |path| !@files.key?(path) } > MAX_FILE_READS
+
       SkillScan.new(texts: paths.map { |path| text(path) }, shipped: shipped(types))
     rescue SkillSupport::UnexpectedResponse
       SkillScan.new(unchecked: :unreadable)
