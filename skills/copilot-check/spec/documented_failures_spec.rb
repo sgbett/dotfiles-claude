@@ -2,9 +2,10 @@
 
 require_relative 'support/gate_calls'
 
-# A failure the rules document is one whose check name matches and every one
-# of whose failure annotations carries a text the rules give for it, its
-# annotations read only through an Actions job link here.
+# A failure the rules document is one whose check name matches and whose
+# failure annotations, bar one runner exit-code line, are at least one and
+# each carry a text the rules give for it, its annotations read only through
+# an Actions job link here.
 RSpec.describe CopilotCheck::DocumentedFailures do
   include CopilotCheck::Testing::GateCalls
 
@@ -37,9 +38,10 @@ RSpec.describe CopilotCheck::DocumentedFailures do
     end)
   end
 
-  it 'documents a failure only when every one of its failure annotations carries a text the rules give for it, ' \
-     'whatever its notices and warnings say' do
-    document(text, exit_code)
+  # The rules needn't quote the runner's exit-code line: it is on every
+  # failed run: step, not a text of the check's own.
+  it "documents a failure whose failure annotations, bar the runner's exit-code line, each carry a text the " \
+     'rules give for it, whatever its notices and warnings say' do
     expect_annotations([exit_code, "#{text}\n", ['Node.js 16 actions are deprecated.', 'warning'],
                         ['Tests were skipped.', 'notice']])
 
@@ -47,9 +49,34 @@ RSpec.describe CopilotCheck::DocumentedFailures do
   end
 
   it "holds a failure with any failure annotation the rules don't give, beside one they do" do
-    expect_annotations([exit_code, text])
+    expect_annotations([text, 'Tests failed.'])
 
     expect(documented_failures.documented?(failed('CI result'))).to be(false)
+  end
+
+  it "holds the runner's exit-code line alone, even when the rules give it" do
+    expect_annotations([exit_code])
+    expect_annotations([exit_code])
+
+    unquoted = documented_failures.documented?(failed('CI result'))
+    document(text, exit_code)
+
+    expect([unquoted, documented_failures.documented?(failed('CI result'))]).to eq([false, false])
+  end
+
+  it 'sets aside only one exit-code line, as a second means a second step failed' do
+    expect_annotations([text, exit_code, exit_code])
+
+    expect(documented_failures.documented?(failed('CI result'))).to be(false)
+  end
+
+  it 'takes any exit code, a Windows one negative, as the exit-code line, and nothing else like it' do
+    ['Process completed with exit code 137.', "Process completed with exit code -1073741819.\n",
+     'Process completed with exit code 1', 'Process completed with exit code 1. The suite failed.'].each do |line|
+      expect_annotations([text, line])
+    end
+
+    expect(Array.new(4) { documented_failures.documented?(failed('CI result')) }).to eq([true, true, false, false])
   end
 
   it 'holds a failure whose name matches but whose annotations do not' do
