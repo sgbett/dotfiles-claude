@@ -120,7 +120,7 @@
   "promptSuggestionEnabled": false,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
-  "theme": "dark-ansi",
+  "theme": "light-ansi",
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true
