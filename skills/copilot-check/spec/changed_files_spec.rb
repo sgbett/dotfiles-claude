@@ -53,6 +53,12 @@ RSpec.describe CopilotCheck::ChangedFiles do
     expect { files.list(here, 18, changed_files: 1) }.to raise_error(SkillSupport::UnexpectedResponse)
   end
 
+  it "fails on a path that isn't UTF-8, which it can't compare as a file system would open it" do
+    expect_files_step(pages: [%([{"filename":"a\xFF.md"}])])
+
+    expect { files.list(here, 18, changed_files: 1) }.to raise_error(SkillSupport::UnexpectedResponse)
+  end
+
   describe '.protected?' do
     it 'holds workflows and actions, any CLAUDE.md, and anything else under a .claude directory, ignoring case' do
       %w[.github/workflows/ci.yml .github/actions/setup/action.yml CLAUDE.md docs/claude.md .claude/rules/a.md
@@ -119,6 +125,22 @@ RSpec.describe CopilotCheck::ChangedFiles do
     it "holds a plan that a name or directory protects regardless, as the plans exemption is only the .claude rule's" do
       %w[.claude/plans/CLAUDE.md .claude/plans/x/.mcp.json .github/skills/x/.claude/plans/y.md].each do |path|
         expect(described_class.protected?(path)).to be(true), path
+      end
+    end
+
+    it 'holds a path that HFS+ or NTFS opens as a protected one, without default-ignorable code points or ' \
+       'trailing dots and spaces' do
+      [".claude\u200C/rules/x.md", 'CLAUDE.md.', 'CLAUDE.md ', '.claude./settings.json',
+       ".github/workflows\u200B/ci.yml", "AGENTS.md\u00AD", '.github./copilot-instructions.md'].each do |path|
+        expect(described_class.protected?(path)).to be(true), path.inspect
+      end
+    end
+
+    it 'holds a .claude or plans segment that only normalises to its name, rather than widen the exemption' do
+      expect(described_class.protected?('.claude/plans/x.md')).to be(false)
+      [".claude/plans\u200C/.claude/x", '.claude/plans./x', ".claude/plans\u200C/x.md", ".claude\u200C/plans/x.md",
+       '.claude/plans/ /x.md', '.claude/plans/.../x.md'].each do |path|
+        expect(described_class.protected?(path)).to be(true), path.inspect
       end
     end
 
