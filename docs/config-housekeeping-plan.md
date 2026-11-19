@@ -4,6 +4,7 @@
 **Status:** Agreed 14 Oct; refined 16 Oct — #7-bundle gap resolved, `/do` adopted as a parallel-build + cutover (D7/D8), all other work paused while underway. First cut and specialist panel folded in (§7, D9–D11). Prerequisite (step 0) and W0 (building `/do`) done; W1–W2 delivered by `/do 9` on 16 Oct (§8). Merged as #10 and W4 done, 17 Oct.
 **Tracking:** [sgbett/dotfiles-claude#9](https://github.com/sgbett/dotfiles-claude/issues/9)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` `@import` mechanism and the first bundle (`git-workflow.md`), then closed. The shareable work-organisation bundle itself is created here (Step 7) on that mechanism.
+**Names:** below, "the app repository" is portfoliobuilder and "its support repository" is portfoliobuilder-support.
 
 ---
 
@@ -23,8 +24,8 @@ The config should support one way of working and get out of its way:
 
 ### 2.1 `/do-hlr` imposes its own conventions
 
-- `skills/do-hlr/SKILL.md` pre-flight step 0.4 creates `feat/$ARGUMENTS-<slug>`. portfoliobuilder's `.claude/rules/git-workflow.md` defines `{type}/{identifier}_{title}`: `fix/` is the default type, and long-running projects use hierarchical `project/#NN_title/master` and `project/#NN_title/#NNNN_sub-title`. Its history has 22 `fix/` and 20 `feature/` branches and no `feat/`.
-- Pre-flight step 0.5 looks for `.claude/plans/YYYYMMDD-$ARGUMENTS-<slug>.md`. portfoliobuilder's docs say `yyyymmdd-name`, and 51 of its 52 plans follow them. In this repo, tracked plans live in `docs/` (`plans/` is gitignored), so step 0.5 never finds one.
+- `skills/do-hlr/SKILL.md` pre-flight step 0.4 creates `feat/$ARGUMENTS-<slug>`. the app repository's `.claude/rules/git-workflow.md` defines `{type}/{identifier}_{title}`: `fix/` is the default type, and long-running projects use hierarchical `project/#NN_title/master` and `project/#NN_title/#NNNN_sub-title`. Its history has 22 `fix/` and 20 `feature/` branches and no `feat/`.
+- Pre-flight step 0.5 looks for `.claude/plans/YYYYMMDD-$ARGUMENTS-<slug>.md`. the app repository's docs say `yyyymmdd-name`, and 51 of its 52 plans follow them. In this repo, tracked plans live in `docs/` (`plans/` is gitignored), so step 0.5 never finds one.
 - Pre-flight step 0.3 stops on a dirty tree. An uncommitted plan makes the tree dirty, and step 0.3 runs before step 0.5 commits the plan.
 
 ### 2.2 Two hierarchy mechanisms
@@ -34,10 +35,10 @@ The config should support one way of working and get out of its way:
 
 ### 2.3 Competing layers
 
-- **`agents/project-manager.md`** duplicates `/do-hlr`: orchestration, HLR conventions and `feat/123-name` branches. It also tells the agent to `git stash` before switching branches, which conflicts with portfoliobuilder's multi-session rules. Nothing references it.
+- **`agents/project-manager.md`** duplicates `/do-hlr`: orchestration, HLR conventions and `feat/123-name` branches. It also tells the agent to `git stash` before switching branches, which conflicts with the app repository's multi-session rules. Nothing references it.
 - **`agents/white-hat.md`** has a generic core, but its "Domain-Specific Focus Areas" section and the examples in its description are about blockchain SDKs and wallets.
-- **`/do-hlr` pipeline step 6** triggers the security gate on `crypto / key / signature / BEEF / merkle / interpreter / operations/`. Those patterns fit the BSV projects. They miss what matters in portfoliobuilder: authorisation (`ability.rb`), multi-tenancy, mass assignment.
-- **`playbooks/specialist-review-timing.md`** (about 230 lines) has a useful generic core: plan reviews check intent and PR reviews check the diff. Around it are prescriptive checkpoint templates and portfoliobuilder material ("Lessons from PostgreSQL Upgrade", the strong-parameters example). The global `CLAUDE.md` "Reviews" section points at it.
+- **`/do-hlr` pipeline step 6** triggers the security gate on `crypto / key / signature / BEEF / merkle / interpreter / operations/`. Those patterns fit the BSV projects. They miss what matters in the app repository: authorisation (`ability.rb`), multi-tenancy, mass assignment.
+- **`playbooks/specialist-review-timing.md`** (about 230 lines) has a useful generic core: plan reviews check intent and PR reviews check the diff. Around it are prescriptive checkpoint templates and the app repository material ("Lessons from PostgreSQL Upgrade", the strong-parameters example). The global `CLAUDE.md` "Reviews" section points at it.
 - **`agents/technical-analyst.md`** has `memory: user` and tells the agent to "update your agent memory" with design decisions. That puts decisions where the record can't see them.
 
 ### 2.4 Unused frameworks
@@ -53,12 +54,12 @@ Usage is counted from `history.jsonl` on 14 Oct 2026. For comparison, `/do-hlr` 
 
 ### 2.5 Preferences in the wrong place
 
-- portfoliobuilder's auto-memory holds preferences that apply everywhere:
+- the app repository's auto-memory holds preferences that apply everywhere:
   - report distinct problems plainly;
   - one ticket per area, with line items;
   - prefer inline fixes over follow-ups.
 - Its `MEMORY.md` "Learned (2026-02-05)" section restates the Decision Protocol and the HLR flow.
-- The two-axis authorisation decision existed only in a memory file. It is now recorded on bettison-org/portfoliobuilder#1234, which already has an ADR acceptance criterion.
+- The two-axis authorisation decision existed only in a memory file. It is now recorded on the app repository's #1234, which already has an ADR acceptance criterion.
 
 ### 2.6 Working-tree drift
 
@@ -77,7 +78,7 @@ Usage is counted from `history.jsonl` on 14 Oct 2026. For comparison, `/do-hlr` 
 | D6 | The HLR conventions' portable part (what an HLR is, when to create one, the capture template, `project:hlr`, `[HLR]`, the sub-issue closure gotcha) moves into the work-organisation bundle; the `/do <issue>` invocation and the `workflow-guide.md` pointer stay inline as private wiring. | Settled 16 Oct |
 | D7 | Replace `/do-hlr` with `/do` by **parallel-change**, not in-place rename: build `/do` as a new skill (Step 1), validate it while `/do-hlr` stays untouched as the fallback, then retire `/do-hlr` and sweep references at cutover (Step 8). "HLR" is a misnomer once it's the general approach. | Agreed 16 Oct |
 | D8 | While #9 is underway, pause all other work — one focused effort. `/do-hlr` stays available only as the migration's rollback until cutover. | Agreed 16 Oct |
-| D9 | Content leaving this repo lands first, by a small PR in its own repo (BSV security focus → bsv-ruby-sdk, bsv-wallet; `/do-hlr` references → portfoliobuilder, bsv-ruby-sdk). #9 merges only after those PRs. Retiring all `do:` commands, `/setup`, `/project:current` and `/plan:feature|prd|brainstorm` is confirmed. | Agreed 16 Oct |
+| D9 | Content leaving this repo lands first, by a small PR in its own repo (BSV security focus → bsv-ruby-sdk, bsv-wallet; `/do-hlr` references → the app repository, bsv-ruby-sdk). #9 merges only after those PRs. Retiring all `do:` commands, `/setup`, `/project:current` and `/plan:feature|prd|brainstorm` is confirmed. | Agreed 16 Oct |
 | D10 | Machine-local edits (auto-memory, `agent-memory/`, `vendor/`) happen after #9 merges, because `git checkout master` can't roll them back. Deletions of untracked files go to `.trash/`, not `rm`. | Lead, 16 Oct (panel) |
 | D11 | Steps 2–8 run in a fresh session as `/do 9`, resuming from the record — this proves the record is sufficient, and agent definitions and `CLAUDE.md` only load at session start. | Lead, 16 Oct (panel) |
 
@@ -134,7 +135,7 @@ Build `/do` **first**, as a new skill (start from a copy of `/do-hlr`), leaving 
 
 - Keep the generic insight: review the plan before the work, review the diff before merge, and know that a plan review can't catch what isn't in the plan.
 - Prefer folding it into `/do-hlr`'s specialist step and deleting the playbook. Failing that, trim it to about 20 lines.
-- Move "Lessons from PostgreSQL Upgrade" and the strong-parameters example to portfoliobuilder, next to the plan or review they came from.
+- Move "Lessons from PostgreSQL Upgrade" and the strong-parameters example to the app repository, next to the plan or review they came from.
 - Update the global `CLAUDE.md` "Reviews" section to match.
 
 ### Step 6: frameworks and README
@@ -148,7 +149,7 @@ Build `/do` **first**, as a new skill (start from a copy of `/do-hlr`), leaving 
 
 - Add "report distinct problems plainly" to the global `CLAUDE.md` Communication section. Multi-finding reports open with a numbered list of the distinct problems, in plain words, with no asides and precise nouns.
 - Create `profiles/work-organisation.md` — the shareable bundle #7's mechanism enables — and put the team practices there (one ticket per area with line items; fix inline rather than filing follow-ups). Import it from the global `CLAUDE.md`. Don't put them inline.
-- portfoliobuilder `MEMORY.md`:
+- the app repository's `MEMORY.md`:
   - drop "Learned (2026-02-05)", which is covered by the global;
   - reduce the authorisation memory to a pointer to #1234;
   - check its remaining sections for staleness.
@@ -165,8 +166,8 @@ Build `/do` **first**, as a new skill (start from a copy of `/do-hlr`), leaving 
 ## 5. Out of scope
 
 - How shared bundles reach a second developer (distribution beyond a local `@import`) belongs to #7's remit, not #9. The bundle's *creation* is now in scope here (Step 7), because #7 closed with only the mechanism and `git-workflow.md`.
-- portfoliobuilder's authorisation ADR is already a criterion on bettison-org/portfoliobuilder#1234, and the decision is recorded there as a comment.
-- portfoliobuilder's plan naming needs no change, because its docs and plans already agree.
+- the app repository's authorisation ADR is already a criterion on the app repository's #1234, and the decision is recorded there as a comment.
+- the app repository's plan naming needs no change, because its docs and plans already agree.
 
 ## 6. Verification
 
@@ -175,7 +176,7 @@ Build `/do` **first**, as a new skill (start from a copy of `/do-hlr`), leaving 
 - `git ls-files -s | awk '$1==120000{print $4}' | while read l; do [ -e "$l" ] || echo "BROKEN $l"; done` prints nothing (today it prints `commands/project/current.md`).
 - `grep -h '^name:' skills/*/SKILL.md | sort | uniq -d` prints nothing (no two skills share a name).
 - `/context` in a fresh session shows the global and its bundles loading; the skill list shows `do`, and `plan:tasks` as the only `plan:` command, with no `speckit:*` or `do:*`.
-- Read `/do` against portfoliobuilder issues without checking anything out: #2076 → `fix/#2076_…`, PR to upstream; #1174 → base `project/#11_rails-upgrade/master`; #1742 → no plan of its own, two context plans.
+- Read `/do` against the app repository's issues without checking anything out: #2076 → `fix/#2076_…`, PR to upstream; #1174 → base `project/#11_rails-upgrade/master`; #1742 → no plan of its own, two context plans.
 - After step 8: `git grep -n "do-hlr" -- . ':!docs/*-plan.md'` finds nothing (this plan's audit keeps the historical name).
 
 ## 7. Execution detail (first cut and specialist panel, 16 Oct)
@@ -204,7 +205,7 @@ The first cut and the panel's augmentations are on #9. The `<!-- do:breakdown --
   - its memory rule follows step 4;
   - migrate none of its audit memory anywhere.
 - **Step 4.** Also drop the description's "proactively use on every new issue/HLR" trigger, which competes with `/do`, and its BSV examples. The 32 legacy `hlrNNN_*` analysis files stay where they are (out of scope).
-- **Step 5.** Nothing to move: portfoliobuilder already holds the lessons. Delete the playbook and drop the `CLAUDE.md` "Reviews" pointer. The generic line lives in `/do`'s specialist step.
+- **Step 5.** Nothing to move: the app repository already holds the lessons. Delete the playbook and drop the `CLAUDE.md` "Reviews" pointer. The generic line lives in `/do`'s specialist step.
 - **Step 6.** Also:
   - remove `contexts` (a claude-workflow link used only by `/do:task`) and the already-broken `commands/project/current.md`;
   - update `scripts/vendor-setup.sh:26–34`, `SETUP.md:59–68`, `SKILLS.md:136`, `commands/dotfiles-setup.md:51,124` and `skills/repo-consistency/SKILL.md:34,41,43,274`;
@@ -215,17 +216,17 @@ The first cut and the panel's augmentations are on #9. The `<!-- do:breakdown --
   - "TBC means ask" moves there too, from technical-analyst's memory.
   - "Don't modify files outside the objective" is reconciled with "fix inline": an opportunistic fix becomes a recorded line item.
 
-  portfoliobuilder's `MEMORY.md` edits wait for W4.
+  the app repository's `MEMORY.md` edits wait for W4.
 - **Step 8.** Reword, don't just rename:
   - the `CLAUDE.md` HLR section, since `/do` isn't only for HLRs;
   - `workflow-guide.md:9`: line items, not sub-issues;
   - the guide's "small changes skip all of this" and "delete or archive the original".
 
-  The `/do-hlr` references in other repos (portfoliobuilder `CLAUDE.md`, bsv-ruby-sdk `.claude/commands/codebase-audit.md`) go in the D9 PRs. The machine-local memory sweep happens in W4: read each file rather than search-and-replace, and leave history alone.
+  The `/do-hlr` references in other repos (the app repository's `CLAUDE.md`, bsv-ruby-sdk `.claude/commands/codebase-audit.md`) go in the D9 PRs. The machine-local memory sweep happens in W4: read each file rather than search-and-replace, and leave history alone.
 
 **Also out of scope:**
 - bsv-ruby-sdk's own project-level `project-manager.md` and `technical-analyst.md`;
-- the `portfoliobuilder-staging` clone;
+- the staging clone of the app repository;
 - historical memories. For example, cabinet's `do-hlr-missing-piece.md` stays as it is: `/do` is a conventions successor, not Cabinet's M6 revision.
 
 **Settled at the W0 handoff (16 Oct):** only bsv-ruby-sdk and bsv-wallet get a `## Security focus` section in #9. The other BSV-adjacent repos (runar, x402-rack, x100-rack, secp256k1-native, the x420 suite) are an accepted gap: `/do`'s default gate still triggers there on crypto, keys and signatures, and each repo gets its own section when it's next worked on.
@@ -239,7 +240,7 @@ Where delivery went beyond or corrected §7:
 - **Cross-repo PRs (D9), merged 17 Oct before #9:**
   - [sgbett/bsv-ruby-sdk#924](https://github.com/sgbett/bsv-ruby-sdk/pull/924): `## Security focus`, plus `codebase-audit.md` pointing at `/do`;
   - [sgbett/bsv-wallet#543](https://github.com/sgbett/bsv-wallet/pull/543): `## Security focus`, with the wallet's own trigger paths (it has no interpreter);
-  - [bettison-org/portfoliobuilder#2080](https://github.com/bettison-org/portfoliobuilder/pull/2080): `CLAUDE.md` points at `/do`.
+  - the app repository's #2080: `CLAUDE.md` points at `/do`.
 - **Step 6: the claude-workflow clone is no longer set up.**
   - With `/plan:tasks` tracked as a copy, nothing tracked resolves into `vendor/claude-workflow`, so `scripts/vendor-setup.sh` and `SETUP.md` no longer clone it.
   - The copy carries the MIT notice. Upstream declares MIT only in its README, so the copyright line is reconstructed from the upstream author and year.
@@ -268,11 +269,11 @@ Where delivery went beyond or corrected §7:
   - not filed: a `## Security focus` for secp256k1-native and runar, each added when that repo is next worked on (§7).
 - **W4 (17 Oct, after #10 merged).** Everything moved is in `.trash/pre-9-w4/`:
   - `agent-memory/project-manager/`, `vendor/claude-workflow`, and `vendor/spec-kit` too (a clean clone, so trashed rather than deleted, per D10);
-  - portfoliobuilder `MEMORY.md` (83 → 56 lines; the original is in the trash):
+  - the app repository's `MEMORY.md` (83 → 56 lines; the original is in the trash):
     - "Learned (2026-02-05)" is dropped;
     - the authorisation memory is a pointer to the decision comment on #1234;
     - the three preference memories now in the global or the bundle (inline fixes, distinct problems, one ticket per area) are retired, along with the two links to them;
     - the nonce-bug section is a pointer, since #1845 closed on 19 Mar and its record is tracked in the repo;
     - the two "Working preferences" sections are merged;
   - technical-analyst's "TBC means ask" memory is a pointer to the global;
-  - the `/do-hlr` sweep updated four live memories (bsv-ruby-sdk commit-per-task, bsv-wallet plan-first, portfoliobuilder-support plans-set-direction, bsv-zig-sdk HLR scope) and two index lines. History stays: cabinet's design memories, portfoliobuilder-support's finished July run, and the zig memory's incident.
+  - the `/do-hlr` sweep updated four live memories (bsv-ruby-sdk commit-per-task, bsv-wallet plan-first, its support repository plans-set-direction, bsv-zig-sdk HLR scope) and two index lines. History stays: cabinet's design memories, the support repository's finished July run, and the zig memory's incident.

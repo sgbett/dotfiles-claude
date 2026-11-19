@@ -4,6 +4,7 @@
 **Status:** Review complete. Tier 1 landed (#31 and the vendoring PR); Tiers 2 and 3 are in progress under #30, with the decisions of 2026-11-18 in section 12.
 **Tracking:** [sgbett/dotfiles-claude#30](https://github.com/sgbett/dotfiles-claude/issues/30)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` mechanism this review builds on.
+**Names:** below, "the app repository" is portfoliobuilder and "its support repository" is portfoliobuilder-support.
 
 ---
 
@@ -17,7 +18,7 @@ Method: a scan of this repository's precedence hierarchy (global `CLAUDE.md`, im
 
 **Indecision?** No. "Rebase" appears in the prompt history every month from December 2025 to November 2026, with no gap. The only axis that moved was landing: squash to merge commit, decided once on 2026-03-22 and never revisited.
 
-**Decided but not propagated?** Yes, exactly this. On 2026-03-22: "this is going to be my global preference going forwards… make sure that nothing in ~/.claude/* contravenes this", and in the same hour, "I would mitigate that by doing a lot of rebasing on the feature branch before merging and that still remains an option." The landing rule reached the global `CLAUDE.md` on 2026-06-21 and the profile when it was extracted on 2026-08-18. The upkeep rule only ever reached portfoliobuilder's project file (2026-02-17, sharpened 2026-11-11 and 12). Every other repository and the profile said nothing about upkeep.
+**Decided but not propagated?** Yes, exactly this. On 2026-03-22: "this is going to be my global preference going forwards… make sure that nothing in ~/.claude/* contravenes this", and in the same hour, "I would mitigate that by doing a lot of rebasing on the feature branch before merging and that still remains an option." The landing rule reached the global `CLAUDE.md` on 2026-06-21 and the profile when it was extracted on 2026-08-18. The upkeep rule only ever reached the app repository's project file (2026-02-17, sharpened 2026-11-11 and 12). Every other repository and the profile said nothing about upkeep.
 
 **Relitigating a rejected relic?** No. The relic was squash, the old "keep master clean" strategy. Rebase was explicitly retained the day squash was dropped, and the first-parent view is what made the landing choice stop mattering.
 
@@ -30,7 +31,7 @@ Six, of which 1 and 2 are one problem (a vacuum in the global rule, filled by a 
 3. **The 13 to 17 November bsv-ruby-sdk session was internally inconsistent.** It rebased and force-pushed with a lease on three PRs, and merged master into two others by hand during a `/do` pre-flight, unannounced, plus one more on a fork for an advisory. The justification cited "the git-workflow rules and `/do`"; the profile had no force-push line. That repository had no back-merges before November.
 4. **"Merge commits, not squash" was prose-only everywhere except bsv-wallet.** Every other repository left GitHub's default merge methods enabled; secp256k1-native rebase-merged all four of its PRs since August. `settings.json`'s force-push `ask` is also leaky (`git push origin --force`, `+ref` and `gh api` ref updates fall through to the broad `git *` allow), a breadth kept deliberately in #12.
 5. **The personal-repo carve-out was declared four different ways** across the personal workspaces and not at all in several repositories. amanuensimus, which is public, cited a stale rationale ("pending the per-project profiles feature"). All four gems' `/release` commands (bsv-ruby-sdk, bsv-wallet, secp256k1-native, x402-rack) push straight to master against the rule, and bsv-wallet's protection now rejects that.
-6. **Stale text:** portfoliobuilder `docs/worktree-setup.md` "Use merge (not rebase)" (January 2026, never updated); its ADR-002 lists `git revert` as a rollback option; one private repository defaults to `main`.
+6. **Stale text:** the app repository's `docs/worktree-setup.md` "Use merge (not rebase)" (January 2026, never updated); its ADR-002 lists `git revert` as a rollback option; one private repository defaults to `main`.
 
 ## 4. The position over time
 
@@ -47,7 +48,7 @@ The one apparent counter-example, 2026-08-15 "instead of rebase merge master", w
 
 | Cluster | Repositories | Written landing rule | Written upkeep rule | Server-side enforcement |
 |---|---|---|---|---|
-| Private, commercial | portfoliobuilder, portfoliobuilder-support, rcpsych-intel and one other | portfoliobuilder and -support yes; others none | portfoliobuilder only | checked; private repositories' state stays in the session, not in this public file |
+| Private, commercial | the app repository, its support repository, rcpsych-intel and one other | the app repository and its support repository yes; others none | the app repository only | checked; private repositories' state stays in the session, not in this public file |
 | Open-source BSV | bsv-ruby-sdk, bsv-wallet, secp256k1-native, x402-rack, bsv-x402, and one not yet public | sdk `CONTRIBUTING.md` yes; wallet README no strategy; rest none | none | bsv-wallet only (`allowed_merge_methods: ["merge"]`, classic protection with `enforce_admins`) |
 | Claude workspaces | cabinet, amanuensimus, one organisation workspace, and five personal workspaces | cabinet yes; the personal ones declare the carve-out variously; two undeclared | none | cabinet checked, state in the session; the personal ones none |
 | External clones | bsv-blockchain SDKs and toolboxes, Homebrew | upstream's | not ours | not ours |
@@ -97,17 +98,17 @@ So the distribution model is:
 
 Three tiers, not public/private. Decided 2026-11-17.
 
-- **Collaborative** (PR-only, merge commits, rebase upkeep, ruleset-enforced): portfoliobuilder, portfoliobuilder-support, cabinet, bsv-ruby-sdk, bsv-wallet, secp256k1-native, x402-rack, bsv-x402, two private repositories, and every repository under the private organisation; the session record names them. Visibility and organisation don't change the rules, only whether contributor-facing docs restate them.
+- **Collaborative** (PR-only, merge commits, rebase upkeep, ruleset-enforced): the app repository, its support repository, cabinet, bsv-ruby-sdk, bsv-wallet, secp256k1-native, x402-rack, bsv-x402, two private repositories, and every repository under the private organisation; the session record names them. Visibility and organisation don't change the rules, only whether contributor-facing docs restate them.
 - **Personal** (commit straight to master, one declared line): rcpsych-intel, amanuensimus, this repository (per the existing memory), and the remaining personal workspaces.
 - **External clones** (upstream's rules; the profile doesn't apply): bsv-blockchain's repositories, Homebrew.
 
 ## 10. Cleanup
 
-**Tier 1, the actual conflict (done under #30):** the profile gains the upkeep, force-push scope and cite-PRs lines; `/do`'s Git invariant narrows scope only and defers to the profile, with provenance in the commit body; portfoliobuilder's rule splits into a vendored copy of the profile plus a differences file; the memory note records the standing preference.
+**Tier 1, the actual conflict (done under #30):** the profile gains the upkeep, force-push scope and cite-PRs lines; `/do`'s Git invariant narrows scope only and defers to the profile, with provenance in the commit body; the app repository's rule splits into a vendored copy of the profile plus a differences file; the memory note records the standing preference.
 
-**Tier 2, enforcement (in progress under #30):** the ruleset template (`profiles/git-workflow/ruleset.json` and `repository.json`) applied to every collaborative repository by the runbook's commands, no bypass actors, classic protection removed only where it adds nothing; the optional work-branch linear-history ruleset deferred; the push-guard hook, `hooks.json` and `setup.md` as profile assets, vendored into portfoliobuilder once this lands; the owner's `ask` globs narrowed to a bare force and the hook wired into the global settings; `git-settings audit` under `repo-consistency` reporting drift. Deferred, the owner's call: a second ruleset (`deletion`, `non_fast_forward`) for `project/**` and `releases/**`, which the default-branch ruleset leaves to the hook; a tag ruleset, so a release tag can't be moved; and an ask on a non-GET `gh api` call, which the broad `gh api` allow of #12 lets through to the refs API and the rulesets themselves.
+**Tier 2, enforcement (in progress under #30):** the ruleset template (`profiles/git-workflow/ruleset.json` and `repository.json`) applied to every collaborative repository by the runbook's commands, no bypass actors, classic protection removed only where it adds nothing; the optional work-branch linear-history ruleset deferred; the push-guard hook, `hooks.json` and `setup.md` as profile assets, vendored into the app repository once this lands; the owner's `ask` globs narrowed to a bare force and the hook wired into the global settings; `git-settings audit` under `repo-consistency` reporting drift. Deferred, the owner's call: a second ruleset (`deletion`, `non_fast_forward`) for `project/**` and `releases/**`, which the default-branch ruleset leaves to the hook; a tag ruleset, so a release tag can't be moved; and an ask on a non-GET `gh api` call, which the broad `gh api` allow of #12 lets through to the refs API and the rulesets themselves.
 
-**Tier 3, drift (in progress under #30):** one standard tier line (`Git tier: collaborative` or `Git tier: personal`) in each repository's `CLAUDE.md`; amanuensimus's stale rationale; the gem release bump routed via PR with the tag pushed direct; the stale lines in portfoliobuilder's `docs/worktree-setup.md` and ADR-002; the repository still on `main` renamed; `repo-consistency`'s git section running the audit.
+**Tier 3, drift (in progress under #30):** one standard tier line (`Git tier: collaborative` or `Git tier: personal`) in each repository's `CLAUDE.md`; amanuensimus's stale rationale; the gem release bump routed via PR with the tag pushed direct; the stale lines in the app repository's `docs/worktree-setup.md` and ADR-002; the repository still on `main` renamed; `repo-consistency`'s git section running the audit.
 
 ## 11. Rules against future slippage
 
