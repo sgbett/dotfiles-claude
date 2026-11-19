@@ -4,8 +4,8 @@ require_relative 'support/gate_calls'
 
 # A failure the rules document is one whose check name matches and whose
 # failure annotations, bar one runner exit-code line, are at least one and
-# each carry a text the rules give for it, its annotations read only through
-# an Actions job link here.
+# each carry a text the rules give for it other than an exit-code line, its
+# annotations read only through an Actions job link here.
 RSpec.describe CopilotCheck::DocumentedFailures do
   include CopilotCheck::Testing::GateCalls
 
@@ -68,6 +68,17 @@ RSpec.describe CopilotCheck::DocumentedFailures do
     expect_annotations([text, exit_code, exit_code])
 
     expect(documented_failures.documented?(failed('CI result'))).to be(false)
+  end
+
+  it 'never takes an exit-code line the rules quote as documenting anything, as it would pass a second failed step' do
+    document(exit_code)
+    expect(documented_failures.documented?(failed('CI result'))).to be(false)
+
+    document(text, exit_code)
+    expect_annotations([exit_code, exit_code])
+    expect_annotations([text, exit_code])
+
+    expect(Array.new(2) { documented_failures.documented?(failed('CI result')) }).to eq([false, true])
   end
 
   it 'takes any exit code, a Windows one negative, as the exit-code line, and nothing else like it' do

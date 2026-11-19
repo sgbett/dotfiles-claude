@@ -8,9 +8,10 @@ module CopilotCheck
   # its name must match an expected failure's, and its failure annotations,
   # bar one runner exit-code line, must be at least one and each carry a
   # text the rules give for that check, so that a real failure beside the
-  # documented one isn't passed. The annotations are read only through a
-  # GitHub Actions job link in this repository, whose last number is the
-  # check run's id; their text is data, compared and never printed.
+  # documented one isn't passed. An exit-code line in the rules documents
+  # nothing. The annotations are read only through a GitHub Actions job
+  # link in this repository, whose last number is the check run's id; their
+  # text is data, compared and never printed.
   class DocumentedFailures
     # An annotations list longer than this is read no further, and leaves
     # the failure undocumented, as an annotation past it could be any.
@@ -20,7 +21,9 @@ module CopilotCheck
     # The runner adds this line to every failed run: step, so a check that
     # fails by design carries it beside its own text, and the rules needn't
     # quote it. A second copy means a second step failed, so only one is set
-    # aside. Windows exit codes are negative.
+    # aside, and the line never documents anything, even where the rules
+    # quote it, or quoting it would pass that second step. Windows exit codes
+    # are negative.
     EXIT_CODE_LINE = /\AProcess completed with exit code -?[0-9]+\.\z/
 
     # +github+ is the SkillSupport::Gh for the repository's host;
@@ -35,7 +38,7 @@ module CopilotCheck
 
     # +check+ is a failed Checks::Check.
     def documented?(check)
-      texts = @expected.select { |failure| failure.name == check.name }.map(&:text)
+      texts = @expected.select { |failure| failure.name == check.name }.map(&:text).grep_v(EXIT_CODE_LINE)
       job = @job_link.match(check.link.to_s)&.[](1)
       !texts.empty? && !job.nil? && every_failure_documented?(job, texts)
     end
@@ -44,7 +47,7 @@ module CopilotCheck
 
     # Whether check run +job+'s failure annotations, all of them read and one
     # runner exit-code line set aside, are at least one and each carries one
-    # of +texts+: that line alone documents nothing, even if the rules give it.
+    # of +texts+, which hold no exit-code line.
     def every_failure_documented?(job, texts)
       messages = failure_messages(job)
       return false if messages.nil?
