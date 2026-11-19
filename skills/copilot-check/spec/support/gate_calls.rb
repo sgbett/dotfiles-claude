@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../lib/copilot_check/promote_check'
+require_relative 'job_answers'
 require_relative 'lead_files'
 
 module CopilotCheck
@@ -12,6 +13,7 @@ module CopilotCheck
     #
     #   expect_gate(checks: { entries: [check_entry('lint', 'pending')] })
     module GateCalls
+      include JobAnswers
       include LeadFiles
 
       HERE = 'sgbett/dotfiles-claude'
@@ -105,16 +107,23 @@ module CopilotCheck
 
       # +entries+ are what gh pr checks lists, nil when no check has run;
       # +annotations+ each failed check's job id and its annotation texts,
-      # for those whose annotations are read.
-      def expect_checks_step(entries: [check_entry('test', 'pass')], annotations: {})
+      # for those whose annotations are read; +jobs+ each job id and its
+      # steps' conclusions, for those whose steps are read, which is once
+      # their annotations pass.
+      def expect_checks_step(entries: [check_entry('test', 'pass')], annotations: {}, jobs: {})
         if entries
           fake_runner.expect_call(CHECKS, stdout: as_json(entries))
         else
           fake_runner.expect_call(CHECKS, exit_status: 1, stderr: fixture('pr-checks/no-checks-18.stderr'))
         end
-        annotations.each do |job, texts|
-          fake_runner.expect_call(annotations_call(job), stdout: as_json(texts.map { |text| annotation(text) }))
-        end
+        annotations.each { |job, texts| expect_failure_reads(job, texts, jobs[job]) }
+      end
+
+      # A failed check's annotations, and its job's steps if +conclusions+
+      # are given.
+      def expect_failure_reads(job, texts, conclusions)
+        fake_runner.expect_call(annotations_call(job), stdout: as_json(texts.map { |text| annotation(text) }))
+        fake_runner.expect_call(job_call(job), stdout: as_json(job_response(job, conclusions))) if conclusions
       end
 
       # +reread+ is the pull request query's answer when mergeable was

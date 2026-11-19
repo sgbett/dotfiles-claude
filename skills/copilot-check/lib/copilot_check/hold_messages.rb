@@ -39,8 +39,9 @@ module CopilotCheck
       checks_cancelled: 'A check on the head was cancelled.',
       undocumented_failures: 'A check on the head failed, and the rules do not document that failure: by its ' \
                              'check name, with a text they give for it on each of its failure annotations bar the ' \
-                             "runner's exit-code line, which needs no entry and alone documents nothing, read " \
-                             'through a GitHub Actions job link in this repository.',
+                             "runner's exit-code line, which needs no entry and alone documents nothing, and " \
+                             'with exactly one failed step in its job, both read through a GitHub Actions job ' \
+                             'link in this repository.',
       not_mergeable: "GitHub doesn't report the pull request as MERGEABLE, after one re-read if it was UNKNOWN.",
       auto_merge_on: 'Auto-merge is on.'
     }.transform_values(&:freeze).freeze

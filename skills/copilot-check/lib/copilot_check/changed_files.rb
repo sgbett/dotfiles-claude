@@ -51,11 +51,12 @@ module CopilotCheck
     # or is under, a .claude directory other than as a plan in its plans/,
     # those last two at any depth, as Claude Code can start in any directory
     # of a checkout and GitHub doesn't say where Copilot looks for each.
-    # Claude Code doesn't load a plan, so one steers nothing more than any
-    # other document the pull request changes (#33). A pull request's files
-    # are never directories, so one at a directory's own path is a symlink
-    # or submodule in its place. Case is ignored, as a case-insensitive file
-    # system ignores it.
+    # Claude Code doesn't load a plan as configuration: an agent reads one
+    # once it is merged or when asked to, so a plan doesn't steer the
+    # pull request's own promotion (#33). A pull request's files are never
+    # directories, so one at a directory's own path is a symlink or submodule
+    # in its place. Case is ignored, as a case-insensitive file system
+    # ignores it.
     def self.protected?(path)
       name = File.basename(path)
       PROTECTED_DIRECTORIES.any? { |directory| "#{path.downcase}/".start_with?(directory) } ||
@@ -66,8 +67,13 @@ module CopilotCheck
     # Whether some .claude segment of +path+ isn't followed by a plans
     # segment with more after it. A path with an empty, . or .. segment gets
     # no plans exemption, as it may resolve to something other than a plan.
-    # Warning: the exemption assumes nothing Claude Code loads imports a
-    # plan, as @.claude/plans/x.md in a CLAUDE.md would.
+    # Warning: the exemption assumes nothing in the base that Claude Code
+    # loads or runs reaches into plans/: an import such as
+    # @.claude/plans/x.md in a CLAUDE.md, a symlink from a loaded place such
+    # as .claude/rules/x.md -> ../plans/x.md, or a hook, statusLine or MCP
+    # server command in the settings or .mcp.json that runs a script under
+    # .claude/plans/. Any of these would load or run a plan the pull request
+    # changes.
     def self.under_claude_directory?(path)
       parts = path.split('/', -1)
       exemptible = !parts.intersect?(UNRESOLVED_SEGMENTS)

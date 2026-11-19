@@ -7,11 +7,12 @@ module CopilotCheck
   # by design, such as a required aggregate that stays red on every draft:
   # its name must match an expected failure's, and its failure annotations,
   # bar one runner exit-code line, must be at least one and each carry a
-  # text the rules give for that check, so that a real failure beside the
-  # documented one isn't passed. An exit-code line in the rules documents
-  # nothing. The annotations are read only through a GitHub Actions job
-  # link in this repository, whose last number is the check run's id; their
-  # text is data, compared and never printed.
+  # text the rules give for that check, and its job must have exactly one
+  # failed step, so that a real failure beside the documented one isn't
+  # passed. An exit-code line in the rules documents nothing. The
+  # annotations and steps are read only through a GitHub Actions job link
+  # in this repository, whose last number is the job's id, which is its
+  # check run's; their text is data, compared and never printed.
   class DocumentedFailures
     # An annotations list longer than this is read no further, and leaves
     # the failure undocumented, as an annotation past it could be any.
@@ -22,9 +23,11 @@ module CopilotCheck
     # fails by design carries it beside its own text, and the rules needn't
     # quote it. A second copy means a second step failed, so only one is set
     # aside, and the line never documents anything, even where the rules
-    # quote it, or quoting it would pass that second step. Windows exit codes
-    # are negative.
+    # quote it, or quoting it would pass that second step. Its count doesn't
+    # stand in for the failed steps', which are read from the job too.
+    # Windows exit codes are negative.
     EXIT_CODE_LINE = /\AProcess completed with exit code -?[0-9]+\.\z/
+    FAILED_STEP = 'failure'
 
     # +github+ is the SkillSupport::Gh for the repository's host;
     # +repository+ its "owner/repo"; +expected+ the PromotionRules'
@@ -40,7 +43,7 @@ module CopilotCheck
     def documented?(check)
       texts = @expected.select { |failure| failure.name == check.name }.map(&:text).grep_v(EXIT_CODE_LINE)
       job = @job_link.match(check.link.to_s)&.[](1)
-      !texts.empty? && !job.nil? && every_failure_documented?(job, texts)
+      !texts.empty? && !job.nil? && every_failure_documented?(job, texts) && one_failed_step?(job)
     end
 
     private
@@ -59,6 +62,24 @@ module CopilotCheck
     def without_one_exit_code_line(messages)
       index = messages.index { |message| EXIT_CODE_LINE.match?(message) }
       index ? messages.reject.with_index { |_, position| position == index } : messages
+    end
+
+    # Whether job +job+ has exactly one failed step, the one the documented
+    # text is taken to come from. The exit-code lines can't tell: the runner
+    # caps a step's annotations at 10 of each type and a job's at 50, so a
+    # failed step's line can go missing.
+    # Warning: annotations name no step, so a step that adds the documented
+    # text and succeeds, beside another that fails, still passes. That takes
+    # a base-branch workflow built so, as a pull request changing one is
+    # held for its protected paths.
+    def one_failed_step?(job)
+      answer = @github.api("repos/#{@repository}/actions/jobs/#{job}")
+      steps = answer['steps'] if answer.is_a?(Hash) && answer['id'].to_s == job
+      unless steps.is_a?(Array) && steps.all?(Hash)
+        raise SkillSupport::UnexpectedResponse, "job #{job} came back without its steps"
+      end
+
+      steps.one? { |step| step['conclusion'] == FAILED_STEP }
     end
 
     # The text of each of the check run's failure annotations, nil for one

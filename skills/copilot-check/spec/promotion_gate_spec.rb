@@ -168,15 +168,22 @@ RSpec.describe CopilotCheck::PromotionGate do
 
   # The rules needn't quote the runner's exit-code line: it is on every
   # failed run: step, not a text of the check's own.
-  it "promotes past a documented failure beside the runner's exit-code line, which the rules don't give" do
+  it "promotes past a documented failure beside the runner's exit-code line, which the rules don't give, in a " \
+     'job with one failed step, and holds it in one with two' do
     text = 'The suite runs once the pull request is ready.'
-    expected = [{ name: 'CI result', text: text }]
-    expect_gate(checks: { entries: [check_entry('CI result', 'fail', job_link)],
-                          annotations: { 41 => [text, 'Process completed with exit code 1.'] } })
+    rules = rules_file(expected_failures: [{ name: 'CI result', text: text }])
+    checks = lambda do |conclusions|
+      { entries: [check_entry('CI result', 'fail', job_link)],
+        annotations: { 41 => [text, 'Process completed with exit code 1.'] }, jobs: { 41 => conclusions } }
+    end
 
-    output = run_promote_check(gate_arguments(rules: rules_file(expected_failures: expected))).last
-
+    expect_gate(checks: checks.call(CopilotCheck::Testing::JobAnswers::ONE_FAILED_STEP))
+    output = run_promote_check(gate_arguments(rules: rules)).last
     expect([output['verdict'], output['reasons'], output['checks'].first['documented']]).to eq(['PROMOTE', [], true])
+
+    expect_gate(checks: checks.call(%w[success failure failure]))
+    output = run_promote_check(gate_arguments(rules: rules)).last
+    expect([output['verdict'], output['checks'].first['documented']]).to eq(['HOLD', false])
   end
 
   it "holds a documented failure beside a failure annotation the rules don't give, and passes it once they do, " \
@@ -188,7 +195,8 @@ RSpec.describe CopilotCheck::PromotionGate do
 
     expect_gate(checks: failed.call(text, 'Tests failed.', exit_code))
     expect(run_promote_check(gate_arguments(rules: rules.call(text))).last['verdict']).to eq('HOLD')
-    expect_gate(checks: failed.call(text, 'Tests failed.', exit_code))
+    passing = failed.call(text, 'Tests failed.', exit_code)
+    expect_gate(checks: passing.merge(jobs: { 41 => CopilotCheck::Testing::JobAnswers::ONE_FAILED_STEP }))
     expect(run_promote_check(gate_arguments(rules: rules.call(text, 'Tests failed.'))).last['verdict'])
       .to eq('PROMOTE')
     expect_gate(checks: failed.call(exit_code))
@@ -198,7 +206,8 @@ RSpec.describe CopilotCheck::PromotionGate do
   it 'promotes past a failure the rules document by name and annotation text' do
     expected = [{ name: 'CI result', text: 'The suite runs once the pull request is ready.' }]
     expect_gate(checks: { entries: [check_entry('CI result', 'fail', job_link), check_entry('test', 'pass')],
-                          annotations: { 41 => ['The suite runs once the pull request is ready.'] } })
+                          annotations: { 41 => ['The suite runs once the pull request is ready.'] },
+                          jobs: { 41 => CopilotCheck::Testing::JobAnswers::ONE_FAILED_STEP } })
 
     output = run_promote_check(gate_arguments(rules: rules_file(expected_failures: expected))).last
 
