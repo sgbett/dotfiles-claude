@@ -8,9 +8,10 @@ require_relative 'vendored_paths'
 module RepoConsistency
   # The lines of drift between the template's projection and a
   # repository's, in a fixed order, each a fixed string or one built from a
-  # validated identifier or a field name. A personal repository is held
-  # only to its declaration; an undeclared one is reported against the
-  # template, since that is then the expectation.
+  # validated identifier, a field name or one of UserSkills' names, so no
+  # path or file text reaches one. A personal repository is held only to
+  # its declaration; an undeclared one is reported against the template,
+  # since that is then the expectation.
   module Drift
     LINEAR_HISTORY = 'required_linear_history'
     PLAN = 'rulesets unavailable on this plan'
@@ -20,6 +21,11 @@ module RepoConsistency
     # A ruleset's name is GitHub's text, so only a plain one reaches a line;
     # any other ruleset is named by its id.
     PLAIN_NAME = /\A[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}\z/
+    UNSHIPPED_SKILL = "names a skill it doesn't ship:"
+    SKILLS_UNCHECKED = { truncated: 'skill names unchecked: tree truncated',
+                         linked: 'skill names unchecked: symlink or submodule',
+                         unreadable: 'skill names unchecked: file too large or not a file',
+                         too_many: 'skill names unchecked: too many instruction files' }.freeze
 
     module_function
 
@@ -35,7 +41,8 @@ module RepoConsistency
       [plan_line(actual), rule_lines(expected, actual), pull_request_lines(expected, actual),
        linear_history_line(actual), ruleset_lines(expected, actual), flag_lines(expected, actual),
        protection_line(actual), branch_line(expected, actual), tier_line(actual),
-       rules_file_lines(expected, actual), hook_lines(expected, actual), settings_line(actual)].flatten.compact
+       rules_file_lines(expected, actual), hook_lines(expected, actual), settings_line(actual),
+       skill_lines(actual)].flatten.compact
     end
 
     def plan_line(actual)
@@ -113,8 +120,14 @@ module RepoConsistency
       end
     end
 
+    def skill_lines(actual)
+      return SKILLS_UNCHECKED.fetch(actual.skills_unchecked) if actual.skills_unchecked
+
+      actual.unshipped_skills.map { |name| "#{UNSHIPPED_SKILL} #{name}" }
+    end
+
     private_class_method :personal_lines, :collaborative_lines, :plan_line, :rule_lines, :pull_request_lines,
                          :linear_history_line, :ruleset_lines, :label, :flag_lines, :protection_line, :branch_line,
-                         :tier_line, :rules_file_lines, :hook_lines, :settings_line
+                         :tier_line, :rules_file_lines, :hook_lines, :settings_line, :skill_lines
   end
 end

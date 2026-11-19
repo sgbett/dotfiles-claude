@@ -10,7 +10,7 @@ RSpec.describe CopilotCheck::Reasons do
                 push_remote_not_head_repository checkout_not_at_head fork_pull_request scripts_unreviewed
                 copilot_id_changed])
     expect(described_class::THREADS).to eq(%i[copilot_id_changed copilot_unrecognised threads_overflow])
-    expect(described_class::REREVIEW).to eq(%i[copilot_id_changed copilot_timeout])
+    expect(described_class::REREVIEW).to eq(%i[copilot_request_refused copilot_id_changed copilot_timeout])
     expect(described_class::PROMOTE_CHECK)
       .to eq(%i[copilot_id_changed copilot_unrecognised threads_overflow head_changed head_unreadable
                 ready_state_unexpected])
@@ -32,6 +32,14 @@ RSpec.describe CopilotCheck::Reasons do
     expect(described_class::MESSAGES[:copilot_timeout])
       .to include('Copilot occasionally does not review, and nothing else may notice: say so plainly in the report.')
     expect(described_class::MESSAGES[:copilot_timeout]).not_to include('required approval')
+  end
+
+  it "names GitHub's reason in a refusal's message, the only message with a value to name" do
+    message = described_class.stop_naming(:copilot_request_refused, 'NO_QUOTA_REMAINING').to_h['message']
+
+    expect(message).to start_with("GitHub refused to request Copilot's review, giving failureReason " \
+                                  'NO_QUOTA_REMAINING, so no review of the push will come.')
+    expect(described_class::MESSAGES.select { |_, text| text.include?('%<') }.keys).to eq([:copilot_request_refused])
   end
 
   it "tells the lead what the user does about each checkout the run can't work in, and to run it again" do

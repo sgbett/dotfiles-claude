@@ -3,6 +3,7 @@
 require_relative 'checkout_calls'
 require_relative 'contents_calls'
 require_relative 'gate_calls'
+require_relative 'review_request_calls'
 require_relative 'script_runs'
 require_relative '../../lib/copilot_check/rereview'
 require_relative '../../lib/copilot_check/setup'
@@ -17,6 +18,7 @@ module CopilotCheck
       include CheckoutCalls
       include ContentsCalls
       include GateCalls
+      include ReviewRequestCalls
       include ScriptRuns
 
       PR_VIEW_FIELDS = 'number,baseRefName,headRefName,isCrossRepository,headRepository,headRepositoryOwner,isDraft,' \
@@ -137,15 +139,6 @@ module CopilotCheck
                                 stdin: graphql_request(ReviewRequest::PULL_REQUEST_ID,
                                                        PullRequestQuery.variables(HERE, GateCalls::NUMBER)),
                                 stdout: fixture('graphql/pull-request-id-18.json'))
-      end
-
-      def request_reviews_request
-        graphql_request(ReviewRequest::MUTATION, 'pullRequestId' => PULL_REQUEST_ID, 'botIds' => [Copilot::BOT_ID])
-      end
-
-      def expect_request_reviews(response, **result)
-        fake_runner.expect_call(GateCalls::GRAPHQL, stdin: request_reviews_request, stdout: as_json(response),
-                                                    **result)
       end
 
       # A GraphQL answer with errors saying each of +messages+, which gh

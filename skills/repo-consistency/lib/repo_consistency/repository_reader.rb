@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'repository_state'
+require_relative 'skill_scan_reader'
 require_relative 'vendored_paths'
 
 module RepoConsistency
@@ -17,9 +18,10 @@ module RepoConsistency
   # Reads what the audit compares for one repository, in a fixed order so
   # that a spec can match every call: the repository, the rules in force on
   # its default branch, its rulesets and each one's detail, its classic
-  # protection, then the files a collaborative repository vendors. Only here
-  # is a 404 on the protection read taken to mean none, and a 403 naming
-  # the plan taken to mean rulesets are unavailable rather than failed.
+  # protection, the files a collaborative repository vendors, then what
+  # SkillScanReader reads. Only here is a 404 on the protection read taken
+  # to mean none, and a 403 naming the plan taken to mean rulesets are
+  # unavailable rather than failed.
   class RepositoryReader
     PER_PAGE = 100
     NOT_PROTECTED = 'Branch not protected'
@@ -49,9 +51,10 @@ module RepoConsistency
       rules = effective_rules
       rulesets = ruleset_details
       protection = classic_protection
+      vendored = files
       RepositoryState.new(repository: @repository, default_branch: @branch, flags: facts.slice(*@flags), rules: rules,
                           rulesets: rulesets, protection: protection, rulesets_available: @rulesets_available,
-                          files: files)
+                          files: vendored, skill_scan: skill_scan(vendored))
     end
 
     private
@@ -124,6 +127,10 @@ module RepoConsistency
 
         [file, content]
       end
+    end
+
+    def skill_scan(vendored)
+      SkillScanReader.read(@github, @repository, branch: @branch, files: vendored)
     end
   end
 end

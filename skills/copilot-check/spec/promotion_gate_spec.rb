@@ -3,7 +3,9 @@
 require_relative 'support/gate_calls'
 
 # `promote-check check` end to end in process: every call it makes, in
-# order, on the fake runner.
+# order, on the fake runner. A real failed run: step adds the runner's
+# exit-code line to its check's annotations, which a repository's rules
+# needn't quote.
 RSpec.describe CopilotCheck::PromotionGate do
   include CopilotCheck::Testing::GateCalls
 
@@ -126,6 +128,32 @@ RSpec.describe CopilotCheck::PromotionGate do
       .to eq([%w[protected_paths_changed], %w[docs/CLAUDE.local.md .mcp.json]])
   end
 
+  it "promotes a pull request whose only .claude paths are plans, which Claude Code doesn't load" do
+    files = [{ 'filename' => '.claude/plans/20261119-x.md' }, { 'filename' => 'apps/x/.claude/plans/y.md' }]
+    expect_gate(files: { pages: [files] })
+
+    output = run_promote_check(gate_arguments).last
+
+    expect([output['verdict'], output['reasons'], output['files']['github_text']['protected_paths']])
+      .to eq(['PROMOTE', [], []])
+  end
+
+  it 'holds plans beside a rules file or settings, a CLAUDE.md among them, or a rules file renamed into them' do
+    plan = { 'filename' => '.claude/plans/x.md' }
+    [[[plan, { 'filename' => '.claude/rules/x.md' }], %w[.claude/rules/x.md]],
+     [[plan, { 'filename' => '.claude/settings.json' }], %w[.claude/settings.json]],
+     [[plan, { 'filename' => '.claude/plans/CLAUDE.md' }], %w[.claude/plans/CLAUDE.md]],
+     [[{ 'filename' => 'docs/x.md' }, plan.merge('previous_filename' => '.claude/rules/x.md')],
+      %w[.claude/rules/x.md]]].each do |files, protected_paths|
+      expect_gate(files: { pages: [files] })
+
+      output = run_promote_check(gate_arguments).last
+
+      expect([output['reasons'].map { |reason| reason['reason'] }, output['files']['github_text']['protected_paths']])
+        .to eq([%w[protected_paths_changed], protected_paths])
+    end
+  end
+
   it "holds a change to Copilot's rubric, or a rename away from it, for the owner" do
     files = [{ 'filename' => '.github/copilot-instructions.md' },
              { 'filename' => 'docs/old-rubric.md', 'previous_filename' => '.github/copilot-instructions.md' }]
@@ -138,22 +166,48 @@ RSpec.describe CopilotCheck::PromotionGate do
     expect(output['files']['github_text']['protected_paths']).to eq(%w[.github/copilot-instructions.md])
   end
 
-  it "holds a documented failure beside a failure annotation the rules don't give, and passes it once they do" do
+  # The rules needn't quote the runner's exit-code line: it is on every
+  # failed run: step, not a text of the check's own.
+  it "promotes past a documented failure beside the runner's exit-code line, which the rules don't give, in a " \
+     'job with one failed step, and holds it in one with two' do
+    text = 'The suite runs once the pull request is ready.'
+    rules = rules_file(expected_failures: [{ name: 'CI result', text: text }])
+    checks = lambda do |conclusions|
+      { entries: [check_entry('CI result', 'fail', job_link)],
+        annotations: { 41 => [text, 'Process completed with exit code 1.'] }, jobs: { 41 => conclusions } }
+    end
+
+    expect_gate(checks: checks.call(CopilotCheck::Testing::JobAnswers::ONE_FAILED_STEP))
+    output = run_promote_check(gate_arguments(rules: rules)).last
+    expect([output['verdict'], output['reasons'], output['checks'].first['documented']]).to eq(['PROMOTE', [], true])
+
+    expect_gate(checks: checks.call(%w[success failure failure]))
+    output = run_promote_check(gate_arguments(rules: rules)).last
+    expect([output['verdict'], output['checks'].first['documented']]).to eq(['HOLD', false])
+  end
+
+  it "holds a documented failure beside a failure annotation the rules don't give, and passes it once they do, " \
+     "but never the runner's exit-code line alone, even when they give it" do
     text = 'The suite runs once the pull request is ready.'
     exit_code = 'Process completed with exit code 1.'
-    checks = { entries: [check_entry('CI result', 'fail', job_link)], annotations: { 41 => [text, exit_code] } }
+    failed = ->(*texts) { { entries: [check_entry('CI result', 'fail', job_link)], annotations: { 41 => texts } } }
     rules = ->(*texts) { rules_file(expected_failures: texts.map { |given| { name: 'CI result', text: given } }) }
 
-    expect_gate(checks: checks)
+    expect_gate(checks: failed.call(text, 'Tests failed.', exit_code))
     expect(run_promote_check(gate_arguments(rules: rules.call(text))).last['verdict']).to eq('HOLD')
-    expect_gate(checks: checks)
-    expect(run_promote_check(gate_arguments(rules: rules.call(text, exit_code))).last['verdict']).to eq('PROMOTE')
+    passing = failed.call(text, 'Tests failed.', exit_code)
+    expect_gate(checks: passing.merge(jobs: { 41 => CopilotCheck::Testing::JobAnswers::ONE_FAILED_STEP }))
+    expect(run_promote_check(gate_arguments(rules: rules.call(text, 'Tests failed.'))).last['verdict'])
+      .to eq('PROMOTE')
+    expect_gate(checks: failed.call(exit_code))
+    expect(run_promote_check(gate_arguments(rules: rules.call(text, exit_code))).last['verdict']).to eq('HOLD')
   end
 
   it 'promotes past a failure the rules document by name and annotation text' do
     expected = [{ name: 'CI result', text: 'The suite runs once the pull request is ready.' }]
     expect_gate(checks: { entries: [check_entry('CI result', 'fail', job_link), check_entry('test', 'pass')],
-                          annotations: { 41 => ['The suite runs once the pull request is ready.'] } })
+                          annotations: { 41 => ['The suite runs once the pull request is ready.'] },
+                          jobs: { 41 => CopilotCheck::Testing::JobAnswers::ONE_FAILED_STEP } })
 
     output = run_promote_check(gate_arguments(rules: rules_file(expected_failures: expected))).last
 

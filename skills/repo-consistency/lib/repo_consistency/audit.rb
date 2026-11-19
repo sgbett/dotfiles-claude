@@ -11,10 +11,11 @@ require_relative 'template'
 module RepoConsistency
   # skills/repo-consistency/bin/git-settings audit: reports, for each
   # repository named, how its live git settings and vendored files differ
-  # from the profile's template (profiles/git-workflow), writing nothing
-  # anywhere. It stops before reading any repository when no repository is
-  # named, the template can't be read or gh has no account on the host, and
-  # on the first repository gh can't read.
+  # from the profile's template (profiles/git-workflow), and which
+  # user-level skills (UserSkills) its instructions name without shipping,
+  # writing nothing anywhere. It stops before reading any repository when
+  # no repository is named, the template can't be read or gh has no
+  # account on the host, and on the first repository gh can't read.
   class Audit
     def self.call(arguments, runner: SkillSupport::CommandRunner.new)
       new(AuditArguments.parse(arguments), runner: runner).call

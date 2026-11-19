@@ -99,6 +99,12 @@ RSpec.describe "/copilot-check's calls of its scripts" do
              .reject { |key| skill.include?(%("#{key}":)) }).to be_empty
   end
 
+  it "has the lead list only the failure texts the rules document, which needn't include the runner's exit-code " \
+     'line' do
+    expect(skill).to include(', and no other: `check` holds a failure with an annotation not listed, bar the ' \
+                             "runner's exit-code line.")
+  end
+
   it "names in Phase 6 only fields check's output has" do
     expect_gate
     output = run_promote_check(gate_arguments).last

@@ -165,7 +165,7 @@ done
 
 ## Git settings against the profile
 
-The git profile, `profiles/git-workflow.md`, is enforced by a ruleset template and vendored files under `profiles/git-workflow/`, and each repository declares its tier in one `CLAUDE.md` line, `Git tier: collaborative` or `Git tier: personal`. This check reports every disagreement between a repository's live settings on GitHub, its vendored copies and the profile. It is audit only: the script writes nothing anywhere, and applying the template is a person's job (below).
+The git profile, `profiles/git-workflow.md`, is enforced by a ruleset template and vendored files under `profiles/git-workflow/`, and each repository declares its tier in one `CLAUDE.md` line, `Git tier: collaborative` or `Git tier: personal`. This check reports every disagreement between a repository's live settings on GitHub, its vendored copies and the profile, and each user-level skill its instructions name but it doesn't ship. It is audit only: the script writes nothing anywhere, and applying the template is a person's job (below).
 
 **Discover the estate.** The authenticated user is `gh api user --jq .login`, and their organisations are `gh api user/orgs --jq '.[].login'`. For the user and for each organisation, `gh repo list <owner> --source --no-archived --json nameWithOwner` lists the repositories; collect every `nameWithOwner`.
 
@@ -201,6 +201,8 @@ Run it exactly as written, unpiped. It prints one JSON object. On `proceed`, `su
 | `vendored rules file missing`, `vendored rules file differs from the profile`, `vendored rules header is not the convention` | `.claude/rules/git-workflow.md` is absent, differs from `profiles/git-workflow.md` after its two header lines, or its first line lacks `vendored from sgbett/dotfiles-claude` |
 | `vendored hook missing: <file>`, `vendored hook differs: <file>` | `.claude/hooks/<file>` is absent or differs byte for byte from the template's |
 | `hooks entry missing from .claude/settings.json`, `settings.json unreadable` | No `PreToolUse` entry runs `.claude/hooks/push-guard`, or the file isn't JSON |
+| `names a skill it doesn't ship: <name>` | `CLAUDE.md`, `.claude/CLAUDE.md` or a `.claude/rules/` file invokes a user-level skill or command, `/<name>` (a hyphenated one also bare), that the repository lacks as `.claude/skills/<name>/SKILL.md` or `.claude/commands/<name>.md` |
+| `skill names unchecked: <why>` | A truncated tree, a submodule or symlinked directory where those files or skills go, over 200 such files, or a file the contents API refused: check by hand |
 
 **Applying the template** is the runbook's procedure, `profiles/git-workflow/setup.md`, run by a person with admin access to the repository; this check never applies it, and never offers to.
 

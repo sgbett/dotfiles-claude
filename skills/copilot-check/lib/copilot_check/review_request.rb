@@ -1,27 +1,30 @@
 # frozen_string_literal: true
 
 require_relative 'checkout_repository'
-require_relative 'copilot'
 require_relative 'pull_request_query'
+require_relative 'reasons'
 
 module CopilotCheck
-  # `rereview request --pr N [--dry-run]`: Phase 5 step 2. Asks Copilot for
-  # a new review through GraphQL's requestReviews, by its bot id, with
-  # union: true, which keeps the reviewers already requested; REST's
-  # requested_reviewers drops a request for Copilot without a word. The
-  # mutation's answer must name the pull request. A dry run finds the pull
-  # request and requests nothing.
+  # `rereview request --pr N [--dry-run]`: Phase 5 step 2. Asks for Copilot's
+  # review through GraphQL's requestCopilotCodeReview rather than
+  # requestReviews: a ruleset that reviews every push requests one moments
+  # after the push, racing ours, and requestReviews then refuses ours with an
+  # error that doesn't say why. This mutation documents that case, answering
+  # failureReason REQUEST_CONFLICT, a review underway, and requests a new
+  # review once Copilot's last one has completed. Any other failureReason it
+  # documents stops the run naming it. A dry run finds the pull request and
+  # requests nothing.
   class ReviewRequest
     PULL_REQUEST_ID = File.read(File.join(__dir__, 'pull_request_id.graphql'))
-    MUTATION = File.read(File.join(__dir__, 'request_reviews.graphql'))
+    MUTATION = File.read(File.join(__dir__, 'request_copilot_code_review.graphql'))
     REQUESTED = 'requested'
     UNDERWAY = 'underway'
     SKIPPED = 'skipped'
-    # GitHub doesn't document the error requestReviews gives while Copilot is
-    # already reviewing, so every error saying "already" is read as that, as
-    # the skill always has. A misreading costs no more than the watcher's
-    # timeout, which reports the missing review.
-    ALREADY = /\balready\b/i
+    REQUEST_CONFLICT = 'REQUEST_CONFLICT'
+    # The rest of GitHub's CopilotCodeReviewRequestReason. The stop's message
+    # names the reason, so only one checked against this list may reach it.
+    REFUSALS = %w[ACTOR_INELIGIBLE REPOSITORY_INELIGIBLE APP_NOT_INSTALLED NO_QUOTA_REMAINING
+                  LICENSED_ORGANIZATION_UNAVAILABLE].freeze
 
     # +options+ are RereviewArguments' Options.
     def initialize(options, runner:)
@@ -44,19 +47,41 @@ module CopilotCheck
     end
 
     def request(id)
-      data = @github.graphql(MUTATION, 'pullRequestId' => id, 'botIds' => [Copilot::BOT_ID])
-      return outcome(REQUESTED) if data.dig('requestReviews', 'pullRequest', 'id') == id
+      answer = @github.graphql(MUTATION, 'pullRequestId' => id)['requestCopilotCodeReview']
+      unexpected('gave no answer') unless answer.is_a?(Hash)
+      unexpected("didn't answer with the pull request") unless names_pull_request?(answer, id)
 
-      raise SkillSupport::UnexpectedResponse, "requestReviews didn't answer with the pull request"
-    rescue SkillSupport::GraphqlError => e
-      raise unless underway?(e.errors)
-
-      outcome(UNDERWAY, session_only: { error: e.message })
+      success, reason = answer.values_at('success', 'failureReason')
+      success == true ? requested(reason) : failed(success, reason)
     end
 
-    def underway?(errors)
-      messages = Array(errors).map { |error| error['message'] if error.is_a?(Hash) }
-      !messages.empty? && messages.all? { |message| ALREADY.match?(message.to_s) }
+    # A failed request may leave pullRequest out; a successful one must name
+    # the pull request it was sent.
+    def names_pull_request?(answer, id)
+      named = answer.dig('pullRequest', 'id')
+      named == id || (named.nil? && answer['success'] != true)
+    end
+
+    def requested(reason)
+      unexpected('succeeded, yet gave a failureReason') unless reason.nil?
+
+      outcome(REQUESTED)
+    end
+
+    def failed(success, reason)
+      unexpected('answered neither success nor failure') unless success == false
+      return outcome(UNDERWAY, session_only: { failure_reason: REQUEST_CONFLICT }) if reason == REQUEST_CONFLICT
+      return refused(reason) if REFUSALS.include?(reason)
+
+      unexpected('failed without a failureReason it documents')
+    end
+
+    def refused(reason)
+      Reasons.stop_naming(Reasons::COPILOT_REQUEST_REFUSED, reason, pull_request: { number: @options.pr })
+    end
+
+    def unexpected(problem)
+      raise SkillSupport::UnexpectedResponse, "requestCopilotCodeReview #{problem}"
     end
 
     def outcome(review_request, **fields)

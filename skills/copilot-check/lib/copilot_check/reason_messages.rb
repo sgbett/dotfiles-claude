@@ -71,6 +71,10 @@ module CopilotCheck
       copilot_timeout: 'No new Copilot review came within 15 minutes (failed_polls counts the polls that could not ' \
                        "read GitHub, and session_only.error holds the last one's error). Copilot occasionally does " \
                        'not review, and nothing else may notice: say so plainly in the report.',
+      copilot_request_refused: "GitHub refused to request Copilot's review, giving failureReason %<value>s, so no " \
+                               'review of the push will come. Tell the user, naming that reason: it concerns ' \
+                               "Copilot's licence, quota or installation, or who may request its review, none of " \
+                               'which the run can change.',
       copilot_unrecognised: "Copilot's latest review has inline comments, but no review thread was started by " \
                             "Copilot's id: the filters no longer recognise Copilot. Stop and flag it; never treat " \
                             'this as convergence.',
