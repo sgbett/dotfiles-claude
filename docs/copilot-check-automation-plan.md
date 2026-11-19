@@ -296,6 +296,8 @@ hit `## Do not flag` are auto-refuted without spending a full agent.
   (§3.3). Derive bot id from prior review author; fall back to `BOT_kgDOCnlnWA`. (Superseded by
   `requestCopilotCodeReview`, #33.)
 - **Re-request while a review is running** may error → assume underway, carry on to watcher (§3.3).
+  (Superseded by #33: only `failureReason: REQUEST_CONFLICT` means underway; any GraphQL error is
+  a tool failure.)
 - **"Review new pushes" ruleset setting fires unreliably** → never depend on it; always re-request.
 - **Runaway loop / cost** → 10 auto-round halt; human pause resets; convergence check each round.
 - **Scope creep from tangential fixes** → 80/20 gate routes them to human; big-tangential is tracked
@@ -309,7 +311,8 @@ hit `## Do not flag` are auto-refuted without spending a full agent.
 
 Confirmed on the live PR: REST no-ops silently; GraphQL `requestReviews` (§3.3) registers the
 request and Copilot begins reviewing (~3 min turnaround). Watcher on the `reviews` endpoint detects
-the new bot review. Mechanism is settled — no further pre-build validation needed.
+the new bot review. Mechanism is settled — no further pre-build validation needed. (The request
+itself has since moved to `requestCopilotCodeReview`, #33; see the note in §3.3.)
 
 ## 11. Build order (once approved)
 
