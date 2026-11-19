@@ -2,6 +2,7 @@
 
 require_relative 'hooks_entry'
 require_relative 'projection'
+require_relative 'skill_mentions'
 require_relative 'template'
 require_relative 'tier_line'
 require_relative 'vendored_paths'
@@ -29,7 +30,7 @@ module RepoConsistency
     end
 
     def call
-      Projection.new(**repository_fields, **rule_fields, **ruleset_fields, **file_fields)
+      Projection.new(**repository_fields, **rule_fields, **ruleset_fields, **file_fields, **skill_fields)
     end
 
     private
@@ -97,6 +98,16 @@ module RepoConsistency
         rules_body: rules_text && rules_text.lines.drop(HEADER_LINES).join,
         hooks: VendoredPaths::HOOK_FILES.to_h { |path| [File.basename(path), @state.files[path]] },
         hooks_entry: HooksEntry.of_text(@state.files[VendoredPaths::SETTINGS_FILE]) }
+    end
+
+    # None for a personal repository, whose instructions aren't read.
+    def skill_fields
+      scan = @state.skill_scan
+      unshipped = if scan.nil? then []
+                  elsif scan.unchecked then scan.unchecked
+                  else (scan.texts.flat_map { |text| SkillMentions.names_in(text) } - scan.shipped).uniq.sort
+                  end
+      { unshipped_skills: unshipped }
     end
   end
 end

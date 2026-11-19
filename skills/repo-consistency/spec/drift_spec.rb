@@ -4,10 +4,14 @@ require_relative 'support/template_fixture'
 require_relative '../lib/repo_consistency/drift'
 require_relative '../lib/repo_consistency/repository_projection'
 require_relative '../lib/repo_consistency/repository_state'
+require_relative '../lib/repo_consistency/skill_scan'
 
 # The template projected onto itself has no drift, both as the template
 # projects itself and as a repository that applied it projects: a line that
-# fired there would be a defect in the comparison, not in a repository.
+# fired there would be a defect in the comparison, not in a repository. The
+# applied repository's instruction files are its CLAUDE.md and the vendored
+# profile, so the real template's case also shows the profile names no
+# user-level skill.
 RSpec.describe RepoConsistency::Drift do
   include RepoConsistency::Testing::TemplateFixture
 
@@ -16,16 +20,22 @@ RSpec.describe RepoConsistency::Drift do
   # The state of a repository that applied +template+ and vendored its
   # files under the runbook's header, as GitHub would answer for it.
   def applied(template)
-    header = "<!-- vendored from sgbett/dotfiles-claude profiles/git-workflow.md -->\n\n"
-    files = { 'CLAUDE.md' => "# Project\n\nGit tier: collaborative\n",
-              '.claude/rules/git-workflow.md' => header + template.profile,
-              '.claude/hooks/push-guard' => template.hooks['push-guard'],
-              '.claude/hooks/push-guard.rb' => template.hooks['push-guard.rb'],
-              '.claude/settings.json' => JSON.generate(template.hooks_settings) }
+    files = vendored(template)
     ruleset = { 'id' => 1, 'name' => template.ruleset_name, 'bypass_actors' => [] }
+    scan = RepoConsistency::SkillScan.new(texts: files.values_at('.claude/rules/git-workflow.md', 'CLAUDE.md'),
+                                          shipped: [])
     RepoConsistency::RepositoryState.new(repository: 'example-owner/applied', default_branch: 'master',
                                          flags: template.repository_flags, rules: template.rules, rulesets: [ruleset],
-                                         protection: nil, rulesets_available: true, files: files)
+                                         protection: nil, rulesets_available: true, files: files, skill_scan: scan)
+  end
+
+  def vendored(template)
+    header = "<!-- vendored from sgbett/dotfiles-claude profiles/git-workflow.md -->\n\n"
+    { 'CLAUDE.md' => "# Project\n\nGit tier: collaborative\n",
+      '.claude/rules/git-workflow.md' => header + template.profile,
+      '.claude/hooks/push-guard' => template.hooks['push-guard'],
+      '.claude/hooks/push-guard.rb' => template.hooks['push-guard.rb'],
+      '.claude/settings.json' => JSON.generate(template.hooks_settings) }
   end
 
   it 'finds none between the template fixture and itself, nor against a repository that applied it' do

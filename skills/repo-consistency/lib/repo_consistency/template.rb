@@ -75,7 +75,8 @@ module RepoConsistency
     # The template as a repository that applied it stands: its ruleset
     # alone in force on master, granting no bypass; its flags set; the hook
     # files and the settings entry vendored; the profile vendored under the
-    # header the runbook gives; and the tier declared collaborative.
+    # header the runbook gives; the tier declared collaborative; and no
+    # skill named that it doesn't ship.
     def projection
       parameters = rules.find { |rule| rule['type'] == PULL_REQUEST }.fetch('parameters')
       Projection.new(default_branch: DEFAULT_BRANCH, tier: TierLine::COLLABORATIVE, difference: nil,
@@ -83,7 +84,8 @@ module RepoConsistency
                      approvals: parameters[APPROVALS], extra_approval: parameters[EXTRA_APPROVAL],
                      ruleset_names: [ruleset_name], ruleset_bypasses: [],
                      flags: @repository_flags, protection_additions: nil, rules_header_ok: true,
-                     rules_body: @profile, hooks: @hooks, hooks_entry: HooksEntry.of_settings(@hooks_settings))
+                     rules_body: @profile, hooks: @hooks, hooks_entry: HooksEntry.of_settings(@hooks_settings),
+                     unshipped_skills: [])
     end
 
     private

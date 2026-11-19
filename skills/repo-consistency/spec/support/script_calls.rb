@@ -53,6 +53,10 @@ module RepoConsistency
         api_call("repos/#{repository}/contents/#{path}", "ref=#{branch}")
       end
 
+      def tree_call(repository, branch)
+        api_call("repos/#{repository}/git/trees/#{branch}", 'recursive=1')
+      end
+
       # A gh shim entry: +call+ with its "gh" dropped, answered as +answer+
       # says (stdout or stdout_file, stderr, exit).
       def entry(call, **answer)
@@ -101,14 +105,16 @@ module RepoConsistency
       end
 
       # sgbett/bsv-ruby-sdk's answers as recorded, in the order the reader
-      # calls, apart from CLAUDE.md, which holds +claude_md+.
+      # calls, apart from CLAUDE.md, which holds +claude_md+. Its tree lists
+      # no instruction file but CLAUDE.md, so the tree is the last read.
       def recorded_entries(claude_md: UNDECLARED_CLAUDE_MD)
         [entry(repository_call(RECORDED), stdout_file: recorded('repos/bsv-ruby-sdk.json')),
          entry(rules_call(RECORDED, 'master'), stdout_file: recorded('rules/bsv-ruby-sdk-master.json')),
          entry(rulesets_call(RECORDED), stdout_file: recorded('rulesets/bsv-ruby-sdk.json')),
          *recorded_ruleset_entries,
          entry(protection_call(RECORDED, 'master'), **not_protected_answer),
-         *file_entries(RECORDED, 'master', VendoredPaths::CLAUDE_MD => claude_md)]
+         *file_entries(RECORDED, 'master', VendoredPaths::CLAUDE_MD => claude_md),
+         entry(tree_call(RECORDED, 'master'), stdout_file: recorded('trees/bsv-ruby-sdk-master.json'))]
       end
 
       def recorded_ruleset_entries

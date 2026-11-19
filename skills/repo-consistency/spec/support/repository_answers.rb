@@ -2,6 +2,7 @@
 
 require_relative 'script_calls'
 require_relative 'template_fixture'
+require_relative 'tree_answers'
 
 module RepoConsistency
   module Testing
@@ -9,11 +10,13 @@ module RepoConsistency
     # the recorded shapes of sgbett/bsv-ruby-sdk: built compliant with the
     # template fixture, then changed by a spec for its case. #entries gives
     # the gh shim's entries in the order RepositoryReader calls, which
-    # expect_entries feeds the fake runner too.
+    # expect_entries feeds the fake runner too. +files+ holds every file on
+    # the default branch by path, vendored or not, and +tree+ the rest of
+    # what the skill-name check reads (TreeAnswers).
     class RepositoryAnswers
       include ScriptCalls
 
-      attr_reader :repository
+      attr_reader :repository, :tree
       attr_accessor :branch, :flags, :rules, :rulesets, :protection, :files, :plan_forbids
 
       def initialize(repository, branch: 'master')
@@ -25,6 +28,7 @@ module RepoConsistency
         @protection = nil
         @plan_forbids = false
         @files = compliant_files
+        @tree = TreeAnswers.new
       end
 
       def compliant_files
@@ -37,7 +41,7 @@ module RepoConsistency
 
       def entries
         [entry(repository_call(repository), stdout: JSON.generate(repository_response)), *rule_entries,
-         protection_entry, *file_entries(repository, branch, files)]
+         protection_entry, *file_entries(repository, branch, files), *tree.entries(repository, branch, files)]
       end
 
       # The fields the reader takes of repos/{owner}/{repo}.

@@ -237,6 +237,85 @@ RSpec.describe RepoConsistency::Audit do
                'rule missing: pull_request', 'ruleset "Git workflow" missing']])
   end
 
+  describe 'skills named but not shipped' do
+    let(:unshipped) { "names a skill it doesn't ship:" }
+
+    def link(path, mode: '120000', type: 'blob')
+      { 'path' => path, 'mode' => mode, 'type' => type, 'sha' => '0' * 40 }
+    end
+
+    it 'reports each user-level skill CLAUDE.md or .claude/CLAUDE.md names that the repository lacks, one line per ' \
+       'name, sorted, after every other line' do
+      repository = answers
+      repository.files['CLAUDE.md'] += "Run `/do` on each issue; /do's breakdown is the record.\n"
+      repository.files['.claude/CLAUDE.md'] = "Ask specialist-review, then /do. Do not skip it.\n"
+      repository.flags['allow_update_branch'] = true
+
+      expect(drift_of(repository))
+        .to eq([['allow_update_branch on', "#{unshipped} do", "#{unshipped} specialist-review"]])
+    end
+
+    it 'scans the vendored rules file and every Markdown file under .claude/rules/ at any depth, and nothing else ' \
+       'there' do
+      repository = answers
+      repository.files['.claude/rules/team/review/finish.md'] = "Finish with /copilot-check.\n"
+      repository.files['.claude/rules/notes.txt'] = "Run /zendesk.\n"
+      repository.files['docs/guide.md'] = "Run /deslop.\n"
+      repository.files[RepoConsistency::VendoredPaths::RULES_FILE] += "Then /transcript.\n"
+
+      expect(drift_of(repository)).to eq([['vendored rules file differs from the profile', "#{unshipped} copilot-check",
+                                           "#{unshipped} transcript"]])
+    end
+
+    it 'counts a skill shipped as a directory under .claude/skills/, or a command as a file under ' \
+       '.claude/commands/, a nested one by its path, and a link anywhere else as nothing' do
+      as_skill = answers('example-owner/as-skill')
+      as_skill.files['CLAUDE.md'] += "Run /do.\n"
+      as_skill.files['.claude/skills/do/SKILL.md'] = "---\nname: do\n---\n"
+      as_skill.tree.extras = [link('.claude/skills/do/scripts'), link('vendor/tools', mode: '160000', type: 'commit')]
+      as_command = answers('example-owner/as-command')
+      as_command.files['CLAUDE.md'] += "Run /do, then /project:generate.\n"
+      as_command.files['.claude/commands/do.md'] = "Work the issue.\n"
+      as_command.files['.claude/commands/project/generate.md'] = "Generate the project.\n"
+      as_page = answers('example-owner/as-page')
+      as_page.files['CLAUDE.md'] += "Run /do.\n"
+      as_page.files['.claude/skills/do.md'] = "Not a skill: a skill is a directory.\n"
+
+      expect(drift_of(as_skill, as_command, as_page)).to eq([[], [], ["#{unshipped} do"]])
+    end
+
+    it 'neither reads nor reports anything more of a personal repository' do
+      repository = answers
+      repository.files = { 'CLAUDE.md' => "Git tier: personal\n\nRun /do, then specialist-review.\n" }
+      repository.rules = []
+      repository.rulesets = []
+
+      expect(drift_of(repository)).to eq([[]])
+      expect(fake_runner.calls.last[:argv])
+        .to eq(contents_call(repository.repository, RepoConsistency::VendoredPaths::SETTINGS_FILE, 'master'))
+    end
+
+    it 'reports the names unchecked, and goes on to the next repository, on a truncated tree, a symlink or ' \
+       'submodule where it looks, or an instruction file the contents API will not give' do
+      truncated = answers('example-owner/truncated')
+      truncated.tree.truncated = true
+      linked = answers('example-owner/linked')
+      linked.tree.extras = [link('.claude/skills/do')]
+      submodule = answers('example-owner/submodule')
+      submodule.tree.extras = [link('.claude/rules/shared', mode: '160000', type: 'commit')]
+      oversized = answers('example-owner/oversized')
+      oversized.files['.claude/rules/handbook.md'] = "Run /do.\n"
+      oversized.tree.oversized = ['.claude/rules/handbook.md']
+      readable = answers('example-owner/readable')
+      [truncated, linked, submodule, oversized, readable].each { |repository| repository.files['CLAUDE.md'] += "/do\n" }
+
+      expect(drift_of(truncated, linked, submodule, oversized, readable))
+        .to eq([['skill names unchecked: tree truncated'], ['skill names unchecked: symlink or submodule'],
+                ['skill names unchecked: symlink or submodule'],
+                ['skill names unchecked: file too large or not a file'], ["#{unshipped} do"]])
+    end
+  end
+
   describe 'stops' do
     it 'stops on no repository, asking GitHub nothing' do
       exit_code, output = run_audit
