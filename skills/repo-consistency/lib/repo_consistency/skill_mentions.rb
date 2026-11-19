@@ -6,14 +6,16 @@ module RepoConsistency
   # Which of UserSkills' names a text invokes, case-sensitively. Every name
   # counts written as a command, /name; a hyphenated one counts bare too, as
   # in "run specialist-review", but a single word never does, since "do" is
-  # prose. Neither form counts inside a path, a URL or a longer name, so
-  # skills/do/, ~/.claude/skills/do, https://x/do, /docs, /do-thing and
-  # create-adr-template name nothing.
+  # prose. Neither form counts inside a path, a URL, a file name or a longer
+  # name, so skills/do/, ~/.claude/skills/do, https://x/do, /docs,
+  # /do-thing, create-adr.md and create-adr-template name nothing.
   module SkillMentions
+    BEFORE = '(?<![\w./~-])'
+    AFTER = '(?![\w/-]|\.\w)'
     PATTERNS = UserSkills::NAMES.to_h do |name|
       quoted = Regexp.escape(name)
-      command = %r{(?<![\w./~-])/#{quoted}(?![\w/-]|\.\w)}
-      [name, name.include?('-') ? Regexp.union(command, %r{(?<![\w./~-])#{quoted}(?![\w/-])}) : command]
+      slash = name.include?('-') ? '/?' : '/'
+      [name, Regexp.new("#{BEFORE}#{slash}#{quoted}#{AFTER}")]
     end.freeze
 
     module_function

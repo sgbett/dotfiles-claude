@@ -16,6 +16,24 @@ module RepoConsistency
   # unchecked rather than stopping the audit, as the repository's other
   # drift stands without it.
   class SkillScanReader
+    # gh printing something other than JSON is a tool failure.
+    class UnusableOutput < SkillSupport::Error; end
+
+    # Gh raises UnexpectedResponse when gh prints something other than JSON,
+    # as RepositoryFiles does for a file it refuses. The files are read
+    # through this, so that only a refusal reads as an unreadable file.
+    class OutputGuard
+      def initialize(github)
+        @github = github
+      end
+
+      def api(path, **options)
+        @github.api(path, **options)
+      rescue SkillSupport::UnexpectedResponse => e
+        raise UnusableOutput, e.message
+      end
+    end
+
     SYMLINK_MODE = '120000'
     SUBMODULE_TYPE = 'commit'
     DIRECTORY_TYPE = 'tree'
@@ -62,7 +80,8 @@ module RepoConsistency
     end
 
     def hides?(entry)
-      (entry['mode'] == SYMLINK_MODE || entry['type'] == SUBMODULE_TYPE) && SkillPaths.hides_from_tree?(entry['path'])
+      submodule = entry['type'] == SUBMODULE_TYPE
+      (submodule || entry['mode'] == SYMLINK_MODE) && SkillPaths.hides_from_tree?(entry['path'], submodule: submodule)
     end
 
     # +types+ maps each path of the tree to its type.
@@ -74,7 +93,8 @@ module RepoConsistency
     end
 
     # RepositoryFiles raises UnexpectedResponse for a file it won't decode:
-    # over the contents API's size limit, or not a file after all.
+    # over the contents API's size limit, or not a file, as a symlink out of
+    # the repository is, which the API doesn't follow.
     def text(path)
       return @files[path] if @files.key?(path)
 
@@ -85,7 +105,7 @@ module RepoConsistency
     end
 
     def files_reader
-      @files_reader ||= SkillSupport::RepositoryFiles.new(@github)
+      @files_reader ||= SkillSupport::RepositoryFiles.new(OutputGuard.new(@github))
     end
 
     def shipped(types)

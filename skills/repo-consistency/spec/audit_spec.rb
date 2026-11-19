@@ -284,6 +284,19 @@ RSpec.describe RepoConsistency::Audit do
       expect(drift_of(as_skill, as_command, as_page)).to eq([[], [], ["#{unshipped} do"]])
     end
 
+    it 'reads a symlinked instruction file through the contents API, and counts a symlinked command file as shipped' do
+      agents = answers('example-owner/agents')
+      agents.files['CLAUDE.md'] += "Run /do.\n"
+      agents.files['AGENTS.md'] = agents.files['CLAUDE.md']
+      agents.files['.claude/commands/do.md'] = "Work the issue.\n"
+      agents.tree.symlinked = ['CLAUDE.md', '.claude/commands/do.md']
+      shared = answers('example-owner/shared')
+      shared.files['.claude/rules/shared.md'] = "Finish with /copilot-check.\n"
+      shared.tree.symlinked = ['.claude/rules/shared.md']
+
+      expect(drift_of(agents, shared)).to eq([[], ["#{unshipped} copilot-check"]])
+    end
+
     it 'neither reads nor reports anything more of a personal repository' do
       repository = answers
       repository.files = { 'CLAUDE.md' => "Git tier: personal\n\nRun /do, then specialist-review.\n" }
@@ -295,8 +308,8 @@ RSpec.describe RepoConsistency::Audit do
         .to eq(contents_call(repository.repository, RepoConsistency::VendoredPaths::SETTINGS_FILE, 'master'))
     end
 
-    it 'reports the names unchecked, and goes on to the next repository, on a truncated tree, a symlink or ' \
-       'submodule where it looks, or an instruction file the contents API will not give' do
+    it 'reports the names unchecked, and goes on to the next repository, on a truncated tree, a symlinked ' \
+       'directory or a submodule where it looks, or an instruction file the contents API will not give' do
       truncated = answers('example-owner/truncated')
       truncated.tree.truncated = true
       linked = answers('example-owner/linked')
@@ -306,12 +319,17 @@ RSpec.describe RepoConsistency::Audit do
       oversized = answers('example-owner/oversized')
       oversized.files['.claude/rules/handbook.md'] = "Run /do.\n"
       oversized.tree.oversized = ['.claude/rules/handbook.md']
+      escaping = answers('example-owner/escaping')
+      escaping.files['.claude/rules/outside.md'] = ''
+      escaping.tree.escaping = ['.claude/rules/outside.md']
       readable = answers('example-owner/readable')
-      [truncated, linked, submodule, oversized, readable].each { |repository| repository.files['CLAUDE.md'] += "/do\n" }
+      repositories = [truncated, linked, submodule, oversized, escaping, readable]
+      repositories.each { |repository| repository.files['CLAUDE.md'] += "/do\n" }
 
-      expect(drift_of(truncated, linked, submodule, oversized, readable))
+      expect(drift_of(*repositories))
         .to eq([['skill names unchecked: tree truncated'], ['skill names unchecked: symlink or submodule'],
                 ['skill names unchecked: symlink or submodule'],
+                ['skill names unchecked: file too large or not a file'],
                 ['skill names unchecked: file too large or not a file'], ["#{unshipped} do"]])
     end
   end
@@ -421,6 +439,17 @@ RSpec.describe RepoConsistency::Audit do
       expect_entries(entries.first(3))
 
       expect { run_audit(repository.repository) }.to raise_error(SkillSupport::IncompleteResults, /more entries/)
+    end
+
+    it 'fails when gh prints something other than JSON for an instruction file, rather than reporting it unchecked' do
+      repository = answers
+      repository.files['.claude/CLAUDE.md'] = "Run /do.\n"
+      entries = repository.entries
+      entries[-1] = entry(contents_call(repository.repository, '.claude/CLAUDE.md', 'master'), stdout: 'not json')
+      expect_gh_login
+      expect_entries(entries)
+
+      expect { run_audit(repository.repository) }.to raise_error(SkillSupport::Error, /other than JSON/)
     end
 
     it 'fails on a default branch whose name is not safe in an API path, before reading anything on it' do

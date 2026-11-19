@@ -7,15 +7,15 @@ RSpec.describe RepoConsistency::SkillMentions do
      'hyphenated one bare' do
     { '`/do`' => ['do'], "/do's breakdown" => ['do'], 'then run /do.' => ['do'], '(/zendesk)' => ['zendesk'],
       '/copilot-check' => ['copilot-check'], 'ask `specialist-review`' => ['specialist-review'],
-      'run /project:generate' => ['project:generate'] }.each do |text, names|
+      'run /project:generate' => ['project:generate'], 'then create-adr.' => ['create-adr'] }.each do |text, names|
       expect(described_class.names_in(text)).to eq(names), text
     end
   end
 
-  it 'finds nothing in a path, a URL, a longer name, another case or prose' do
+  it 'finds nothing in a path, a URL, a file name, a longer name, another case or prose' do
     ['skills/do/', '~/.claude/skills/do', 'https://x/do', '/docs', '/docs/', '/do-thing', '/do.md', '/DO',
-     'create-adr-template', 'skills/create-adr', 'Do not', 'do it now', 'a zendesk ticket', 'the transcript',
-     '.claude/commands/project:generate'].each do |text|
+     'create-adr-template', 'create-adr.md', 'skills/create-adr', 'Do not', 'do it now', 'a zendesk ticket',
+     'the transcript', '.claude/commands/project:generate'].each do |text|
       expect(described_class.names_in(text)).to eq([]), text
     end
   end

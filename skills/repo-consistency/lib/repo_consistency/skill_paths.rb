@@ -32,14 +32,23 @@ module RepoConsistency
       "#{COMMANDS}#{name.tr(':', '/')}#{MARKDOWN}"
     end
 
-    # Whether a symlink or submodule at +path+ would hide from the tree an
-    # instruction file, a skill or command the repository ships, or a
-    # directory holding them. Anything under rules/ or commands/ could be
-    # one, a link's name not saying whether it stands for a file or a
-    # directory; only skills/' own entries are skills.
-    def hides_from_tree?(path)
+    # Whether a symlink, or with +submodule+ a submodule, at +path+ would
+    # hide from the tree an instruction file, a skill or command the
+    # repository ships, or a directory holding them. A symlink named as a
+    # Markdown file stands for a file, which the contents API reads through
+    # when its target is in the repository; any other could stand for a
+    # directory, a link's name not saying which. A submodule is always one.
+    def hides_from_tree?(path, submodule:)
+      watched?(path) && (submodule || !path.end_with?(MARKDOWN))
+    end
+
+    # Anything under rules/ or commands/ could be one of those, but only
+    # skills/' own entries are skills.
+    def watched?(path)
       INSTRUCTION_FILES.include?(path) || DIRECTORIES.include?(path) || path.start_with?(RULES, COMMANDS) ||
         (path.start_with?(SKILLS) && !path.delete_prefix(SKILLS).include?('/'))
     end
+
+    private_class_method :watched?
   end
 end

@@ -8,22 +8,28 @@ module RepoConsistency
   module Testing
     # The answers one repository gives the skill-name check's reads: its
     # recursive tree, in the recorded shape, listing each of its files and
-    # their directories, then +extras+ (a link, say), cut off when
+    # their directories, then +extras+ (a submodule, say), cut off when
     # +truncated+; then the contents read of each instruction file the
-    # vendored reads didn't cover, answered as GitHub answers for a file
-    # over 1 MB when +oversized+ names it.
+    # vendored reads didn't cover. A file +symlinked+ names is a symlink in
+    # the tree whose contents read, as GitHub's does for a target in the
+    # repository, gives the target's text; one +escaping+ names, a symlink
+    # out of the repository, which the API answers as a symlink. One
+    # +oversized+ names is answered as GitHub answers for a file over 1 MB.
     class TreeAnswers
       include ScriptCalls
 
       FILE_MODE = '100644'
+      SYMLINK_MODE = '120000'
       DIRECTORY_MODE = '040000'
       SHA = '0' * 40
 
-      attr_accessor :extras, :truncated, :oversized
+      attr_accessor :extras, :truncated, :symlinked, :escaping, :oversized
 
       def initialize
         @extras = []
         @truncated = false
+        @symlinked = []
+        @escaping = []
         @oversized = []
       end
 
@@ -53,14 +59,23 @@ module RepoConsistency
       def file_answer(path, text)
         response = file_response(path, text)
         response = response.merge('encoding' => 'none', 'content' => '') if oversized.include?(path)
+        response = escaping_link(path) if escaping.include?(path)
         { stdout: JSON.generate(response) }
+      end
+
+      def escaping_link(path)
+        { 'name' => File.basename(path), 'path' => path, 'type' => 'symlink', 'target' => '../../notes.md' }
       end
 
       def response(paths)
         directories = paths.flat_map { |path| directories_of(path) }.uniq
         listed = directories.map { |path| tree_entry(path, DIRECTORY_MODE, 'tree') } +
-                 paths.map { |path| tree_entry(path, FILE_MODE, 'blob') } + extras
+                 paths.map { |path| tree_entry(path, file_mode(path), 'blob') } + extras
         { 'sha' => SHA, 'tree' => listed.sort_by { |entry| entry['path'] }, 'truncated' => truncated }
+      end
+
+      def file_mode(path)
+        symlinked.include?(path) || escaping.include?(path) ? SYMLINK_MODE : FILE_MODE
       end
 
       # "a/b/c.md" is in "a" and "a/b".
