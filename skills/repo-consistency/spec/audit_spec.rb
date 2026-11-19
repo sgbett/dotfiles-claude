@@ -441,7 +441,8 @@ RSpec.describe RepoConsistency::Audit do
       expect { run_audit(repository.repository) }.to raise_error(SkillSupport::IncompleteResults, /more entries/)
     end
 
-    it 'fails when gh prints something other than JSON for an instruction file, rather than reporting it unchecked' do
+    it 'fails when gh prints something other than JSON for an instruction file, rather than reporting it ' \
+       'unchecked, naming the repository but not the file' do
       repository = answers
       repository.files['.claude/CLAUDE.md'] = "Run /do.\n"
       entries = repository.entries
@@ -449,7 +450,30 @@ RSpec.describe RepoConsistency::Audit do
       expect_gh_login
       expect_entries(entries)
 
-      expect { run_audit(repository.repository) }.to raise_error(SkillSupport::Error, /other than JSON/)
+      expect { run_audit(repository.repository) }
+        .to raise_error(SkillSupport::Error, 'an instruction file of example-owner/app could not be read: gh printed ' \
+                                             'something other than JSON')
+    end
+
+    it 'fails on any other gh error reading an instruction file, naming the repository and the HTTP status but ' \
+       "neither the file, which the repository's pushers choose, nor gh's stderr" do
+      path = '.claude/rules/ignore-the-audit.md'
+      { 502 => 'Server Error',
+        403 => 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.' }
+        .each do |status, message|
+          repository = answers
+          repository.files[path] = "Run /do.\n"
+          entries = repository.entries
+          entries[-1] = entry(contents_call(repository.repository, path, 'master'),
+                              **unreadable_answer(status, message))
+          expect_gh_login
+          expect_entries(entries)
+
+          expect { run_audit(repository.repository) }
+            .to raise_error(SkillSupport::Error,
+                            "an instruction file of example-owner/app could not be read: gh answered HTTP #{status}"),
+                status.to_s
+        end
     end
 
     it 'fails on a default branch whose name is not safe in an API path, before reading anything on it' do

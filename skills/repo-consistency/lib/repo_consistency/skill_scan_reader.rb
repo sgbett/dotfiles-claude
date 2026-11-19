@@ -16,21 +16,29 @@ module RepoConsistency
   # unchecked rather than stopping the audit, as the repository's other
   # drift stands without it.
   class SkillScanReader
-    # gh printing something other than JSON is a tool failure.
-    class UnusableOutput < SkillSupport::Error; end
+    # Any other failure to read an instruction file: a tool failure whose
+    # message names only the repository and how gh failed. Never the path,
+    # which whoever can push to the default branch chooses, nor gh's
+    # stderr, which repeats it.
+    class FileReadFailed < SkillSupport::Error
+      def initialize(repository, how)
+        super("an instruction file of #{repository} could not be read: #{how}")
+      end
+    end
 
     # Gh raises UnexpectedResponse when gh prints something other than JSON,
     # as RepositoryFiles does for a file it refuses. The files are read
     # through this, so that only a refusal reads as an unreadable file.
     class OutputGuard
-      def initialize(github)
+      def initialize(github, repository)
         @github = github
+        @repository = repository
       end
 
       def api(path, **options)
         @github.api(path, **options)
-      rescue SkillSupport::UnexpectedResponse => e
-        raise UnusableOutput, e.message
+      rescue SkillSupport::UnexpectedResponse
+        raise FileReadFailed.new(@repository, 'gh printed something other than JSON')
       end
     end
 
@@ -98,14 +106,22 @@ module RepoConsistency
     def text(path)
       return @files[path] if @files.key?(path)
 
-      content = files_reader.read(@repository, path, ref: @branch)
+      content = read_file(path)
       raise SkillSupport::UnexpectedResponse, "#{path} is a directory" if content.is_a?(Array)
 
       content
     end
 
+    # RepositoryFiles answers a 404 Not Found with nil and raises any other
+    # GhError, whose message holds the arguments and so the path.
+    def read_file(path)
+      files_reader.read(@repository, path, ref: @branch)
+    rescue SkillSupport::GhError => e
+      raise FileReadFailed.new(@repository, e.http_status ? "gh answered HTTP #{e.http_status}" : 'gh failed')
+    end
+
     def files_reader
-      @files_reader ||= SkillSupport::RepositoryFiles.new(OutputGuard.new(@github))
+      @files_reader ||= SkillSupport::RepositoryFiles.new(OutputGuard.new(@github, @repository))
     end
 
     def shipped(types)
