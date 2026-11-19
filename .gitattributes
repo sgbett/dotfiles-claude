@@ -1,9 +1,11 @@
 # The live settings.json carries machine-local autoMode config, which Claude Code
 # reads only from user settings and /auto-mode-setup writes there; this public
-# repo must never receive it, so staging strips it.
+# repo must never receive it, so staging strips it. A pull's autostash, a
+# checkout or a merge then writes the file back without it, so
+# scripts/automode-filter also puts it back, from a copy in .git/.
 # Warning: the filter lives in .git/config, which a fresh clone lacks:
-#   git config filter.strip-automode.clean "jq 'del(.autoMode)'"
-#   git config filter.strip-automode.smudge cat
+#   git config filter.strip-automode.clean 'sh "$(git rev-parse --git-common-dir)/../scripts/automode-filter" clean'
+#   git config filter.strip-automode.smudge 'sh "$(git rev-parse --git-common-dir)/../scripts/automode-filter" smudge'
 #   git config filter.strip-automode.required true
 # Warning: after an autoMode edit, git status shows settings.json modified with
 # an empty diff (git trusts the changed file size); git add settings.json clears

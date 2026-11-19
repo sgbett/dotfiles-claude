@@ -1,0 +1,37 @@
+#!/bin/sh
+# Git's strip-automode filter for settings.json (see .gitattributes). clean
+# keeps the machine-local autoMode block out of this public repository;
+# smudge puts it back whenever git writes the file, as a checkout, merge or
+# a pull's autostash otherwise leaves it without the block.
+#
+# The block is saved in the repository's git directory, which no checkout,
+# merge or stash touches, and only from content that has one, so a clean of
+# a copy without it never wipes the saved block. A failure exits non-zero,
+# which the filter's required flag turns into a failed git command.
+set -eu
+
+saved="$(git rev-parse --git-common-dir)/automode.json"
+input="$(mktemp)"
+trap 'rm -f "$input"' EXIT
+cat > "$input"
+
+case "${1:-}" in
+  clean)
+    if jq -e 'has("autoMode")' "$input" > /dev/null; then
+      jq '.autoMode' "$input" > "$saved.tmp"
+      mv "$saved.tmp" "$saved"
+    fi
+    jq 'del(.autoMode)' "$input"
+    ;;
+  smudge)
+    if [ -s "$saved" ]; then
+      jq --slurpfile block "$saved" '. + {autoMode: $block[0]}' "$input"
+    else
+      cat "$input"
+    fi
+    ;;
+  *)
+    echo "usage: automode-filter clean|smudge" >&2
+    exit 2
+    ;;
+esac
