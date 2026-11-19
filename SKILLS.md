@@ -132,7 +132,7 @@ Checks documentation consistency across the repository, and each repository's gi
 - SETUP.md accurately reflects repo contents
 - No broken links or orphaned documentation
 - Naming conventions followed (kebab-case, British English)
-- Each repository's live rulesets, merge flags and vendored copies against `profiles/git-workflow/` (`bin/git-settings audit`, read-only, reported in the session alone)
+- Each repository's live rulesets, merge flags and vendored copies against `profiles/git-workflow/`, and any user-level skill its instruction files name but it doesn't ship (`bin/git-settings audit`, read-only, reported in the session alone)
 
 **Behaviour:**
 - Prefers fixing local docs over contributed files (ai-software-architect skills)
