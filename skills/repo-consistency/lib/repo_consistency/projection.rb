@@ -18,10 +18,11 @@ module RepoConsistency
   # hooks maps each hook file's name to its text, nil when missing;
   # hooks_entry is HooksEntry's answer for the settings file;
   # unshipped_skills lists, sorted, each of UserSkills' names the
-  # instruction files invoke that the repository doesn't ship, or is the
-  # SkillScan's unchecked reason.
+  # instruction files invoke that the repository doesn't ship;
+  # skills_unchecked is nil, or the SkillScan's reason the files went
+  # unchecked, unshipped_skills then being [].
   Projection = Struct.new(:default_branch, :tier, :difference, :rulesets_available, :rule_types, :merge_methods,
                           :approvals, :extra_approval, :ruleset_names, :ruleset_bypasses, :flags,
                           :protection_additions, :rules_header_ok, :rules_body, :hooks, :hooks_entry,
-                          :unshipped_skills, keyword_init: true)
+                          :unshipped_skills, :skills_unchecked, keyword_init: true)
 end

@@ -12,10 +12,10 @@ RSpec.describe RepoConsistency::SkillMentions do
     end
   end
 
-  it 'finds nothing in a path, a URL, a file name, a longer name, another case or prose' do
-    ['skills/do/', '~/.claude/skills/do', 'https://x/do', '/docs', '/docs/', '/do-thing', '/do.md', '/DO',
-     'create-adr-template', 'create-adr.md', 'skills/create-adr', 'Do not', 'do it now', 'a zendesk ticket',
-     'the transcript', '.claude/commands/project:generate'].each do |text|
+  it 'finds nothing in a path, a URL, an anchor, a file name, a longer word, another case or prose' do
+    ['skills/do/', '~/.claude/skills/do', 'https://x/do', 'x:/do', '[x](docs/adr.md#create-adr)', '/docs', '/docs/',
+     '/doé', '/do-thing', '/do.md', '/DO', 'create-adr-template', 'create-adr.md', 'skills/create-adr', 'Do not',
+     'do it now', 'a zendesk ticket', 'the transcript', '.claude/commands/project:generate'].each do |text|
       expect(described_class.names_in(text)).to eq([]), text
     end
   end

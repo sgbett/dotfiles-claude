@@ -103,11 +103,10 @@ module RepoConsistency
     # None for a personal repository, whose instructions aren't read.
     def skill_fields
       scan = @state.skill_scan
-      unshipped = if scan.nil? then []
-                  elsif scan.unchecked then scan.unchecked
-                  else (scan.texts.flat_map { |text| SkillMentions.names_in(text) } - scan.shipped).uniq.sort
-                  end
-      { unshipped_skills: unshipped }
+      return { unshipped_skills: [], skills_unchecked: scan&.unchecked } if scan.nil? || scan.unchecked
+
+      named = scan.texts.flat_map { |text| SkillMentions.names_in(text) }
+      { unshipped_skills: (named - scan.shipped).uniq.sort, skills_unchecked: nil }
     end
   end
 end

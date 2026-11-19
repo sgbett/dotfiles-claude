@@ -1,12 +1,18 @@
 # frozen_string_literal: true
 
+require_relative 'user_skills'
+
 module RepoConsistency
   # Where, as paths of a repository's tree, Claude Code finds the
   # instructions it loads into every session (CLAUDE.md, .claude/CLAUDE.md
   # and each Markdown file under .claude/rules/ at any depth) and the skills
-  # and commands the repository ships.
+  # and commands the repository ships. Instruction files are matched
+  # ignoring case, as a case-insensitive file system loads claude.md or
+  # .Claude/rules/x.MD all the same; a shipping path is exact, since a
+  # skill's name is its directory's.
   module SkillPaths
-    INSTRUCTION_FILES = %w[CLAUDE.md .claude/CLAUDE.md].freeze
+    CLAUDE_DIRECTORY = '.claude'
+    INSTRUCTION_FILES = %w[claude.md .claude/claude.md].freeze
     RULES = '.claude/rules/'
     SKILLS = '.claude/skills/'
     COMMANDS = '.claude/commands/'
@@ -17,8 +23,14 @@ module RepoConsistency
 
     module_function
 
+    # Whether +path+, an entry of the root tree, is the .claude directory.
+    def claude_directory?(path)
+      path.casecmp?(CLAUDE_DIRECTORY)
+    end
+
     def instruction_file?(path)
-      INSTRUCTION_FILES.include?(path) || (path.start_with?(RULES) && path.end_with?(MARKDOWN))
+      folded = path.downcase
+      INSTRUCTION_FILES.include?(folded) || (folded.start_with?(RULES) && folded.end_with?(MARKDOWN))
     end
 
     # The directory that ships +name+ as a skill.
@@ -39,14 +51,16 @@ module RepoConsistency
     # when its target is in the repository; any other could stand for a
     # directory, a link's name not saying which. A submodule is always one.
     def hides_from_tree?(path, submodule:)
-      watched?(path) && (submodule || !path.end_with?(MARKDOWN))
+      watched?(path) && (submodule || !path.downcase.end_with?(MARKDOWN))
     end
 
-    # Anything under rules/ or commands/ could be one of those, but only
-    # skills/' own entries are skills.
+    # Anything under rules/ or commands/ could be one of those. Under
+    # skills/, only an entry named as a user-level skill could hide one the
+    # repository ships; a repository's own linked skill hides nothing.
     def watched?(path)
-      INSTRUCTION_FILES.include?(path) || DIRECTORIES.include?(path) || path.start_with?(RULES, COMMANDS) ||
-        (path.start_with?(SKILLS) && !path.delete_prefix(SKILLS).include?('/'))
+      folded = path.downcase
+      INSTRUCTION_FILES.include?(folded) || DIRECTORIES.include?(folded) || folded.start_with?(RULES, COMMANDS) ||
+        (folded.start_with?(SKILLS) && UserSkills::NAMES.include?(path[SKILLS.length..]))
     end
 
     private_class_method :watched?

@@ -120,10 +120,9 @@ module RepoConsistency
     end
 
     def skill_lines(actual)
-      skills = actual.unshipped_skills
-      return SKILLS_UNCHECKED.fetch(skills) if skills.is_a?(Symbol)
+      return SKILLS_UNCHECKED.fetch(actual.skills_unchecked) if actual.skills_unchecked
 
-      skills.map { |name| "#{UNSHIPPED_SKILL} #{name}" }
+      actual.unshipped_skills.map { |name| "#{UNSHIPPED_SKILL} #{name}" }
     end
 
     private_class_method :personal_lines, :collaborative_lines, :plan_line, :rule_lines, :pull_request_lines,

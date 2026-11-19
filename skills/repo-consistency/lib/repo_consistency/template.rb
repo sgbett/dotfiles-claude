@@ -85,7 +85,7 @@ module RepoConsistency
                      ruleset_names: [ruleset_name], ruleset_bypasses: [],
                      flags: @repository_flags, protection_additions: nil, rules_header_ok: true,
                      rules_body: @profile, hooks: @hooks, hooks_entry: HooksEntry.of_settings(@hooks_settings),
-                     unshipped_skills: [])
+                     unshipped_skills: [], skills_unchecked: nil)
     end
 
     private

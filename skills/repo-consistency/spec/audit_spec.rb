@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
+require_relative 'support/recorded_run'
 require_relative 'support/repository_answers'
 require_relative 'support/script_calls'
 require_relative 'support/template_fixture'
 require_relative '../lib/repo_consistency/audit'
 
 RSpec.describe RepoConsistency::Audit do
-  include RepoConsistency::Testing::ScriptCalls
+  include RepoConsistency::Testing::RecordedRun
   include RepoConsistency::Testing::TemplateFixture
 
   let(:messages) { RepoConsistency::Reasons::MESSAGES }
@@ -268,11 +269,12 @@ RSpec.describe RepoConsistency::Audit do
     end
 
     it 'counts a skill shipped as a directory under .claude/skills/, or a command as a file under ' \
-       '.claude/commands/, a nested one by its path, and a link anywhere else as nothing' do
+       '.claude/commands/, a nested one by its path, and a link anywhere else, or to a skill of its own, as nothing' do
       as_skill = answers('example-owner/as-skill')
       as_skill.files['CLAUDE.md'] += "Run /do.\n"
       as_skill.files['.claude/skills/do/SKILL.md'] = "---\nname: do\n---\n"
-      as_skill.tree.extras = [link('.claude/skills/do/scripts'), link('vendor/tools', mode: '160000', type: 'commit')]
+      as_skill.tree.extras = [link('.claude/skills/do/scripts'), link('.claude/skills/my-tool'),
+                              link('vendor/tools', mode: '160000', type: 'commit')]
       as_command = answers('example-owner/as-command')
       as_command.files['CLAUDE.md'] += "Run /do, then /project:generate.\n"
       as_command.files['.claude/commands/do.md'] = "Work the issue.\n"
@@ -282,6 +284,14 @@ RSpec.describe RepoConsistency::Audit do
       as_page.files['.claude/skills/do.md'] = "Not a skill: a skill is a directory.\n"
 
       expect(drift_of(as_skill, as_command, as_page)).to eq([[], [], ["#{unshipped} do"]])
+    end
+
+    it 'scans instruction files whatever their case, as a case-insensitive file system loads them' do
+      repository = answers
+      repository.files['claude.md'] = "Run /do.\n"
+      repository.files['.claude/Rules/Team.MD'] = "Finish with /copilot-check.\n"
+
+      expect(drift_of(repository)).to eq([["#{unshipped} copilot-check", "#{unshipped} do"]])
     end
 
     it 'reads a symlinked instruction file through the contents API, and counts a symlinked command file as shipped' do
@@ -308,10 +318,12 @@ RSpec.describe RepoConsistency::Audit do
         .to eq(contents_call(repository.repository, RepoConsistency::VendoredPaths::SETTINGS_FILE, 'master'))
     end
 
-    it 'reports the names unchecked, and goes on to the next repository, on a truncated tree, a symlinked ' \
-       'directory or a submodule where it looks, or an instruction file the contents API will not give' do
-      truncated = answers('example-owner/truncated')
-      truncated.tree.truncated = true
+    it 'reports the names unchecked, and goes on to the next repository, on a truncated root or .claude tree, a ' \
+       'symlinked directory or a submodule where it looks, or an instruction file the contents API will not give' do
+      root_cut = answers('example-owner/root-cut')
+      root_cut.tree.truncated = :root
+      claude_cut = answers('example-owner/claude-cut')
+      claude_cut.tree.truncated = :claude
       linked = answers('example-owner/linked')
       linked.tree.extras = [link('.claude/skills/do')]
       submodule = answers('example-owner/submodule')
@@ -323,11 +335,12 @@ RSpec.describe RepoConsistency::Audit do
       escaping.files['.claude/rules/outside.md'] = ''
       escaping.tree.escaping = ['.claude/rules/outside.md']
       readable = answers('example-owner/readable')
-      repositories = [truncated, linked, submodule, oversized, escaping, readable]
+      repositories = [root_cut, claude_cut, linked, submodule, oversized, escaping, readable]
       repositories.each { |repository| repository.files['CLAUDE.md'] += "/do\n" }
 
       expect(drift_of(*repositories))
-        .to eq([['skill names unchecked: tree truncated'], ['skill names unchecked: symlink or submodule'],
+        .to eq([['skill names unchecked: tree truncated'], ['skill names unchecked: tree truncated'],
+                ['skill names unchecked: symlink or submodule'],
                 ['skill names unchecked: symlink or submodule'],
                 ['skill names unchecked: file too large or not a file'],
                 ['skill names unchecked: file too large or not a file'], ["#{unshipped} do"]])
@@ -476,6 +489,17 @@ RSpec.describe RepoConsistency::Audit do
         end
     end
 
+    it "fails on a .claude directory whose id in the root tree isn't an object id, before it goes into a path" do
+      repository = answers
+      repository.tree.claude_sha = '../../../user'
+      expect_gh_login
+      expect_entries(repository.entries[0...-1])
+
+      expect { run_audit(repository.repository) }
+        .to raise_error(SkillSupport::UnexpectedResponse, 'a tree of example-owner/app lists a directory without a ' \
+                                                          'valid object id')
+    end
+
     it 'fails on a default branch whose name is not safe in an API path, before reading anything on it' do
       repository = answers
       repository.branch = "release'1"
@@ -488,7 +512,7 @@ RSpec.describe RepoConsistency::Audit do
 end
 
 RSpec.describe 'skills/repo-consistency/bin/git-settings' do
-  include RepoConsistency::Testing::ScriptCalls
+  include RepoConsistency::Testing::RecordedRun
 
   it 'audits sgbett/bsv-ruby-sdk as recorded against profiles/git-workflow, the real template, whatever RUBYOPT ' \
      'says' do
