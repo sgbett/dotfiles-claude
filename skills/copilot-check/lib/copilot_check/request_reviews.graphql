@@ -1,5 +1,0 @@
-mutation CopilotCheckRequestReviews($pullRequestId: ID!, $botIds: [ID!]!) {
-  requestReviews(input: { pullRequestId: $pullRequestId, botIds: $botIds, union: true }) {
-    pullRequest { id }
-  }
-}

@@ -1,0 +1,4 @@
+{
+  "query": "query CopilotCheckCopilotCodeReviewSchema {\n  failureReasons: __type(name: \"CopilotCodeReviewRequestReason\") { enumValues(includeDeprecated: true) { name } }\n  input: __type(name: \"RequestCopilotCodeReviewInput\") { inputFields { name } }\n  payload: __type(name: \"RequestCopilotCodeReviewPayload\") { fields(includeDeprecated: true) { name } }\n}\n",
+  "variables": {}
+}

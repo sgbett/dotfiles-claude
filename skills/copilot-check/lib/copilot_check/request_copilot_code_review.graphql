@@ -1,0 +1,7 @@
+mutation CopilotCheckRequestCopilotCodeReview($pullRequestId: ID!) {
+  requestCopilotCodeReview(input: { pullRequestId: $pullRequestId }) {
+    success
+    failureReason
+    pullRequest { id }
+  }
+}

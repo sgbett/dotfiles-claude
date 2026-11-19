@@ -6,7 +6,8 @@ module CopilotCheck
   # Every reason /copilot-check's scripts can stop or ask for, and every
   # reason promote-check's verdict can hold a draft for, each with its
   # message. A message is a constant, so no GitHub text can reach one;
-  # whatever the lead needs travels beside it in validated fields.
+  # whatever the lead needs travels beside it in validated fields, or, for
+  # stop_naming, in the message itself once checked against a constant list.
   module Reasons
     NOT_A_PULL_REQUEST_NUMBER = :not_a_pull_request_number
     CHAINED_WITHOUT_NUMBER = :chained_without_number
@@ -25,6 +26,7 @@ module CopilotCheck
     COPILOT_UNRECOGNISED = :copilot_unrecognised
     THREADS_OVERFLOW = :threads_overflow
     COPILOT_TIMEOUT = :copilot_timeout
+    COPILOT_REQUEST_REFUSED = :copilot_request_refused
     HEAD_CHANGED = :head_changed
     HEAD_UNREADABLE = :head_unreadable
     READY_STATE_UNEXPECTED = :ready_state_unexpected
@@ -42,9 +44,11 @@ module CopilotCheck
              COPILOT_ID_CHANGED].freeze
     # threads': `fetch` and `resolve` stop only where the thread fetch does.
     THREADS = THREAD_STOPS
-    # rereview's: `request` never stops, and `watch` stops on Copilot's
-    # latest review under another id, or on none newer within 15 minutes.
-    REREVIEW = [COPILOT_ID_CHANGED, COPILOT_TIMEOUT].freeze
+    # rereview's: `request` stops when GitHub refuses to request Copilot's
+    # review other than for one already pending, and `watch` stops on
+    # Copilot's latest review under another id, or on none newer within 15
+    # minutes.
+    REREVIEW = [COPILOT_REQUEST_REFUSED, COPILOT_ID_CHANGED, COPILOT_TIMEOUT].freeze
     # promote-check's whole enum of stops: `check` stops only where the
     # thread fetch does, and `verify` on anything but the head it was given,
     # open, ready and without auto-merge.
@@ -63,6 +67,12 @@ module CopilotCheck
 
     def stop(reason, **fields)
       SkillSupport::Outcome.stop(reason, MESSAGES.fetch(reason), **fields)
+    end
+
+    # A stop whose message names +value+. The caller must have checked
+    # +value+ against a constant list, as it reaches the message.
+    def stop_naming(reason, value, **fields)
+      SkillSupport::Outcome.stop(reason, format(MESSAGES.fetch(reason), value: value), **fields)
     end
 
     # One entry of an ask's list; +details+ carries what the answer needs.
