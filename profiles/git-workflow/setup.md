@@ -32,13 +32,34 @@ git config --global rebase.autoStash true
 - `push.useForceIfIncludes true`: a lease push also checks that the remote tip was seen locally, so a background fetch cannot defeat the lease.
 - `rebase.autoStash true`: a rebase over a dirty tree stashes your changes and restores them afterwards.
 
-Then the trust dialog: the first interactive Claude Code session in the checkout asks whether to trust the workspace and lists the project's hooks. The push-guard hook is what it lists.
+Then the trust dialog: the first interactive Claude Code session in the checkout asks whether to trust the workspace and lists the project's hooks. The push-guard hook is what it lists. The dialog is not a gate on the hook: trust granted to a parent folder extends to the checkout with no new dialog, and a `claude -p` or SDK session never shows one, so the review the next section asks for is what stands between a collaborator and the code the checkout runs.
 
 ## The push-guard hook, what it is and is not
 
-The hook reads the literal text of each Bash command the agent runs. It denies a bare force-push, and any force or deletion aimed at a base branch (`master`, `project/*`, `releases/*`); it asks before a lease push to a branch another author has commits on; otherwise it says nothing. It reads only what the Bash tool is given: a push inside a script, a Makefile or a git alias, a ref update through the GitHub API, or a word it cannot see in the text (`pu''sh`, an escaped or quoted word) is invisible to it, so the hook guards habit and the default branch's ruleset is the server-side control. Project and release branches have the hook alone until a repository adds a ruleset for them.
+The hook reads the literal text of each Bash command the agent runs. It denies a bare force-push, and any force or deletion aimed at a base branch (`master`, `project/*/master`, `releases/*`); it asks before a lease push to, or a deletion of, a branch another author has commits on; it asks, with a reason, about a push it cannot settle; otherwise it says nothing. It reads only what the Bash tool is given: a push inside a script, a Makefile or a git alias, a ref update through the GitHub API, or a push the text does not spell out (`pu''sh`, an escaped word) is invisible to it, so the hook guards habit and the default branch's ruleset is the server-side control. Project and release branches have the hook alone until a repository adds a ruleset for them.
 
-The hook runs code from the checkout on every Bash command, so collaborators review it as they would any code in the repository before trusting the workspace, and review the `.claude/` part of a pull request's diff before checking that branch out, since the next Bash command runs whatever `push-guard` the branch carries. A collaborator who prefers not to run code from the checkout can point a user-level `PreToolUse` hook at a copy of the two files kept outside it.
+Another author is another email address. The author check matches the pusher's `user.email` against each commit's author email, both read through the repository's mailmap, and the display name does not count, so a second address of the pusher's own (a GitHub noreply address, for example) is another author until a `.mailmap` line folds it onto the first.
+
+The hook runs code from the checkout on every Bash command, so collaborators review it as they would any code in the repository before trusting the workspace, and review the `.claude/` part of a pull request's diff before checking that branch out, since the next Bash command runs whatever `push-guard` the branch carries. Hooks merge across settings levels, so a user-level copy of the hook runs beside the checkout's, not instead of it. The opt-out is `disableAllHooks`, in the checkout's `.claude/settings.local.json` or in a file passed with `--settings`, and it silences the collaborator's own hooks in that checkout too.
+
+The entry in `hooks.json`, merged into the repository's `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/push-guard\"", "timeout": 5, "onFailure": "block" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`onFailure` is set because a hook that exceeds its timeout otherwise gives no decision and the push proceeds; Claude Code 2.1.295 and later honour the field.
 
 ## Applying the template to a repository (admin)
 
