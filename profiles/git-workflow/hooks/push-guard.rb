@@ -23,26 +23,64 @@ module PushGuard
   # A destination may name a branch as refs/heads/x, heads/x or x.
   BRANCH_PREFIX = %r{\A(?:refs/)?heads/}.freeze
 
-  # Every reason the hook can give, so the texts live in one place.
+  # The directory a command runs in, as far as the hook can follow it.
+  module Directory
+    # Where a cd or -C lands from +from+, which is nil once the hook has lost
+    # track: a relative path then stays lost, an absolute path or ~ recovers.
+    def self.follow(from, path)
+      return if from.nil? && !path.start_with?('/', '~')
+
+      File.expand_path(path, from)
+    end
+  end
+
+  # Every reason the hook can give, so the texts live in one place. An ask
+  # ends with what silences it.
   module Reasons
     BARE_FORCE = 'push-guard: a bare force-push rewrites whatever is on the remote; ' \
                  'use git push --force-with-lease --force-if-includes on your own branch'
-    EVERY_BRANCH = 'push-guard: --all with a lease may rewrite every branch, base branches included. Push anyway?'
     UNBALANCED_QUOTES = "push-guard: the command's quotes do not balance, so the push in it could not be read"
     UNREADABLE_INPUT = 'push-guard: the hook input could not be read'
     VARIABLE = 'push-guard: a push with an unexpanded $ cannot be read; write the remote and refspec out'
+    UNKNOWN_DIRECTORY = 'push-guard: the directory the push runs in could not be followed, so the push could not ' \
+                        'be checked; write it as git -C <path> push'
+    NO_EMAIL = 'push-guard: user.email is not set, so the commits on the remote could not be told from your own ' \
+               'and the push could not be checked; set it with git config user.email <address>'
+    UNRESOLVED_DESTINATION = 'push-guard: where a push with no refspec goes could not be resolved, so the push ' \
+                             'could not be checked; name the remote and branch, as git push <remote> <branch>'
+    BY_NAME = 'git push <remote> <branch>'
 
     def self.base_branch(branch)
       "push-guard: #{branch} is a base branch; it is never rewritten or deleted"
     end
 
-    def self.other_authors(branch, remote, count)
-      "push-guard: #{branch} on #{remote} has commits by #{count} other author(s); " \
-        'a branch with another active committer is theirs until they say otherwise. Push anyway?'
+    # --all, --prune, a wildcard or matching refspec, push.default=matching
+    # and a configured remote.<name>.push: the remote's refs decide what is
+    # touched, and the hook cannot see them.
+    def self.every_branch(form, by_name = BY_NAME)
+      "push-guard: #{form} may rewrite or delete any branch on the remote, base branches included, " \
+        "so the targets could not be checked; name them, as #{by_name}. Push anyway?"
+    end
+
+    def self.prune
+      every_branch('--prune', 'git push <remote> --delete <branch>')
+    end
+
+    def self.other_authors(branch, remote, addresses, at_least)
+      count = "#{'at least ' if at_least}#{addresses.length}"
+      "push-guard: #{branch} on #{remote} has commits by #{count} other author(s), #{addresses.join(', ')}; " \
+        'a branch with another active committer is theirs until they say otherwise, ' \
+        'and an address of your own belongs in .mailmap. Push anyway?'
+    end
+
+    def self.unreadable_history(branch, remote, mend)
+      "push-guard: the commits of #{branch} on #{remote} beyond its base could not be read, " \
+        "so the push could not be checked; run #{mend} first"
     end
 
     def self.unreadable(construct)
-      "push-guard: a push behind #{construct} cannot be read; run git push on its own command line"
+      "push-guard: a push behind #{construct} cannot be read; " \
+        'run git push on its own command line with the remote and refspec written out'
     end
 
     def self.prefix_option(option)
@@ -90,20 +128,27 @@ module PushGuard
       @reason = reason
     end
 
+    def deny?
+      kind == 'deny'
+    end
+
     def to_json(*)
       JSON.generate('hookSpecificOutput' => { 'hookEventName' => 'PreToolUse', 'permissionDecision' => kind,
                                               'permissionDecisionReason' => reason })
     end
   end
 
-  # One refspec of a push: +src:dst, src:dst, :dst or src.
+  # One refspec of a push: +src:dst, src:dst, :dst, src, or the matching
+  # form, a bare colon.
   class Refspec
-    attr_reader :destination
+    attr_reader :text, :destination
 
     def initialize(text)
+      @text = text
       @force = text.start_with?('+')
       source, destination = text.sub(/\A\+/, '').split(':', 2)
-      @deletion = source.to_s.empty? && !destination.nil?
+      @matching = source.to_s.empty? && destination.to_s.empty?
+      @deletion = source.to_s.empty? && !destination.nil? && !@matching
       @destination = (destination || source).to_s.sub(BRANCH_PREFIX, '')
     end
 
@@ -119,6 +164,21 @@ module PushGuard
     def current_branch?
       destination == 'HEAD'
     end
+
+    # The colon alone pushes every branch that has a namesake on the remote.
+    def matching?
+      @matching
+    end
+
+    # A * in the destination names whatever the remote's refs match.
+    def wildcard?
+      destination.include?('*')
+    end
+
+    # A destination the hook reads without asking git.
+    def named?
+      !current_branch? && !matching? && !wildcard?
+    end
   end
 
   # A git push as its arguments describe it: the force forms, the remote and
@@ -127,11 +187,12 @@ module PushGuard
   # known here is not understood rather than ignored.
   class Push
     FLAGS = %w[--verbose --quiet --tags --no-tags --dry-run --porcelain --thin --no-thin --set-upstream --progress
-               --no-progress --prune --no-prune --verify --no-verify --follow-tags --no-follow-tags --atomic
-               --no-atomic --ipv4 --ipv6 --signed --no-signed --recurse-submodules --no-recurse-submodules
-               --force-if-includes --no-force-if-includes].freeze
-    WITH_ARGUMENT = %w[-o --push-option --repo --receive-pack --exec].freeze
-    WITH_INLINE_ARGUMENT = /\A--(?:push-option|repo|receive-pack|exec|recurse-submodules|signed)=/.freeze
+               --no-progress --verify --no-verify --follow-tags --no-follow-tags --atomic --no-atomic --ipv4 --ipv6
+               --signed --no-signed --recurse-submodules --no-recurse-submodules --force-if-includes
+               --no-force-if-includes].freeze
+    WITH_ARGUMENT = %w[-o --push-option --receive-pack --exec].freeze
+    WITH_INLINE_ARGUMENT = /\A--(?:push-option|receive-pack|exec|recurse-submodules|signed)=/.freeze
+    REPO = /\A--repo(?:=|\z)/.freeze
     # --m onwards is unambiguous: no other push option starts with m.
     MIRROR_FORMS = (3..8).map { |length| '--mirror'[0, length] }.freeze
     SHORT_BUNDLE = /\A-[A-Za-z46]+\z/.freeze
@@ -140,11 +201,12 @@ module PushGuard
 
     def initialize(arguments, directory)
       @directory = directory
-      @force = @lease = @mirror = @delete = @all = false
-      @lease_ref = nil
+      @force = @lease = @lease_value = @mirror = @delete = @all = @prune = false
+      @lease_ref = @repo = nil
       @unknown_options = []
       positionals = read(arguments)
-      @remote = positionals.first
+      # A positional repository wins over --repo, as git ranks them.
+      @remote = positionals.first || @repo
       @refspecs = positionals.drop(1).map { |text| Refspec.new(text) }
     end
 
@@ -163,7 +225,7 @@ module PushGuard
     # Something on the remote may be rewritten or removed, so the targets
     # matter; a plain push never needs git asked anything.
     def destructive?
-      rewrites? || refspecs.any?(&:deletion?)
+      rewrites? || prune? || refspecs.any?(&:deletion?)
     end
 
     def unknown_option
@@ -174,8 +236,22 @@ module PushGuard
       @lease
     end
 
+    # --force-with-lease=<ref>:<value> says what the remote must hold, so
+    # it rewrites without a remote-tracking ref.
+    def lease_value?
+      @lease_value
+    end
+
+    def deletes?
+      @delete
+    end
+
     def all?
       @all
+    end
+
+    def prune?
+      @prune
     end
 
     private
@@ -184,10 +260,8 @@ module PushGuard
       positionals = []
       rest = arguments.dup
       while (word = rest.shift)
-        if word == '--'
-          positionals.concat(rest)
-          break
-        end
+        break positionals.concat(rest) if word == '--'
+
         word.start_with?('-') ? option(word, rest) : positionals << word
       end
       positionals
@@ -196,9 +270,14 @@ module PushGuard
     def option(word, rest)
       return rest.shift if WITH_ARGUMENT.include?(word)
       return short_options(word, rest) if SHORT_BUNDLE.match?(word)
+      return repo_option(word, rest) if REPO.match?(word)
       return if FLAGS.include?(word) || WITH_INLINE_ARGUMENT.match?(word)
 
       shape_option(word)
+    end
+
+    def repo_option(word, rest)
+      @repo = word.include?('=') ? word.split('=', 2).last : rest.shift
     end
 
     # The options that change what the push sends and where.
@@ -207,6 +286,7 @@ module PushGuard
       when *MIRROR_FORMS then @mirror = true
       when '--delete' then @delete = true
       when '--all', '--branches' then @all = true
+      when '--prune', '--no-prune' then @prune = word == '--prune'
       else force_option(word)
       end
     end
@@ -215,19 +295,21 @@ module PushGuard
       case word
       when '--force' then @force = true
       when '--force-with-lease' then @lease = true
-      when /\A--force-with-lease=([^:]*)/ then lease_on(Regexp.last_match(1))
+      when /\A--force-with-lease=([^:]*)(:.*)?\z/ then lease_on(Regexp.last_match(1), Regexp.last_match(2))
       when '--no-force-with-lease' then clear_lease
       else @unknown_options << word
       end
     end
 
-    def lease_on(ref)
+    def lease_on(ref, value)
       @lease = true
       @lease_ref = ref.sub(BRANCH_PREFIX, '') unless ref.empty?
+      @lease_value = true unless value.nil?
     end
 
     def clear_lease
       @lease = false
+      @lease_value = false
       @lease_ref = nil
     end
 
@@ -243,20 +325,34 @@ module PushGuard
 
   # One simple command of the Bash text, read from its command word: what
   # precedes it without changing it (shell keywords, wrappers, NAME=value
-  # assignments) and redirections are dropped first. An option after a
-  # wrapper is not understood, since it may change what runs.
+  # assignments) and redirections are dropped first, though an assignment
+  # that moves git's repository or sets its configuration is kept in mind.
+  # An option after a wrapper is not understood, since it may change what
+  # runs.
   class Segment
     PREFIX_WORDS = %w[command env exec nice time sudo doas if then else elif while until do { !].freeze
     ASSIGNMENT = /\A[A-Za-z_][A-Za-z0-9_]*=/.freeze
-    # `>`, `2>`, `>>`, `<` or `&>` on its own: the next word is the file.
-    REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>)\z/.freeze
-    # `2>&1`, `>/dev/null`, `&>file`, or a trailing `&`.
+    CHANGE_DIRECTORY = %w[cd pushd popd].freeze
+    # GIT_DIR and GIT_WORK_TREE point git at a repository -C does not name.
+    DIRECTORY_ASSIGNMENT = /\AGIT_(?:DIR|WORK_TREE)=/.freeze
+    # GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT with its KEY and VALUE pairs,
+    # and GIT_CONFIG_GLOBAL or _SYSTEM set configuration the hook does not
+    # see.
+    CONFIG_ASSIGNMENT = /\AGIT_CONFIG_[A-Z0-9_]+=/.freeze
+    # An operator on its own (`>`, `2>`, `>>`, `<`, `&>`, `&>>`, `>&`, `<&`
+    # or `2>&`): the next word is its file or descriptor.
+    REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>>?|\d*[<>]&)\z/.freeze
+    # An operator with its file or descriptor attached: `2>&1`, `>&2`,
+    # `>/dev/null`, `&>file` or `&>>log`.
     REDIRECTION = /\A(?:\d*[<>]|&)/.freeze
 
     attr_reader :words
 
     def initialize(words)
-      @words = without_prefix(without_redirections(words))
+      command = without_redirections(words)
+      prefix = command.take_while { |word| PREFIX_WORDS.include?(word) || ASSIGNMENT.match?(word) }
+      @assignments = prefix.grep(ASSIGNMENT)
+      @words = command.drop(prefix.length)
     end
 
     # The option that follows a wrapper, as in env -i or nice -n 10.
@@ -265,14 +361,16 @@ module PushGuard
     end
 
     def change_directory?
-      words.first == 'cd'
+      CHANGE_DIRECTORY.include?(words.first)
     end
 
-    # Where a cd goes: ~ for a bare cd, nil for a form (cd -, options) the
-    # hook does not follow.
+    # Where a cd goes: ~ for a bare cd, and nil for a form the hook cannot
+    # follow (cd -, an option, a $, two arguments, pushd, popd), after which
+    # the directory is unknown.
     def change_directory_target
+      return unless words.first == 'cd'
       return '~' if words.length == 1
-      return if words.length > 2 || words[1].start_with?('-')
+      return if words.length > 2 || words[1].start_with?('-') || words[1].include?('$')
 
       words[1]
     end
@@ -281,15 +379,27 @@ module PushGuard
       !words.empty? && File.basename(words.first) == 'git'
     end
 
+    # Something other than git runs, with git and push among its words: a
+    # wrapper the hook does not know, timeout or nohup say, that may hand
+    # them on.
+    def wraps_push?
+      words.include?('push') && words.any? { |word| File.basename(word) == 'git' }
+    end
+
     def git_arguments
       words.drop(1)
     end
 
-    private
-
-    def without_prefix(words)
-      words.drop_while { |word| PREFIX_WORDS.include?(word) || ASSIGNMENT.match?(word) }
+    def directory_unknown?
+      @assignments.any? { |word| DIRECTORY_ASSIGNMENT.match?(word) }
     end
+
+    # The GIT_CONFIG_* variable set for the command, if one is.
+    def config_override
+      @assignments.find { |word| CONFIG_ASSIGNMENT.match?(word) }&.split('=', 2)&.first
+    end
+
+    private
 
     def without_redirections(words)
       rest = words.dup
@@ -304,27 +414,35 @@ module PushGuard
     end
   end
 
-  # git's own options before the subcommand; -C names the directory, an
-  # option the hook does not know ends the reading, and a -c that changes
-  # what push does is remembered.
+  # git's own options before the subcommand: each -C names a directory
+  # relative to the one before it, --git-dir and --work-tree point git
+  # somewhere the hook does not follow, an option the hook does not know
+  # ends the reading, and a -c that changes what push does is remembered.
   class GitCommand
     FLAGS = %w[--no-pager -p --paginate -P --no-replace-objects --bare --literal-pathspecs --glob-pathspecs
                --noglob-pathspecs --icase-pathspecs --no-optional-locks --no-lazy-fetch].freeze
-    WITH_ARGUMENT = %w[-c --git-dir --work-tree --namespace --exec-path --config-env].freeze
-    INLINE_ARGUMENT = /\A--(?:git-dir|work-tree|namespace|exec-path|config-env|super-prefix)=/.freeze
+    WITH_ARGUMENT = %w[-c --namespace --exec-path --config-env].freeze
+    INLINE_ARGUMENT = /\A--(?:namespace|exec-path|config-env|super-prefix)=/.freeze
+    MOVES_REPOSITORY = /\A--(?:git-dir|work-tree)(?:=|\z)/.freeze
     # alias.* can rename push; remote.*, push.* and url.* change what, where
     # and how it pushes.
     PUSH_CONFIG = /\A(?:alias|remote|push|url)\./i.freeze
 
-    attr_reader :directory, :subcommand, :arguments, :unknown_option, :config_override
+    attr_reader :directories, :subcommand, :arguments, :unknown_option, :config_override
 
     def initialize(arguments)
       @arguments = arguments.dup
+      @directories = []
+      @directory_unknown = false
       read_options
     end
 
     def push?
       subcommand == 'push'
+    end
+
+    def directory_unknown?
+      @directory_unknown
     end
 
     private
@@ -341,16 +459,19 @@ module PushGuard
     end
 
     def known_option?(word)
-      if word == '-C'
-        @directory = @arguments.shift
-      elsif WITH_ARGUMENT.include?(word)
-        note_config(word, @arguments.shift)
-      elsif INLINE_ARGUMENT.match?(word)
-        note_config(word[/\A--[a-z-]+/], word.split('=', 2).last)
-      else
-        return FLAGS.include?(word)
+      case word
+      when '-C' then @directories << @arguments.shift.to_s
+      when MOVES_REPOSITORY then lose_directory(word)
+      when *WITH_ARGUMENT then note_config(word, @arguments.shift)
+      when INLINE_ARGUMENT then note_config(word[/\A--[a-z-]+/], word.split('=', 2).last)
+      else return FLAGS.include?(word)
       end
       true
+    end
+
+    def lose_directory(word)
+      @arguments.shift unless word.include?('=')
+      @directory_unknown = true
     end
 
     def note_config(option, value)
@@ -362,17 +483,24 @@ module PushGuard
   end
 
   # Reads the Bash text into the pushes it holds, following cd between
-  # commands, and into asks for what it cannot read.
+  # commands as far as it can, and into asks for what it cannot read.
   class CommandReader
-    SEPARATORS = /\n|;|&&|\|\||\||&/.freeze
+    # A newline, ;, pipe, &&, ||, |& or a background &, but not the & of
+    # 2>&1, >&2 or &>file.
+    SEPARATORS = /\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>)/.freeze
+    CONTINUATION = /\\\n/.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
     attr_reader :pushes, :decisions
 
     def initialize(command, cwd)
-      @command = command
+      @command = command.gsub(CONTINUATION, '')
       @cwd = cwd
+      # A cd inside parentheses is a subshell's, which the next command does
+      # not inherit; the hook does not read the nesting, so any cd in such a
+      # command loses the directory.
+      @subshell = @command.match?(/[()]/)
       @pushes = []
       @decisions = []
     end
@@ -399,38 +527,51 @@ module PushGuard
       ask(reason) if text.include?('push')
     end
 
+    # A cd is followed before the $ test, since Shellwords keeps a $d whole
+    # and a cd "$d" must lose the directory rather than be passed over.
     def read_segment(text)
-      return ask_about_push(text, Reasons::VARIABLE) if text.include?('$')
-
       words = split(text)
       return ask_about_push(text, Reasons::UNBALANCED_QUOTES) if words.nil?
 
-      read_words(Segment.new(words), text)
+      segment = Segment.new(words)
+      return follow(segment) if segment.change_directory?
+      return ask_about_push(text, Reasons::VARIABLE) if text.include?('$')
+
+      read_words(segment, text)
     end
 
     def read_words(segment, text)
       return ask_about_push(text, Reasons.prefix_option(segment.prefix_option)) if segment.prefix_option
-      return follow(segment) if segment.change_directory?
-      return unless segment.git?
+      return read_git(segment, text) if segment.git?
 
-      read_git(GitCommand.new(segment.git_arguments), text)
+      ask(Reasons.unreadable(segment.words.first)) if segment.wraps_push?
     end
 
-    # A push-shaping -c is asked about whether or not the segment says push:
-    # an alias can give push any name.
-    def read_git(git, text)
+    # A push-shaping -c or GIT_CONFIG_* variable is asked about whether or
+    # not the segment says push: an alias can give push any name.
+    def read_git(segment, text)
+      git = GitCommand.new(segment.git_arguments)
+      override = segment.config_override || git.config_override
       if git.unknown_option
         ask_about_push(text, Reasons.unknown_git_option(git.unknown_option))
-      elsif git.config_override
-        ask(Reasons.config_override(git.config_override))
+      elsif override
+        ask(Reasons.config_override(override))
       elsif git.push?
-        @pushes << Push.new(git.arguments, File.expand_path(git.directory || '.', @cwd))
+        @pushes << Push.new(git.arguments, push_directory(segment, git))
       end
     end
 
+    # nil once the directory is unknown: after a cd the hook could not
+    # follow, or under GIT_DIR, GIT_WORK_TREE, --git-dir or --work-tree.
+    def push_directory(segment, git)
+      return if segment.directory_unknown? || git.directory_unknown?
+
+      git.directories.reduce(@cwd) { |from, path| Directory.follow(from, path) }
+    end
+
     def follow(segment)
-      target = segment.change_directory_target
-      @cwd = File.expand_path(target, @cwd) if target
+      target = segment.change_directory_target unless @subshell
+      @cwd = target.nil? ? nil : Directory.follow(@cwd, target)
     end
 
     def split(text)
@@ -446,6 +587,10 @@ module PushGuard
   class Repository
     ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0' }.freeze
     GIT = %w[git --no-pager -c core.fsmonitor=false -c log.showSignature=false].freeze
+    DESTINATION_FORMAT = '%(refname)%00%(push:remotename)%00%(push:short)'
+    # Keeps the log within the hook's timeout on a branch of any length; the
+    # count the hook gives is then a floor.
+    MAX_COMMITS = 1000
 
     def initialize(directory)
       @directory = directory
@@ -468,9 +613,34 @@ module PushGuard
       git('config', key)
     end
 
-    # [email, name] per commit in +range+.
+    # Where git would push +branch+ with no refspec, as [remote name, short
+    # destination] from its push atoms, resolved for +remote+ when the
+    # command names one; both empty where git has no answer, nil where it
+    # fails. The pattern also lists refs/heads/<branch>/..., so the exact
+    # line is taken.
+    def push_destination(branch, remote)
+      override = remote ? ['-c', "branch.#{branch}.pushRemote=#{remote}"] : []
+      output = git(*override, 'for-each-ref', "--format=#{DESTINATION_FORMAT}", "refs/heads/#{branch}")
+      return if output.nil?
+
+      line = output.lines.find { |candidate| candidate.start_with?("refs/heads/#{branch}\0") }
+      line.to_s.chomp.split("\0", 3).drop(1)
+    end
+
+    # user.email as .mailmap maps it; nil where it is not set.
+    def own_email
+      email = config('user.email').to_s
+      return if email.empty?
+
+      git('check-mailmap', "<#{email}>").to_s[/<([^>]*)>/, 1] || email
+    end
+
+    # [email, name] per commit in +range+, newest first and MAX_COMMITS at
+    # most, the email as .mailmap maps it; nil when git cannot read the
+    # range. Identity is the email alone; the name is kept because a bot is
+    # known by its name.
     def authors(range)
-      output = git('log', '--no-show-signature', '--format=%ae%x00%an', range)
+      output = git('log', '--no-show-signature', "--max-count=#{MAX_COMMITS}", '--format=%aE%x00%aN', range)
       return if output.nil?
 
       output.lines.map do |line|
@@ -487,25 +657,88 @@ module PushGuard
     end
   end
 
-  # How many people other than the pusher have commits on the remote's copy
-  # of the branch beyond its base; nil when git cannot say.
+  # Where a push with no refspec goes. git resolves it for the current branch
+  # under push.default, remote.pushDefault and branch.<name>.pushRemote, and
+  # for the remote the command names when it names one, so the hook keeps
+  # none of those rules itself. Two settings the push atoms fold away,
+  # push.default=matching and a configured remote.<name>.push, are read from
+  # config and asked about, as is a git that fails.
+  class Destination
+    attr_reader :remote, :branch, :ask
+
+    def initialize(repository, named_remote)
+      @repository = repository
+      @named_remote = named_remote
+      resolve
+    end
+
+    private
+
+    def resolve
+      current = @repository.current_branch
+      return if current.nil?
+      return refuse(Reasons.every_branch('push.default=matching')) if matching?
+
+      resolved = @repository.push_destination(current, @named_remote)
+      return refuse(Reasons::UNRESOLVED_DESTINATION) if resolved.nil?
+
+      @remote = remote_name(resolved[0])
+      return refuse(Reasons.every_branch("the configured remote.#{remote}.push")) if configured_refspec?
+
+      @branch = branch_name(resolved[1], current)
+    end
+
+    def refuse(reason)
+      @ask = Decision.ask(reason)
+    end
+
+    def matching?
+      @repository.config('push.default') == 'matching'
+    end
+
+    def configured_refspec?
+      !@repository.config("remote.#{remote}.push").nil?
+    end
+
+    # The remote-name atom is empty where no configuration names one, which
+    # is where git falls back to origin.
+    def remote_name(atom)
+      [@named_remote, atom, 'origin'].find { |name| !name.to_s.empty? }
+    end
+
+    # The short destination is <remote>/<branch>, and empty where git would
+    # refuse the push; the current branch then stands, so a checkout of a
+    # base branch is still denied.
+    def branch_name(short, current)
+      branch = short.to_s.delete_prefix("#{remote}/")
+      branch.empty? ? current : branch
+    end
+  end
+
+  # Whether people other than the pusher have commits on the remote's copy
+  # of the branch beyond its base, as an ask; nil where none have, and where
+  # there is no copy to read and git needs none.
   class AuthorCheck
     BOT_NAME = /\[bot\]\z/i.freeze
     GITHUB_ACTIONS = /github-actions/i.freeze
 
-    def initialize(repository, remote, branch)
+    def initialize(repository, remote, branch, copy_needed)
       @repository = repository
       @remote = remote
       @branch = branch
+      @copy_needed = copy_needed
     end
 
-    def other_authors
-      return unless repository.ref?(tracking_ref)
+    def ask
+      return missing_copy unless repository.ref?(tracking_ref)
 
-      authors = repository.authors("#{base_ref}..#{tracking_ref}")
-      return if authors.nil?
+      own = repository.own_email
+      return Decision.ask(Reasons::NO_EMAIL) if own.nil?
 
-      strangers(authors).map { |email, _name| email.downcase }.uniq.length
+      base, mend = base_and_mend
+      return unreadable(mend) unless repository.ref?(base)
+
+      strangers_ask(repository.authors("#{base}..#{tracking_ref}"), own)
     end
 
     private
@@ -516,18 +749,42 @@ module PushGuard
       "refs/remotes/#{remote}/#{branch}"
     end
 
-    def base_ref
-      "refs/remotes/#{remote}/#{repository.default_branch(remote) || 'master'}"
+    # A bare lease expects the remote-tracking ref, so without one git itself
+    # rejects the rewrite as stale information and nothing is checked; a
+    # lease with a value in it rewrites without one, so the copy is needed to
+    # read the authors and its absence asks.
+    def missing_copy
+      unreadable("git fetch #{remote} #{branch}") if @copy_needed
     end
 
-    def strangers(authors)
-      own_email = repository.config('user.email')
-      own_name = repository.config('user.name')
-      authors.reject { |email, name| same?(own_email, email) || same?(own_name, name) || bot?(email, name) }
+    # The remote's copy of its default branch, with the command that brings
+    # it here when it is not: a fetch of that branch, or set-head where the
+    # remote's HEAD itself is not known and master is assumed.
+    def base_and_mend
+      default = repository.default_branch(remote)
+      return ["refs/remotes/#{remote}/master", "git remote set-head #{remote} -a"] if default.nil?
+
+      ["refs/remotes/#{remote}/#{default}", "git fetch #{remote} #{default}"]
     end
 
-    def same?(mine, theirs)
-      !mine.nil? && !mine.empty? && mine.casecmp?(theirs)
+    def unreadable(mend)
+      Decision.ask(Reasons.unreadable_history(branch, remote, mend))
+    end
+
+    def strangers_ask(authors, own)
+      return unreadable("git fetch #{remote} #{branch}") if authors.nil?
+
+      addresses = strangers(authors, own)
+      return if addresses.empty?
+
+      Decision.ask(Reasons.other_authors(branch, remote, addresses, authors.length == Repository::MAX_COMMITS))
+    end
+
+    # The addresses on the branch that are neither the pusher's nor a bot's,
+    # lower-cased and each once.
+    def strangers(authors, own)
+      strangers = authors.reject { |email, name| own.casecmp?(email) || bot?(email, name) }
+      strangers.map { |email, _name| email.downcase }.uniq
     end
 
     def bot?(email, name)
@@ -535,12 +792,16 @@ module PushGuard
     end
   end
 
-  # The decision table for one push, first match wins: a bare force is
-  # denied, an option not understood is asked about, a rewrite or deletion
-  # of a base branch is denied, a lease onto another author's commits is
-  # asked about, and the rest is left to the permission rules.
+  # The decision for one push. The order is the point: what needs no question
+  # to git is settled first (a bare force denied, an option not understood
+  # asked about, a plain push left to the permission rules, a push whose
+  # targets cannot be named asked about, a refspec naming a base branch
+  # denied), so a deny never waits on git and a directory the hook lost track
+  # of is asked about before git is asked anything; then the targets git
+  # names are checked against the bases; and last, since it can only add an
+  # ask, the authors on the remote's copy.
   class Judge
-    def initialize(push, repository = Repository.new(push.directory))
+    def initialize(push, repository = nil)
       @push = push
       @repository = repository
     end
@@ -548,51 +809,108 @@ module PushGuard
     def decide
       return Decision.deny(Reasons::BARE_FORCE) if push.bare_force?
       return Decision.ask(Reasons.unknown_push_option(push.unknown_option)) if push.unknown_option
-      return unless push.destructive?
 
-      decide_targets
+      decide_targets if push.destructive?
     end
 
     private
 
-    attr_reader :push, :repository
+    attr_reader :push
 
-    def decide_targets
-      return Decision.ask(Reasons::EVERY_BRANCH) if push.all? && push.lease?
-
-      Decision.strictest(targets.map { |branch, deleting| decide_target(branch, deleting) })
+    def repository
+      @repository ||= Repository.new(push.directory)
     end
 
-    def decide_target(branch, deleting)
-      return if branch.nil?
-      return Decision.deny(Reasons.base_branch(branch)) if base?(branch) && (deleting || push.rewrites?)
-      return unless push.lease?
+    # --delete with no refspec is a push git refuses, so nothing is decided.
+    def decide_targets
+      return if push.deletes? && push.refspecs.empty?
 
-      other_authors_ask(branch)
+      decisions = decisions_without_git
+      return Decision.strictest(decisions) if decisions.any?(&:deny?)
+      return Decision.strictest(decisions << Decision.ask(Reasons::UNKNOWN_DIRECTORY)) if push.directory.nil?
+
+      Decision.strictest(decisions_with_git(decisions))
+    end
+
+    def decisions_without_git
+      [unnamed_targets_ask, *base_denies(named_targets)].compact
+    end
+
+    def base_denies(targets)
+      targets.map { |branch, deleting| base_deny(branch, deleting) }
+    end
+
+    def unnamed_targets_ask
+      reason = unnamed_targets_reason
+      Decision.ask(reason) if reason
+    end
+
+    # --prune, --all with a lease, a wildcard or the matching refspec: the
+    # remote decides what they touch.
+    def unnamed_targets_reason
+      return Reasons.prune if push.prune?
+      return Reasons.every_branch('--all with a lease') if push.all? && push.lease?
+
+      refspec = push.refspecs.find { |candidate| candidate.wildcard? || candidate.matching? }
+      Reasons.every_branch("the refspec #{refspec.text}") if refspec
+    end
+
+    # [branch, deleting] for each refspec the hook reads on its own, and for
+    # the lease's ref when no refspec names a branch.
+    def named_targets
+      targets = push.refspecs.select(&:named?).map { |refspec| [refspec.destination, deleting?(refspec)] }
+      targets << [push.lease_ref, false] if push.refspecs.empty? && push.lease_ref
+      targets
+    end
+
+    def deleting?(refspec)
+      push.deletes? || refspec.deletion?
+    end
+
+    def base_deny(branch, deleting)
+      return unless base?(branch) && (deleting || push.rewrites?)
+
+      Decision.deny(Reasons.base_branch(branch))
     end
 
     def base?(branch)
       BASE_BRANCHES.any? { |pattern| File.fnmatch(pattern, branch, File::FNM_PATHNAME) }
     end
 
-    # [branch, deleting] per refspec; without one, the lease's ref, else the
-    # current branch.
-    def targets
-      return push.refspecs.map { |refspec| [branch_of(refspec), refspec.deletion?] } unless push.refspecs.empty?
+    # The targets git names, the current branch behind HEAD or where a push
+    # with no refspec goes, checked against the bases; then every target's
+    # authors, unless an ask is already in hand.
+    def decisions_with_git(decisions)
+      targets = resolved_targets
+      decisions += [destination&.ask, *base_denies(targets)].compact
+      return decisions unless decisions.empty?
 
-      [[push.lease_ref || repository.current_branch, false]]
+      author_asks(push.remote || destination.remote, named_targets + targets)
     end
 
-    def branch_of(refspec)
-      refspec.current_branch? ? repository.current_branch : refspec.destination
+    # Where a push with no refspec goes; nil where refspecs name the targets.
+    def destination
+      return unless push.refspecs.empty?
+
+      @destination ||= Destination.new(repository, push.remote)
     end
 
-    def other_authors_ask(branch)
-      remote = push.remote || 'origin'
-      count = AuthorCheck.new(repository, remote, branch).other_authors
-      return if count.nil? || count.zero?
+    def resolved_targets
+      return destination.branch ? [[destination.branch, false]] : [] if destination
 
-      Decision.ask(Reasons.other_authors(branch, remote, count))
+      refspecs = push.refspecs.select(&:current_branch?)
+      current = repository.current_branch unless refspecs.empty?
+      current ? refspecs.map { |refspec| [current, deleting?(refspec)] } : []
+    end
+
+    def author_asks(remote, targets)
+      targets.uniq.map { |branch, deleting| author_ask(remote, branch, deleting) }
+    end
+
+    def author_ask(remote, branch, deleting)
+      return unless push.lease? || deleting
+
+      AuthorCheck.new(repository, remote, branch, push.lease_value?).ask
     end
   end
 

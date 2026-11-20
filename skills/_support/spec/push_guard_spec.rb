@@ -12,10 +12,22 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     'push-guard: a bare force-push rewrites whatever is on the remote; ' \
       'use git push --force-with-lease --force-if-includes on your own branch'
   end
+  let(:another_on_feat) do
+    'push-guard: feat on origin has commits by 1 other author(s), another@example.invalid; a branch with another ' \
+      'active committer is theirs until they say otherwise, and an address of your own belongs in .mailmap. ' \
+      'Push anyway?'
+  end
+  let(:unknown_directory) do
+    'push-guard: the directory the push runs in could not be followed, so the push could not be checked; ' \
+      'write it as git -C <path> push'
+  end
   let(:another_author) { { 'GIT_AUTHOR_NAME' => 'Another Author', 'GIT_AUTHOR_EMAIL' => 'another@example.invalid' } }
+  let(:same_name_stranger) { { 'GIT_AUTHOR_NAME' => 'Skill Spec', 'GIT_AUTHOR_EMAIL' => 'stranger@example.invalid' } }
+  let(:aliased_pusher) { { 'GIT_AUTHOR_NAME' => 'S. Spec', 'GIT_AUTHOR_EMAIL' => 'other@example.invalid' } }
   let(:bot_author) do
     { 'GIT_AUTHOR_NAME' => 'dependabot[bot]', 'GIT_AUTHOR_EMAIL' => '1+dependabot[bot]@users.noreply.github.com' }
   end
+  let(:system_path) { { 'PATH' => '/usr/bin:/bin' } }
 
   def event(command, cwd: Dir.pwd, tool_name: 'Bash')
     JSON.generate('hook_event_name' => 'PreToolUse', 'tool_name' => tool_name, 'session_id' => 'spec', 'cwd' => cwd,
@@ -38,6 +50,19 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     run_hook(event(command, **options), env)
   end
 
+  # The ask for one other author's commits on +branch+ at +remote+; the
+  # example on origin pins the text in full.
+  def other_authors_ask(branch, remote, address = 'another@example.invalid')
+    ['ask', "push-guard: #{branch} on #{remote} has commits by 1 other author(s), #{address}; a branch with another " \
+            'active committer is theirs until they say otherwise, and an address of your own belongs in .mailmap. ' \
+            'Push anyway?']
+  end
+
+  def unreadable_history_ask(mend)
+    ['ask', 'push-guard: the commits of feat on origin beyond its base could not be read, so the push could not be ' \
+            "checked; run #{mend} first"]
+  end
+
   def git(*arguments, env: {})
     output, status = Open3.capture2e(env, 'git', *arguments)
     raise "git #{arguments.join(' ')} failed: #{output}" unless status.success?
@@ -52,12 +77,23 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     git('push', '--quiet', '-u', 'origin', 'feat')
   end
 
+  # A commit by +author+ on the checkout, pushed to +branch+ on origin while
+  # feat stays the current branch.
+  def push_branch(branch, author = {})
+    commit("on #{branch}", env: author)
+    git('push', '--quiet', 'origin', "HEAD:#{branch}")
+  end
+
+  def configure(key, value)
+    git('config', key, value)
+  end
+
   # The pusher's identity as the sandbox commits with, in the repository's
   # configuration, where the hook reads it.
   def declare_pusher
     identity = SkillSupport::Testing::Sandbox::GIT_IDENTITY
-    git('config', 'user.email', identity.fetch('GIT_AUTHOR_EMAIL'))
-    git('config', 'user.name', identity.fetch('GIT_AUTHOR_NAME'))
+    configure('user.email', identity.fetch('GIT_AUTHOR_EMAIL'))
+    configure('user.name', identity.fetch('GIT_AUTHOR_NAME'))
   end
 
   # The sandbox repository on feat, with a bare origin whose default branch is
@@ -73,6 +109,40 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     push_commit('mine')
   end
 
+  # A second remote at the same bare repository, fetched.
+  def add_remote(name)
+    git('remote', 'add', name, sandbox.path('origin.git'))
+    git('fetch', '--quiet', name)
+  end
+
+  # feat tracks origin/+branch+, created on origin from master.
+  def track(branch)
+    git('push', '--quiet', 'origin', "master:#{branch}")
+    git('branch', '--quiet', "--set-upstream-to=origin/#{branch}", 'feat')
+  end
+
+  def mailmap(line)
+    File.write('.mailmap', "#{line}\n")
+  end
+
+  # What a single-branch fetch leaves: the remote's HEAD known, its copy of
+  # master not here.
+  def forget_base
+    git('update-ref', '-d', 'refs/remotes/origin/master')
+  end
+
+  def forget_remote_head
+    git('remote', 'set-head', 'origin', '--delete')
+  end
+
+  # The object behind origin/feat goes missing, so the ref still resolves
+  # while a log over it fails.
+  def lose_tip
+    sha, = Open3.capture2('git', 'rev-parse', 'refs/remotes/origin/feat')
+    sha = sha.strip
+    File.delete(File.join('.git', 'objects', sha[0, 2], sha[2..]))
+  end
+
   # The repository's configuration tells git log to verify signatures with a
   # gpg that leaves a marker behind, whose path this returns: a git log that
   # obeys that configuration runs it on a signed commit.
@@ -80,8 +150,8 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     marker = sandbox.path('gpg-ran')
     File.write(sandbox.path('gpg'), "#!/bin/sh\ntouch '#{marker}'\nexit 1\n")
     File.chmod(0o755, sandbox.path('gpg'))
-    git('config', 'gpg.program', sandbox.path('gpg'))
-    git('config', 'log.showSignature', 'true')
+    configure('gpg.program', sandbox.path('gpg'))
+    configure('log.showSignature', 'true')
     marker
   end
 
@@ -142,6 +212,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(requires).to contain_exactly('json', 'open3', 'shellwords')
     end
 
+    # The system PATH alone: its ruby is Apple's 2.6, and the xcrun its
+    # rbconfig shells out to is beside it. A method 2.6 lacks parses and then
+    # fails at run time, so the paths that parse git's output run end to end.
     context 'under the ruby macOS ships' do
       before { skip 'no /usr/bin/ruby on this machine' unless File.executable?('/usr/bin/ruby') }
 
@@ -150,20 +223,39 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         expect([output.strip, status.success?]).to eq(['Syntax OK', true])
       end
 
-      # The system PATH alone: its ruby is Apple's, and the xcrun its rbconfig
-      # shells out to is beside it.
       it 'denies a bundled -f end to end' do
-        expect(guard('git push -fu origin x', env: { 'PATH' => '/usr/bin:/bin' })).to eq(['deny', bare_force])
+        expect(guard('git push -fu origin x', env: system_path)).to eq(['deny', bare_force])
+      end
+
+      it 'resolves the destination through push.default=upstream end to end' do
+        repository_with_origin
+        track('project/p1/master')
+        configure('push.default', 'upstream')
+        expect(guard('git push --force-with-lease', env: system_path))
+          .to eq(['deny', 'push-guard: project/p1/master is a base branch; it is never rewritten or deleted'])
+      end
+
+      it 'reads the authors through .mailmap end to end' do
+        repository_with_origin
+        mailmap('Skill Spec <skill-spec@example.invalid> <other@example.invalid>')
+        push_commit('mine too', aliased_pusher)
+        push_commit('theirs', another_author)
+        expect(guard('git push --force-with-lease', env: system_path)).to eq(['ask', another_on_feat])
       end
     end
   end
 
   describe 'a plain push' do
     ['git push', 'git push -u origin feat', 'git push --tags', 'git push -n origin x', 'git push origin :feat',
-     'git push --delete origin feat'].each do |command|
+     'git push --delete origin feat', 'git push --no-prune origin', 'git push origin :', 'GIT_DIR=/elsewhere git push',
+     'cd "$d" && git push', 'pushd work && git push origin feat'].each do |command|
       it "leaves `#{command}` to the permission rules" do
         expect(guard(command)).to be_nil
       end
+    end
+
+    it 'decides nothing for --repo origin --delete x, which has no refspec and git refuses' do
+      expect(guard('git push --repo origin --delete x')).to be_nil
     end
   end
 
@@ -173,10 +265,17 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
      'git push origin x --force', 'cd x && git push -f', 'A=b git push -f', 'sudo git push -f',
      'git push -f origin x 2>&1', '(git push -f)', 'git push -f &', 'if git push -f; then echo pushed; fi',
      'git push --force-with-lease -f origin feat', 'git push --force-with-lease --force origin feat',
-     'git push --force-with-lease --no-force-with-lease -f origin feat'].each do |command|
+     'git push --force-with-lease --no-force-with-lease -f origin feat',
+     'git push origin x 2>&1 --force', '2>&1 git push --force', 'git push --force >&2', 'git push --force &>/dev/null',
+     'git push --force |& tee log', 'git push --force-with-lease origin feat 2>&1 && git push -f origin x',
+     'cd "$d" && git push --force', 'GIT_DIR=/elsewhere git push --force'].each do |command|
       it "denies `#{command}`" do
         expect(guard(command)).to eq(['deny', bare_force])
       end
+    end
+
+    it 'joins a backslash-newline continuation before reading, so a --force on the second line is read' do
+      expect(guard("git push origin feat --force-with-lease \\\n  --force")).to eq(['deny', bare_force])
     end
 
     it 'denies first when a lease push shares the command with it' do
@@ -193,12 +292,14 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       'git push --force-with-lease origin releases/1' => 'releases/1',
       'git push --force-with-lease origin releases/v2' => 'releases/v2',
       'git push --force-with-lease origin HEAD:project/x/master' => 'project/x/master',
-      'git push --delete origin project/x/master' => 'project/x/master',
+      'git push --prune --force-with-lease origin master' => 'master',
       'git push --delete origin master' => 'master',
+      'git push --delete origin project/x/master' => 'project/x/master',
       'git push -d origin releases/1' => 'releases/1',
       'git push origin :master' => 'master',
       'git push origin :refs/heads/master' => 'master',
-      'git push origin :heads/master' => 'master' }.each do |command, branch|
+      'git push origin :heads/master' => 'master',
+      'cd "$d" && git push --force-with-lease origin master' => 'master' }.each do |command, branch|
       it "denies `#{command}`" do
         expect(guard(command))
           .to eq(['deny', "push-guard: #{branch} is a base branch; it is never rewritten or deleted"])
@@ -210,10 +311,21 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
     end
 
+    it 'denies --all with a lease from a checkout of master, the strictest answer standing' do
+      expect(guard('git push --all --force-with-lease'))
+        .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    end
+
     it 'leaves project/x/y, project/x and releases/v2/hotfix as work branches, a * being one path segment' do
       commands = ['git push --force-with-lease origin project/x/y', 'git push --force-with-lease origin project/x',
                   'git push --force-with-lease origin releases/v2/hotfix', 'git push --delete origin project/x/y']
       expect(commands.map { |command| guard(command) }).to eq([nil, nil, nil, nil])
+    end
+
+    it 'judges a lease push to project/x/y, a pull-request branch, by its authors' do
+      repository_with_origin
+      push_branch('project/x/y', another_author)
+      expect(guard('git push --force-with-lease origin project/x/y')).to eq(other_authors_ask('project/x/y', 'origin'))
     end
 
     it 'reads --no-force-with-lease after a lease as clearing it, leaving a plain push' do
@@ -225,15 +337,42 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'says nothing when the remote has only the pusher’s commits beyond the base' do
       repository_with_origin
       expect([guard('git push --force-with-lease'),
-              guard('git push --force-with-lease --force-if-includes origin feat')]).to eq([nil, nil])
+              guard('git push --force-with-lease --force-if-includes origin feat'),
+              guard('git push --force-with-lease origin feat 2>&1 && echo ok')]).to eq([nil, nil, nil])
     end
 
-    it 'asks when another author has commits there, counting them' do
+    it 'asks when another author has commits there, naming them' do
       repository_with_origin
       push_commit('theirs', another_author)
+      expect(guard('git push --force-with-lease')).to eq(['ask', another_on_feat])
+    end
+
+    it 'asks about a stranger who shares the pusher’s name, since identity is the email alone' do
+      repository_with_origin
+      push_commit('theirs', same_name_stranger)
+      expect(guard('git push --force-with-lease')).to eq(other_authors_ask('feat', 'origin', 'stranger@example.invalid'))
+    end
+
+    it 'does not count a second address of the pusher’s that .mailmap folds onto the first' do
+      repository_with_origin
+      mailmap('Skill Spec <skill-spec@example.invalid> <other@example.invalid>')
+      push_commit('mine too', aliased_pusher)
+      expect(guard('git push --force-with-lease')).to be_nil
+    end
+
+    it 'reads the pusher’s own user.email through .mailmap too' do
+      repository_with_origin
+      mailmap('Skill Spec <skill-spec@example.invalid> <other@example.invalid>')
+      configure('user.email', 'other@example.invalid')
+      expect(guard('git push --force-with-lease')).to be_nil
+    end
+
+    it 'asks when user.email is not set' do
+      repository_with_origin
+      git('config', '--unset', 'user.email')
       expect(guard('git push --force-with-lease'))
-        .to eq(['ask', 'push-guard: feat on origin has commits by 1 other author(s); a branch with another active ' \
-                       'committer is theirs until they say otherwise. Push anyway?'])
+        .to eq(['ask', 'push-guard: user.email is not set, so the commits on the remote could not be told from your ' \
+                       'own and the push could not be checked; set it with git config user.email <address>'])
     end
 
     it 'does not count a bot' do
@@ -246,6 +385,42 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --force-with-lease origin solo')).to be_nil
     end
 
+    it 'asks for a lease with a value in it when the remote’s copy is not here, naming the fetch' do
+      expect(guard('git push --force-with-lease=feat:0123abc origin feat'))
+        .to eq(unreadable_history_ask('git fetch origin feat'))
+    end
+
+    it 'asks when the base is not here, naming the fetch' do
+      repository_with_origin
+      forget_base
+      expect(guard('git push --force-with-lease')).to eq(unreadable_history_ask('git fetch origin master'))
+    end
+
+    it 'asks when neither the base nor the remote’s HEAD is here, naming set-head' do
+      repository_with_origin
+      forget_remote_head
+      forget_base
+      expect(guard('git push --force-with-lease')).to eq(unreadable_history_ask('git remote set-head origin -a'))
+    end
+
+    it 'asks when git log fails, naming the fetch' do
+      repository_with_origin
+      lose_tip
+      expect(guard('git push --force-with-lease')).to eq(unreadable_history_ask('git fetch origin feat'))
+    end
+
+    it 'asks about a deletion of a branch another author has commits on, as about a lease' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect([guard('git push origin --delete feat'), guard('git push origin :feat'), guard('git push -d origin feat')])
+        .to eq([['ask', another_on_feat]] * 3)
+    end
+
+    it 'says nothing about a deletion of a branch with only the pusher’s commits' do
+      repository_with_origin
+      expect(guard('git push origin --delete feat')).to be_nil
+    end
+
     it 'asks the repository that -C names, relative to cwd' do
       repository_with_origin
       push_commit('theirs', another_author)
@@ -254,15 +429,30 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([nil, 'ask'])
     end
 
+    it 'joins repeated -C paths in order' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect(guard('git -C .. -C work push --force-with-lease')).to eq(['ask', another_on_feat])
+    end
+
     it 'follows a cd earlier in the command' do
       repository_with_origin
       push_commit('theirs', another_author)
       expect(guard('cd work && git push --force-with-lease 2>&1', cwd: sandbox.root).first).to eq('ask')
     end
 
-    it 'asks before --all with a lease, which may rewrite every branch' do
-      expect(guard('git push --all --force-with-lease'))
-        .to eq(['ask', 'push-guard: --all with a lease may rewrite every branch, base branches included. Push anyway?'])
+    it 'recovers the directory from an absolute cd or -C after one it could not follow' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect([guard("cd \"$d\" && cd #{sandbox.work_directory} && git push --force-with-lease", cwd: sandbox.root),
+              guard("cd \"$d\" && git -C #{sandbox.work_directory} push --force-with-lease", cwd: sandbox.root)])
+        .to eq([['ask', another_on_feat]] * 2)
+    end
+
+    it 'reads >& log as a redirection, judging the push on origin and not on a remote named log' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect(guard('git push --force-with-lease >& log')).to eq(['ask', another_on_feat])
     end
 
     it 'runs no program the repository’s configuration names while it reads the log' do
@@ -277,6 +467,104 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     end
   end
 
+  describe 'the destination of a push with no refspec' do
+    it 'denies through push.default=upstream when the upstream is a project base' do
+      repository_with_origin
+      track('project/p1/master')
+      configure('push.default', 'upstream')
+      expect(guard('git push --force-with-lease'))
+        .to eq(['deny', 'push-guard: project/p1/master is a base branch; it is never rewritten or deleted'])
+    end
+
+    it 'reads remote.pushDefault for the remote' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      add_remote('upstream')
+      configure('remote.pushDefault', 'upstream')
+      expect(guard('git push --force-with-lease')).to eq(other_authors_ask('feat', 'upstream'))
+    end
+
+    it 'reads branch.feat.pushRemote for the remote' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      add_remote('upstream')
+      configure('branch.feat.pushRemote', 'upstream')
+      expect(guard('git push --force-with-lease')).to eq(other_authors_ask('feat', 'upstream'))
+    end
+
+    it 'reads the remote the command names over the configuration' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      configure('remote.pushDefault', 'upstream')
+      expect(guard('git push origin --force-with-lease')).to eq(['ask', another_on_feat])
+    end
+
+    it 'reads a positional remote over --repo, as git does' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      add_remote('upstream')
+      expect(guard('git push upstream --repo=origin --force-with-lease')).to eq(other_authors_ask('feat', 'upstream'))
+    end
+
+    it 'reads --repo when no positional names the remote' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      add_remote('upstream')
+      expect([guard('git push --repo=upstream --force-with-lease'), guard('git push --repo upstream --force-with-lease')])
+        .to eq([other_authors_ask('feat', 'upstream')] * 2)
+    end
+
+    it 'says nothing with remote.origin.push configured when the command names the refspec' do
+      repository_with_origin
+      configure('remote.origin.push', 'refs/heads/master:refs/heads/master')
+      expect(guard('git push --force-with-lease origin feat')).to be_nil
+    end
+  end
+
+  describe 'a push whose targets it cannot name' do
+    let(:prune) do
+      'push-guard: --prune may rewrite or delete any branch on the remote, base branches included, so the targets ' \
+        'could not be checked; name them, as git push <remote> --delete <branch>. Push anyway?'
+    end
+
+    def cannot_name(form)
+      "push-guard: #{form} may rewrite or delete any branch on the remote, base branches included, so the targets " \
+        'could not be checked; name them, as git push <remote> <branch>. Push anyway?'
+    end
+
+    it 'asks before --prune, whatever else is on the line' do
+      expect([guard('git push --prune origin'), guard('git push --prune --force-with-lease origin feat')])
+        .to eq([['ask', prune]] * 2)
+    end
+
+    it 'asks before --all with a lease, which may rewrite every branch' do
+      git('checkout', '--quiet', '-b', 'feat')
+      expect(guard('git push --all --force-with-lease')).to eq(['ask', cannot_name('--all with a lease')])
+    end
+
+    it 'asks before a wildcard refspec with a lease' do
+      expect(guard("git push --force-with-lease origin 'refs/heads/*:refs/heads/*'"))
+        .to eq(['ask', cannot_name('the refspec refs/heads/*:refs/heads/*')])
+    end
+
+    it 'asks before the matching refspec with a lease' do
+      expect(guard('git push --force-with-lease origin :')).to eq(['ask', cannot_name('the refspec :')])
+    end
+
+    it 'asks under push.default=matching' do
+      repository_with_origin
+      configure('push.default', 'matching')
+      expect(guard('git push --force-with-lease')).to eq(['ask', cannot_name('push.default=matching')])
+    end
+
+    it 'asks when remote.origin.push is configured and the command names no refspec' do
+      repository_with_origin
+      configure('remote.origin.push', 'refs/heads/master:refs/heads/master')
+      expect(guard('git push --force-with-lease'))
+        .to eq(['ask', cannot_name('the configured remote.origin.push')])
+    end
+  end
+
   describe 'a command it cannot read' do
     it 'says nothing for a push in the text of another command' do
       expect(guard('echo "git push --force"')).to be_nil
@@ -285,15 +573,21 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     { "sh -c 'git push -f'" => 'sh -c', "bash -lc 'git push -f'" => 'bash -lc', "zsh -ic 'git push -f'" => 'zsh -ic',
       "dash -c 'git push -f'" => 'dash -c', "ksh -c 'git push -f'" => 'ksh -c', 'echo $(git push -f)' => '$(',
       'echo `git push -f`' => '`', 'echo x | xargs -I{} git push -f {}' => 'xargs',
-      'eval "git push -f"' => 'eval' }.each do |command, construct|
+      'eval "git push -f"' => 'eval', 'timeout 60 git push --force' => 'timeout', 'nohup git push -f' => 'nohup',
+      'caffeinate -i git push -f' => 'caffeinate' }.each do |command, construct|
       it "asks for `#{command}`, naming #{construct}" do
         expect(guard(command))
-          .to eq(['ask', "push-guard: a push behind #{construct} cannot be read; run git push on its own command line"])
+          .to eq(['ask', "push-guard: a push behind #{construct} cannot be read; run git push on its own command " \
+                         'line with the remote and refspec written out'])
       end
     end
 
     it 'says nothing for an opaque construct that mentions no push' do
       expect(guard('echo $(git status)')).to be_nil
+    end
+
+    it 'says nothing for a command whose words say push but not git' do
+      expect(guard('make push')).to be_nil
     end
 
     it 'asks for a push in a segment whose quotes do not balance' do
@@ -324,7 +618,10 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
     { 'git -c alias.st=push st -f' => 'alias.st', 'git -c remote.origin.push=+refs/heads/*:refs/heads/* push' =>
       'remote.origin.push', 'git -c remote.origin.mirror=true push' => 'remote.origin.mirror',
-      'git --config-env=alias.st=PUSH_ALIAS st && git push' => 'alias.st' }.each do |command, key|
+      'git --config-env=alias.st=PUSH_ALIAS st && git push' => 'alias.st',
+      %q(GIT_CONFIG_PARAMETERS="'push.default=matching'" git push --force-with-lease) => 'GIT_CONFIG_PARAMETERS',
+      'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.st GIT_CONFIG_VALUE_0=push git st' => 'GIT_CONFIG_COUNT' }
+      .each do |command, key|
       it "asks for `#{command}`, whose configuration changes what push does" do
         reason = "push-guard: setting #{key} on the command line changes what push does, " \
                  'so the push could not be checked'
@@ -337,6 +634,20 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         option = command.split[2]
         expect(guard(command))
           .to eq(['ask', "push-guard: the push option #{option} is not understood, so the push could not be checked"])
+      end
+    end
+  end
+
+  describe 'a directory it cannot follow' do
+    ['cd "$d" && git push --force-with-lease', 'cd - && git push --force-with-lease',
+     'cd -P x && git push --force-with-lease', 'cd a b && git push --force-with-lease',
+     'pushd work && git push --force-with-lease', 'popd && git push --force-with-lease',
+     '(cd /tmp); git push --force-with-lease', 'cd "$d" && cd work && git push --force-with-lease',
+     'cd "$d" && git -C work push --force-with-lease', 'git --work-tree=/elsewhere push --force-with-lease',
+     'git --git-dir /elsewhere/.git push --force-with-lease', 'GIT_DIR=/elsewhere git push --force-with-lease',
+     'GIT_WORK_TREE=/elsewhere git push --force-with-lease'].each do |command|
+      it "asks for `#{command}`, whose push it cannot place" do
+        expect(guard(command)).to eq(['ask', unknown_directory])
       end
     end
   end
