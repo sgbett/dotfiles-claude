@@ -16,9 +16,10 @@ require 'open3'
 require 'shellwords'
 
 module PushGuard
-  # Never rewritten or deleted. Matched with FNM_PATHNAME off, so project/x/y
-  # matches project/* too.
-  BASE_BRANCHES = ['master', 'project/*', 'releases/*'].freeze
+  # Never rewritten or deleted. A project's pull-request branches live under
+  # project/<id>/ beside its base, project/<id>/master, so a * stands for one
+  # path segment and not for the rest of the name.
+  BASE_BRANCHES = ['master', 'project/*/master', 'releases/*'].freeze
   # A destination may name a branch as refs/heads/x, heads/x or x.
   BRANCH_PREFIX = %r{\A(?:refs/)?heads/}.freeze
 
@@ -571,7 +572,7 @@ module PushGuard
     end
 
     def base?(branch)
-      BASE_BRANCHES.any? { |pattern| File.fnmatch(pattern, branch) }
+      BASE_BRANCHES.any? { |pattern| File.fnmatch(pattern, branch, File::FNM_PATHNAME) }
     end
 
     # [branch, deleting] per refspec; without one, the lease's ref, else the

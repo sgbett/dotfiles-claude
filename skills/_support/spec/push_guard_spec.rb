@@ -190,7 +190,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
   describe 'a base branch' do
     { 'git push --force-with-lease=master:abc origin master' => 'master',
       'git push --force-with-lease origin releases/1' => 'releases/1',
-      'git push --force-with-lease origin HEAD:project/x/y' => 'project/x/y',
+      'git push --force-with-lease origin releases/v2' => 'releases/v2',
+      'git push --force-with-lease origin HEAD:project/x/master' => 'project/x/master',
+      'git push --delete origin project/x/master' => 'project/x/master',
       'git push --delete origin master' => 'master',
       'git push -d origin releases/1' => 'releases/1',
       'git push origin :master' => 'master',
@@ -205,6 +207,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'denies a lease push from a checkout of master' do
       expect(guard('git push --force-with-lease'))
         .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    end
+
+    it 'leaves project/x/y, project/x and releases/v2/hotfix as work branches, a * being one path segment' do
+      commands = ['git push --force-with-lease origin project/x/y', 'git push --force-with-lease origin project/x',
+                  'git push --force-with-lease origin releases/v2/hotfix', 'git push --delete origin project/x/y']
+      expect(commands.map { |command| guard(command) }).to eq([nil, nil, nil, nil])
     end
 
     it 'reads --no-force-with-lease after a lease as clearing it, leaving a plain push' do
@@ -370,10 +378,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
   describe 'setup.md' do
     it 'names every base-branch pattern the hook protects' do
-      path = File.join(profile_directory, 'setup.md')
-      pending 'setup.md is written alongside, by the ruleset item' unless File.exist?(path)
-      runbook = File.read(path)
-      expect(['master', 'project/*', 'releases/*'].reject { |pattern| runbook.include?("`#{pattern}`") }).to eq([])
+      runbook = File.read(File.join(profile_directory, 'setup.md'))
+      expect(['master', 'project/*/master', 'releases/*'].reject { |pattern| runbook.include?("`#{pattern}`") })
+        .to eq([])
     end
   end
 end
