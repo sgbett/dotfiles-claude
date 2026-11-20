@@ -246,9 +246,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
   end
 
   describe 'a plain push' do
-    ['git push', 'git push -u origin feat', 'git push --tags', 'git push -n origin x', 'git push origin :feat',
-     'git push --delete origin feat', 'git push --no-prune origin', 'git push origin :', 'GIT_DIR=/elsewhere git push',
-     'cd "$d" && git push', 'pushd work && git push origin feat'].each do |command|
+    ['git push', 'git push -u origin feat', 'git push --tags', 'git push -n origin x', 'git push --no-prune origin',
+     'git push origin :', 'GIT_DIR=/elsewhere git push', 'cd "$d" && git push',
+     'pushd work && git push origin feat'].each do |command|
       it "leaves `#{command}` to the permission rules" do
         expect(guard(command)).to be_nil
       end
@@ -318,8 +318,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
     it 'leaves project/x/y, project/x and releases/v2/hotfix as work branches, a * being one path segment' do
       commands = ['git push --force-with-lease origin project/x/y', 'git push --force-with-lease origin project/x',
-                  'git push --force-with-lease origin releases/v2/hotfix', 'git push --delete origin project/x/y']
-      expect(commands.map { |command| guard(command) }).to eq([nil, nil, nil, nil])
+                  'git push --force-with-lease origin releases/v2/hotfix']
+      expect([*commands.map { |command| guard(command) }, guard('git push --delete origin project/x/y').first])
+        .to eq([nil, nil, nil, 'ask'])
     end
 
     it 'judges a lease push to project/x/y, a pull-request branch, by its authors' do
@@ -419,6 +420,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'says nothing about a deletion of a branch with only the pusher’s commits' do
       repository_with_origin
       expect(guard('git push origin --delete feat')).to be_nil
+    end
+
+    it 'asks about a deletion when the remote’s copy is not here, since git deletes an unfetched branch too' do
+      expect([guard('git push origin --delete solo'), guard('git push origin :solo')])
+        .to eq([['ask', 'push-guard: the commits of solo on origin beyond its base could not be read, so the push ' \
+                        'could not be checked; run git fetch origin solo first']] * 2)
     end
 
     it 'asks the repository that -C names, relative to cwd' do

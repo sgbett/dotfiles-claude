@@ -750,9 +750,10 @@ module PushGuard
     end
 
     # A bare lease expects the remote-tracking ref, so without one git itself
-    # rejects the rewrite as stale information and nothing is checked; a
-    # lease with a value in it rewrites without one, so the copy is needed to
-    # read the authors and its absence asks.
+    # rejects the rewrite as stale information and nothing is checked. A
+    # lease with a value in it rewrites without one, and a deletion removes
+    # the remote branch whether or not it was ever fetched, so for those the
+    # copy is needed to read the authors and its absence asks.
     def missing_copy
       unreadable("git fetch #{remote} #{branch}") if @copy_needed
     end
@@ -910,7 +911,7 @@ module PushGuard
     def author_ask(remote, branch, deleting)
       return unless push.lease? || deleting
 
-      AuthorCheck.new(repository, remote, branch, push.lease_value?).ask
+      AuthorCheck.new(repository, remote, branch, deleting || push.lease_value?).ask
     end
   end
 
