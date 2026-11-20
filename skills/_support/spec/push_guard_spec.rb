@@ -7,6 +7,7 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
   let(:profile_directory) { File.join(repository_root, 'profiles', 'git-workflow') }
   let(:hook) { File.join(profile_directory, 'hooks', 'push-guard') }
   let(:decider) { File.join(profile_directory, 'hooks', 'push-guard.rb') }
+  let(:hooks_json) { File.join(profile_directory, 'hooks.json') }
   let(:bare_force) do
     'push-guard: a bare force-push rewrites whatever is on the remote; ' \
       'use git push --force-with-lease --force-if-includes on your own branch'
@@ -369,18 +370,24 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
   end
 
   describe 'hooks.json' do
-    it 'is the PreToolUse entry on Bash that runs the vendored hook with a timeout' do
-      fragment = JSON.parse(File.read(File.join(profile_directory, 'hooks.json')))
-      entry = { 'type' => 'command', 'command' => 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/push-guard"', 'timeout' => 5 }
+    it 'is the PreToolUse entry on Bash that runs the vendored hook with a timeout, blocking when the hook fails' do
+      fragment = JSON.parse(File.read(hooks_json))
+      entry = { 'type' => 'command', 'command' => 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/push-guard"', 'timeout' => 5,
+                'onFailure' => 'block' }
       expect(fragment).to eq('hooks' => { 'PreToolUse' => [{ 'matcher' => 'Bash', 'hooks' => [entry] }] })
     end
   end
 
   describe 'setup.md' do
+    let(:runbook) { File.read(File.join(profile_directory, 'setup.md')) }
+
     it 'names every base-branch pattern the hook protects' do
-      runbook = File.read(File.join(profile_directory, 'setup.md'))
       expect(['master', 'project/*/master', 'releases/*'].reject { |pattern| runbook.include?("`#{pattern}`") })
         .to eq([])
+    end
+
+    it 'quotes the hooks.json entry as it is' do
+      expect(runbook).to include(File.read(hooks_json).strip)
     end
   end
 end
