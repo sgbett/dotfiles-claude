@@ -515,24 +515,30 @@ module PushGuard
     # 2>&1, >&2 or &>file.
     SEPARATORS = /\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>)/.freeze
     CONTINUATION = "\\\n"
-    COMMENT = /\A\s*#/.freeze
+    # The code of a line and the comment after it: a # at the start or after
+    # whitespace, outside quotes, to the end of the line. Quoted and escaped
+    # text is stepped over first; a quote opened on an earlier line is not
+    # seen, so a # inside such a string passes for a comment now and then,
+    # which the lines read apart cover.
+    COMMENT = /\A(?<code>(?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|(?<=\S)#|[^'"\\#])*)(?:\A|(?<=\s))#.*\z/.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
     attr_reader :pushes, :decisions
 
-    # The command's lines as bash joins them: a line ending in an odd number
-    # of backslashes continues into the next, since an even number is escaped
-    # backslashes; a line whose first non-blank character is # is a comment
-    # to its end, backslash and all, and ends a continuation.
+    # The command's lines as bash joins them: a line whose code ends in an
+    # odd number of backslashes continues into the next, since an even number
+    # is escaped backslashes and a comment runs to the end of the line,
+    # backslash and all; a line that is only a comment is dropped, and ends a
+    # continuation.
     def self.join(command)
       lines = []
       continued = false
       command.split("\n", -1).each do |line|
-        text = COMMENT.match?(line) ? '' : line
-        continues = text[/\\*\z/].length.odd?
+        code = line.sub(COMMENT, '\k<code>')
+        continues = code[/\\*\z/].length.odd?
         lines << '' unless continued
-        lines[-1] += continues ? text.chomp('\\') : text
+        lines[-1] += continues ? line.chomp('\\') : line unless code.strip.empty?
         continued = continues
       end
       lines.join("\n")
@@ -871,13 +877,15 @@ module PushGuard
     end
 
     # What the text of the push settles on its own: a bare force, an option
-    # not understood, a shell character run into a target. A reading of the
-    # command that may be wrong about the targets contributes no more.
+    # not understood, and for a destructive push a shell character run into
+    # a target or a refspec naming a base branch outright. A reading of the
+    # command that may be wrong about the current branch contributes no more.
     def decide_from_text
       return Decision.deny(Reasons::BARE_FORCE) if push.bare_force?
       return Decision.ask(Reasons.unknown_push_option(push.unknown_option)) if push.unknown_option
+      return unless push.destructive?
 
-      shell_word_ask if push.destructive?
+      Decision.strictest([shell_word_ask, *base_denies(refspec_targets)])
     end
 
     private
@@ -928,10 +936,14 @@ module PushGuard
       Reasons.every_branch("the refspec #{refspec.text}") if refspec
     end
 
-    # [branch, deleting] for each refspec the hook reads on its own, and for
-    # the lease's ref when no refspec names a branch.
+    # [branch, deleting] for each refspec the hook reads on its own.
+    def refspec_targets
+      push.refspecs.select(&:named?).map { |refspec| [refspec.destination, deleting?(refspec)] }
+    end
+
+    # The refspec targets, and the lease's ref when no refspec names a branch.
     def named_targets
-      targets = push.refspecs.select(&:named?).map { |refspec| [refspec.destination, deleting?(refspec)] }
+      targets = refspec_targets
       targets << [push.lease_ref, false] if push.refspecs.empty? && push.lease_ref
       targets
     end
@@ -1022,9 +1034,10 @@ module PushGuard
   # The entry: one event in, at most one decision out, and a failure is an
   # ask. So is input that is not a hook event.
   class Hook
-    # The event is UTF-8 whatever the locale says, like git's output.
+    # The event is UTF-8 whatever the locale says, like git's output, and a
+    # byte that is not is read as text rather than failing the read.
     def self.run(input, output)
-      decision = new(Event.new(input.read.force_encoding(Encoding::UTF_8))).decision
+      decision = new(Event.new(input.read.force_encoding(Encoding::UTF_8).scrub)).decision
       output.puts(decision.to_json) if decision
     rescue StandardError => e
       output.puts(Decision.ask(Reasons.failure(e)).to_json)

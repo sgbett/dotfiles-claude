@@ -346,6 +346,19 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
     end
 
+    it 'reads a trailing comment to the end of its line, so its backslash does not join the push after it' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard("git status # C:\\\ngit push --force-with-lease origin master"),
+              guard("git status # C:\\\ngit push \\\n  --force-with-lease origin master"),
+              guard("git status # C:\\\ngit push \\\n  --delete origin master")]).to eq([denied] * 3)
+    end
+
+    it 'keeps a # inside quotes as text, and denies a base branch a refspec names on a line read apart' do
+      expect([guard("git commit -m \"fix #12\" && git push \\\n  --force origin feat"),
+              guard("git commit -m \"a \\\n#b\" && git push --force-with-lease origin master")])
+        .to eq([['deny', bare_force], ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']])
+    end
+
     it 'denies --all with a lease from a checkout of master, the strictest answer standing' do
       expect(guard('git push --all --force-with-lease'))
         .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
@@ -776,6 +789,11 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
     it 'says nothing for another tool' do
       expect(guard('git push --force', tool_name: 'Edit')).to be_nil
+    end
+
+    it 'reads a byte that is not UTF-8 in the command as text, deciding the push beside it' do
+      stdin = event('git commit -m "x" && git push -f').b.sub('"x"', "\"\xFF\"".b)
+      expect(run_hook(stdin)).to eq(['deny', bare_force])
     end
   end
 
