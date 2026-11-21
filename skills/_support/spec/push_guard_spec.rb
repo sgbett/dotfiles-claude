@@ -303,8 +303,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard("git push origin feat --force-with-lease \\\n  --force")).to eq(['deny', bare_force])
     end
 
-    it 'also reads a continuation split at its newlines, since an escaped backslash or a comment does not continue' do
-      expect([guard("echo x\\\\\ngit push --force origin master"), guard("# see C:\\\ngit push --force origin master")])
+    it 'reads an even number of trailing backslashes as escaped, not as a continuation' do
+      expect([guard("echo x\\\\\ngit push --force origin master"),
+              guard("echo x\\\\\ngit push --force-with-lease origin master").first]).to eq([['deny', bare_force], 'deny'])
+    end
+
+    it 'reads a comment line to its end, backslash and all, so a continuation after it is still read' do
+      expect([guard("# see C:\\\ngit push --force origin master"), guard("# C:\\\ngit push \\\n  --force origin master")])
         .to eq([['deny', bare_force]] * 2)
     end
 
@@ -507,6 +512,33 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       repository_with_origin
       push_commit('theirs', another_author)
       expect(guard('cd work && git push --force-with-lease 2>&1', cwd: sandbox.root).first).to eq('ask')
+    end
+
+    it 'judges a continued lease push by its joined lines, not by the first line alone from a checkout of master' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      git('checkout', '--quiet', 'master')
+      expect(guard("git push --force-with-lease \\\n  origin feat")).to eq(['ask', another_on_feat])
+    end
+
+    it 'says nothing for a continued lease push to the pusher’s own branch from a checkout of master' do
+      repository_with_origin
+      git('checkout', '--quiet', 'master')
+      expect(guard("git push --force-with-lease \\\n  origin feat")).to be_nil
+    end
+
+    it 'strips a direction override and a zero-width space from an address, which count as printable' do
+      repository_with_origin
+      push_commit('bidi', 'GIT_AUTHOR_EMAIL' => "a‮b​c@example.invalid")
+      expect(guard('git push --force-with-lease')).to eq(other_authors_ask('feat', 'origin', 'abc@example.invalid'))
+    end
+
+    it 'reads a non-ASCII address, and command, as UTF-8 under a C locale' do
+      repository_with_origin
+      push_commit('theirs', 'GIT_AUTHOR_EMAIL' => 'zoë@example.invalid')
+      c_locale = { 'LANG' => 'C', 'LC_ALL' => 'C' }
+      expect([guard('git push --force-with-lease', env: c_locale), guard('git commit -m "zoë" && git push -f', env: c_locale)])
+        .to eq([other_authors_ask('feat', 'origin', 'zoë@example.invalid'), ['deny', bare_force]])
     end
 
     it 'recovers the directory from an absolute cd or -C after one it could not follow' do

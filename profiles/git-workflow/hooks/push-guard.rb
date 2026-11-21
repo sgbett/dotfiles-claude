@@ -75,11 +75,13 @@ module PushGuard
     end
 
     # An address is whatever the commit says it is, and the text reaches the
-    # permission prompt: only printable characters go in, each address is cut
-    # to ADDRESS_LENGTH and at most ADDRESSES_LISTED are named.
+    # permission prompt: only printable characters go in, less the format
+    # characters Ruby counts among them (a direction override, a zero-width
+    # space), each address is cut to ADDRESS_LENGTH and at most
+    # ADDRESSES_LISTED are named.
     def self.address_list(addresses)
       shown = addresses.first(ADDRESSES_LISTED).map do |address|
-        address.scrub('').gsub(/[^[:print:]]/, '')[0, ADDRESS_LENGTH]
+        address.gsub(/[^[:print:]]|\p{Cf}/, '')[0, ADDRESS_LENGTH]
       end
       rest = addresses.length - shown.length
       rest.positive? ? "#{shown.join(', ')} and #{rest} more" : shown.join(', ')
@@ -512,20 +514,28 @@ module PushGuard
     # A newline, ;, pipe, &&, ||, |& or a background &, but not the & of
     # 2>&1, >&2 or &>file.
     SEPARATORS = /\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>)/.freeze
-    CONTINUATION = /\\\n/.freeze
+    CONTINUATION = "\\\n"
+    COMMENT = /\A\s*#/.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
     attr_reader :pushes, :decisions
 
-    # A backslash-newline continues the line, but not after an escaped
-    # backslash or inside a comment, which the hook does not read; so a
-    # command holding one is read both joined and split at every newline,
-    # and the strictest answer across the two readings stands.
-    def self.readings(command)
-      return [command] unless command.match?(CONTINUATION)
-
-      [command.gsub(CONTINUATION, ''), command]
+    # The command's lines as bash joins them: a line ending in an odd number
+    # of backslashes continues into the next, since an even number is escaped
+    # backslashes; a line whose first non-blank character is # is a comment
+    # to its end, backslash and all, and ends a continuation.
+    def self.join(command)
+      lines = []
+      continued = false
+      command.split("\n", -1).each do |line|
+        text = COMMENT.match?(line) ? '' : line
+        continues = text[/\\*\z/].length.odd?
+        lines << '' unless continued
+        lines[-1] += continues ? text.chomp('\\') : text
+        continued = continues
+      end
+      lines.join("\n")
     end
 
     def initialize(command, cwd)
@@ -690,9 +700,11 @@ module PushGuard
 
     private
 
+    # git writes bytes, read here as UTF-8 whatever the locale says, so a
+    # non-ASCII name or address is text and not an encoding error.
     def git(*arguments)
       stdout, _stderr, status = Open3.capture3(ENVIRONMENT, *GIT, *arguments, chdir: @directory)
-      status.success? ? stdout.chomp : nil
+      status.success? ? stdout.force_encoding(Encoding::UTF_8).scrub.chomp : nil
     end
   end
 
@@ -855,10 +867,17 @@ module PushGuard
     end
 
     def decide
+      decide_from_text || (decide_targets if push.destructive?)
+    end
+
+    # What the text of the push settles on its own: a bare force, an option
+    # not understood, a shell character run into a target. A reading of the
+    # command that may be wrong about the targets contributes no more.
+    def decide_from_text
       return Decision.deny(Reasons::BARE_FORCE) if push.bare_force?
       return Decision.ask(Reasons.unknown_push_option(push.unknown_option)) if push.unknown_option
 
-      decide_targets if push.destructive?
+      shell_word_ask if push.destructive?
     end
 
     private
@@ -881,7 +900,7 @@ module PushGuard
     end
 
     def decisions_without_git
-      [shell_word_ask, unnamed_targets_ask, *base_denies(named_targets)].compact
+      [unnamed_targets_ask, *base_denies(named_targets)].compact
     end
 
     # A word like master&>/dev/null is neither the branch nor the redirection
@@ -1003,8 +1022,9 @@ module PushGuard
   # The entry: one event in, at most one decision out, and a failure is an
   # ask. So is input that is not a hook event.
   class Hook
+    # The event is UTF-8 whatever the locale says, like git's output.
     def self.run(input, output)
-      decision = new(Event.new(input.read)).decision
+      decision = new(Event.new(input.read.force_encoding(Encoding::UTF_8))).decision
       output.puts(decision.to_json) if decision
     rescue StandardError => e
       output.puts(Decision.ask(Reasons.failure(e)).to_json)
@@ -1024,13 +1044,19 @@ module PushGuard
 
     private
 
+    # The command as bash joins its lines decides everything. Where it had a
+    # backslash-newline the lines read apart are a backstop against a join
+    # the hook got wrong, and contribute only what a push's text settles,
+    # since apart they may be wrong about its targets.
     def decide(command, cwd)
-      Decision.strictest(CommandReader.readings(command).flat_map { |text| decisions(text, cwd) })
+      decisions = decisions(CommandReader.join(command), cwd, &:decide)
+      decisions += decisions(command, cwd, &:decide_from_text) if command.include?(CommandReader::CONTINUATION)
+      Decision.strictest(decisions)
     end
 
-    def decisions(text, cwd)
+    def decisions(text, cwd, &judge)
       reader = CommandReader.new(text, cwd).read
-      reader.decisions + reader.pushes.map { |push| Judge.new(push).decide }
+      reader.decisions + reader.pushes.map { |push| judge.call(Judge.new(push)) }
     end
   end
 end
