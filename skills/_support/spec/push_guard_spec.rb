@@ -28,6 +28,7 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     { 'GIT_AUTHOR_NAME' => 'dependabot[bot]', 'GIT_AUTHOR_EMAIL' => '1+dependabot[bot]@users.noreply.github.com' }
   end
   let(:system_path) { { 'PATH' => '/usr/bin:/bin' } }
+  let(:log_bound) { File.read(decider)[/^\s*MAX_COMMITS = (\d+)/, 1].to_i }
 
   def event(command, cwd: Dir.pwd, tool_name: 'Bash')
     JSON.generate('hook_event_name' => 'PreToolUse', 'tool_name' => tool_name, 'session_id' => 'spec', 'cwd' => cwd,
@@ -143,6 +144,25 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     File.delete(File.join('.git', 'objects', sha[0, 2], sha[2..]))
   end
 
+  # origin/feat becomes +count+ commits of the pusher's over one of another
+  # author's, all beyond the base, written straight into the remote-tracking
+  # ref: a history too long to grow by committing.
+  def bury_stranger_under(count)
+    base, = Open3.capture2('git', 'rev-parse', 'refs/remotes/origin/master')
+    entries = [commit_entry(1, 'Another Author <another@example.invalid>', "from #{base.strip}")]
+    (2..count + 1).each do |mark|
+      entries << commit_entry(mark, 'Skill Spec <skill-spec@example.invalid>', "from :#{mark - 1}")
+    end
+    output, status = Open3.capture2e('git', 'fast-import', '--quiet', '--force', stdin_data: entries.join)
+    raise "fast-import failed: #{output}" unless status.success?
+  end
+
+  def commit_entry(mark, identity, parent)
+    stamp = "#{1_700_000_000 + mark} +0000"
+    "commit refs/remotes/origin/feat\nmark :#{mark}\nauthor #{identity} #{stamp}\ncommitter #{identity} #{stamp}\n" \
+      "data 1\n.\n#{parent}\n\n"
+  end
+
   # The repository's configuration tells git log to verify signatures with a
   # gpg that leaves a marker behind, whose path this returns: a git log that
   # obeys that configuration runs it on a signed commit.
@@ -227,6 +247,11 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         expect(guard('git push -fu origin x', env: system_path)).to eq(['deny', bare_force])
       end
 
+      it 'forbids the git it runs a lazy fetch, which in a partial clone would reach the promisor remote' do
+        expect(File.read(decider))
+          .to include("ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1' }.freeze")
+      end
+
       it 'resolves the destination through push.default=upstream end to end' do
         repository_with_origin
         track('project/p1/master')
@@ -276,6 +301,11 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
     it 'joins a backslash-newline continuation before reading, so a --force on the second line is read' do
       expect(guard("git push origin feat --force-with-lease \\\n  --force")).to eq(['deny', bare_force])
+    end
+
+    it 'also reads a continuation split at its newlines, since an escaped backslash or a comment does not continue' do
+      expect([guard("echo x\\\\\ngit push --force origin master"), guard("# see C:\\\ngit push --force origin master")])
+        .to eq([['deny', bare_force]] * 2)
     end
 
     it 'denies first when a lease push shares the command with it' do
@@ -352,6 +382,37 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       repository_with_origin
       push_commit('theirs', same_name_stranger)
       expect(guard('git push --force-with-lease')).to eq(other_authors_ask('feat', 'origin', 'stranger@example.invalid'))
+    end
+
+    it 'names only the printable characters of an address, cut to 64, since the text reaches the prompt' do
+      repository_with_origin
+      push_commit('long', 'GIT_AUTHOR_EMAIL' => "#{'x' * 290}@example.invalid")
+      push_commit('control', 'GIT_AUTHOR_EMAIL' => "a\e[31m\rb@example.invalid")
+      expect(guard('git push --force-with-lease'))
+        .to eq(['ask', 'push-guard: feat on origin has commits by 2 other author(s), a[31mb@example.invalid, ' \
+                       "#{'x' * 64}; a branch with another active committer is theirs until they say otherwise, " \
+                       'and an address of your own belongs in .mailmap. Push anyway?'])
+    end
+
+    it 'names at most five addresses and counts the rest' do
+      repository_with_origin
+      (1..6).each { |n| push_commit("theirs #{n}", 'GIT_AUTHOR_EMAIL' => "author#{n}@example.invalid") }
+      expect(guard('git push --force-with-lease'))
+        .to eq(['ask', 'push-guard: feat on origin has commits by 6 other author(s), author6@example.invalid, ' \
+                       'author5@example.invalid, author4@example.invalid, author3@example.invalid, ' \
+                       'author2@example.invalid and 1 more; a branch with another active committer is theirs until ' \
+                       'they say otherwise, and an address of your own belongs in .mailmap. Push anyway?'])
+    end
+
+    it 'asks when the log fills its bound, since older commits may be another author’s' do
+      repository_with_origin
+      bury_stranger_under(log_bound - 2)
+      expect(guard('git push --force-with-lease')).to eq(['ask', another_on_feat])
+      bury_stranger_under(log_bound - 1)
+      expect(guard('git push --force-with-lease'))
+        .to eq(['ask', "push-guard: feat on origin has #{log_bound} or more commits beyond its base, more than the " \
+                       'hook reads, so the push could not be checked; git shortlog -sne refs/remotes/origin/master..' \
+                       'refs/remotes/origin/feat lists their authors'])
     end
 
     it 'does not count a second address of the pusher’s that .mailmap folds onto the first' do
@@ -600,6 +661,14 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'asks for a push in a segment whose quotes do not balance' do
       expect(guard('git commit -m "x; git push -f"'))
         .to eq(['ask', "push-guard: the command's quotes do not balance, so the push in it could not be read"])
+    end
+
+    it 'asks for a refspec with a redirection run against it, where the same written apart is denied' do
+      expect([guard('git push --force-with-lease origin master&>/dev/null'),
+              guard('git push --force-with-lease origin master &>/dev/null')])
+        .to eq([['ask', 'push-guard: master&>/dev/null runs a shell character into the remote or refspec, so the ' \
+                        'push could not be checked; write the redirection apart from the refspec'],
+                ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']])
     end
 
     ['git push $REMOTE feat', 'git push origin $BRANCH', '$GIT push -f'].each do |command|

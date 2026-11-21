@@ -49,6 +49,8 @@ module PushGuard
     UNRESOLVED_DESTINATION = 'push-guard: where a push with no refspec goes could not be resolved, so the push ' \
                              'could not be checked; name the remote and branch, as git push <remote> <branch>'
     BY_NAME = 'git push <remote> <branch>'
+    ADDRESS_LENGTH = 64
+    ADDRESSES_LISTED = 5
 
     def self.base_branch(branch)
       "push-guard: #{branch} is a base branch; it is never rewritten or deleted"
@@ -66,16 +68,36 @@ module PushGuard
       every_branch('--prune', 'git push <remote> --delete <branch>')
     end
 
-    def self.other_authors(branch, remote, addresses, at_least)
-      count = "#{'at least ' if at_least}#{addresses.length}"
-      "push-guard: #{branch} on #{remote} has commits by #{count} other author(s), #{addresses.join(', ')}; " \
-        'a branch with another active committer is theirs until they say otherwise, ' \
+    def self.other_authors(branch, remote, addresses)
+      "push-guard: #{branch} on #{remote} has commits by #{addresses.length} other author(s), " \
+        "#{address_list(addresses)}; a branch with another active committer is theirs until they say otherwise, " \
         'and an address of your own belongs in .mailmap. Push anyway?'
+    end
+
+    # An address is whatever the commit says it is, and the text reaches the
+    # permission prompt: only printable characters go in, each address is cut
+    # to ADDRESS_LENGTH and at most ADDRESSES_LISTED are named.
+    def self.address_list(addresses)
+      shown = addresses.first(ADDRESSES_LISTED).map do |address|
+        address.scrub('').gsub(/[^[:print:]]/, '')[0, ADDRESS_LENGTH]
+      end
+      rest = addresses.length - shown.length
+      rest.positive? ? "#{shown.join(', ')} and #{rest} more" : shown.join(', ')
     end
 
     def self.unreadable_history(branch, remote, mend)
       "push-guard: the commits of #{branch} on #{remote} beyond its base could not be read, " \
         "so the push could not be checked; run #{mend} first"
+    end
+
+    def self.long_history(branch, remote, bound, range)
+      "push-guard: #{branch} on #{remote} has #{bound} or more commits beyond its base, more than the hook reads, " \
+        "so the push could not be checked; git shortlog -sne #{range} lists their authors"
+    end
+
+    def self.shell_word(word)
+      "push-guard: #{word} runs a shell character into the remote or refspec, so the push could not be checked; " \
+        'write the redirection apart from the refspec'
     end
 
     def self.unreadable(construct)
@@ -196,18 +218,25 @@ module PushGuard
     # --m onwards is unambiguous: no other push option starts with m.
     MIRROR_FORMS = (3..8).map { |length| '--mirror'[0, length] }.freeze
     SHORT_BUNDLE = /\A-[A-Za-z46]+\z/.freeze
+    # A redirection or control operator run against a word, as in
+    # master&>/dev/null, which the shell splits and the hook cannot.
+    SHELL_CHARACTER = /[<>&|()]/.freeze
 
-    attr_reader :remote, :refspecs, :lease_ref, :directory
+    attr_reader :remote, :refspecs, :lease_ref, :directory, :unknown_option
 
     def initialize(arguments, directory)
       @directory = directory
       @force = @lease = @lease_value = @mirror = @delete = @all = @prune = false
-      @lease_ref = @repo = nil
-      @unknown_options = []
+      @lease_ref = @repo = @unknown_option = nil
       positionals = read(arguments)
       # A positional repository wins over --repo, as git ranks them.
       @remote = positionals.first || @repo
       @refspecs = positionals.drop(1).map { |text| Refspec.new(text) }
+    end
+
+    # The remote or refspec a shell character was run against, if any.
+    def shell_word
+      [remote, *refspecs.map(&:text)].compact.find { |word| SHELL_CHARACTER.match?(word) }
     end
 
     # --mirror, --force or -f, or a + refspec: nothing checks what the remote
@@ -226,10 +255,6 @@ module PushGuard
     # matter; a plain push never needs git asked anything.
     def destructive?
       rewrites? || prune? || refspecs.any?(&:deletion?)
-    end
-
-    def unknown_option
-      @unknown_options.first
     end
 
     def lease?
@@ -297,7 +322,7 @@ module PushGuard
       when '--force-with-lease' then @lease = true
       when /\A--force-with-lease=([^:]*)(:.*)?\z/ then lease_on(Regexp.last_match(1), Regexp.last_match(2))
       when '--no-force-with-lease' then clear_lease
-      else @unknown_options << word
+      else @unknown_option = word if @unknown_option.nil?
       end
     end
 
@@ -308,8 +333,7 @@ module PushGuard
     end
 
     def clear_lease
-      @lease = false
-      @lease_value = false
+      @lease = @lease_value = false
       @lease_ref = nil
     end
 
@@ -494,8 +518,18 @@ module PushGuard
 
     attr_reader :pushes, :decisions
 
+    # A backslash-newline continues the line, but not after an escaped
+    # backslash or inside a comment, which the hook does not read; so a
+    # command holding one is read both joined and split at every newline,
+    # and the strictest answer across the two readings stands.
+    def self.readings(command)
+      return [command] unless command.match?(CONTINUATION)
+
+      [command.gsub(CONTINUATION, ''), command]
+    end
+
     def initialize(command, cwd)
-      @command = command.gsub(CONTINUATION, '')
+      @command = command
       @cwd = cwd
       # A cd inside parentheses is a subshell's, which the next command does
       # not inherit; the hook does not read the nesting, so any cd in such a
@@ -585,11 +619,16 @@ module PushGuard
   # The repository's own configuration can name programs (a signature
   # verifier, a file monitor, a pager), so those are switched off here.
   class Repository
-    ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0' }.freeze
+    # In a partial clone a log, or check-mailmap with mailmap.blob set, can
+    # fetch a missing object from the promisor remote, which runs that
+    # remote's uploadpack before anyone has answered; GIT_NO_LAZY_FETCH
+    # forbids it (git before 2.44 ignores the variable).
+    ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1' }.freeze
     GIT = %w[git --no-pager -c core.fsmonitor=false -c log.showSignature=false].freeze
     DESTINATION_FORMAT = '%(refname)%00%(push:remotename)%00%(push:short)'
-    # Keeps the log within the hook's timeout on a branch of any length; the
-    # count the hook gives is then a floor.
+    # Keeps the log within the hook's timeout on a branch of any length; a
+    # log that reaches it may hide older authors, so it is asked about rather
+    # than counted.
     MAX_COMMITS = 1000
 
     def initialize(directory)
@@ -636,9 +675,9 @@ module PushGuard
     end
 
     # [email, name] per commit in +range+, newest first and MAX_COMMITS at
-    # most, the email as .mailmap maps it; nil when git cannot read the
-    # range. Identity is the email alone; the name is kept because a bot is
-    # known by its name.
+    # most, the email as .mailmap maps it and otherwise as the commit has it;
+    # nil when git cannot read the range. Identity is the email alone; the
+    # name is kept because a bot is known by its name.
     def authors(range)
       output = git('log', '--no-show-signature', "--max-count=#{MAX_COMMITS}", '--format=%aE%x00%aN', range)
       return if output.nil?
@@ -738,7 +777,7 @@ module PushGuard
       base, mend = base_and_mend
       return unreadable(mend) unless repository.ref?(base)
 
-      strangers_ask(repository.authors("#{base}..#{tracking_ref}"), own)
+      strangers_ask("#{base}..#{tracking_ref}", own)
     end
 
     private
@@ -772,13 +811,21 @@ module PushGuard
       Decision.ask(Reasons.unreadable_history(branch, remote, mend))
     end
 
-    def strangers_ask(authors, own)
+    def strangers_ask(range, own)
+      authors = repository.authors(range)
       return unreadable("git fetch #{remote} #{branch}") if authors.nil?
+      return long_history(range) if authors.length == Repository::MAX_COMMITS
 
       addresses = strangers(authors, own)
       return if addresses.empty?
 
-      Decision.ask(Reasons.other_authors(branch, remote, addresses, authors.length == Repository::MAX_COMMITS))
+      Decision.ask(Reasons.other_authors(branch, remote, addresses))
+    end
+
+    # A log that fills the bound may have older commits, and authors, below
+    # it, so it cannot be counted.
+    def long_history(range)
+      Decision.ask(Reasons.long_history(branch, remote, Repository::MAX_COMMITS, range))
     end
 
     # The addresses on the branch that are neither the pusher's nor a bot's,
@@ -834,7 +881,13 @@ module PushGuard
     end
 
     def decisions_without_git
-      [unnamed_targets_ask, *base_denies(named_targets)].compact
+      [shell_word_ask, unnamed_targets_ask, *base_denies(named_targets)].compact
+    end
+
+    # A word like master&>/dev/null is neither the branch nor the redirection
+    # it was meant as, so the targets cannot be read from it.
+    def shell_word_ask
+      Decision.ask(Reasons.shell_word(push.shell_word)) if push.shell_word
     end
 
     def base_denies(targets)
@@ -972,8 +1025,12 @@ module PushGuard
     private
 
     def decide(command, cwd)
-      reader = CommandReader.new(command, cwd).read
-      Decision.strictest(reader.decisions + reader.pushes.map { |push| Judge.new(push).decide })
+      Decision.strictest(CommandReader.readings(command).flat_map { |text| decisions(text, cwd) })
+    end
+
+    def decisions(text, cwd)
+      reader = CommandReader.new(text, cwd).read
+      reader.decisions + reader.pushes.map { |push| Judge.new(push).decide }
     end
   end
 end
