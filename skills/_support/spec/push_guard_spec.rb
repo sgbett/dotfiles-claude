@@ -353,6 +353,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard("git status # C:\\\ngit push \\\n  --delete origin master")]).to eq([denied] * 3)
     end
 
+    it 'starts a comment at a # glued to a shell operator too, as bash and zsh do' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard("true;# C:\\\ngit push --force-with-lease"), guard("true&&# C:\\\ngit push origin --delete HEAD")])
+        .to eq([denied] * 2)
+    end
+
     it 'keeps a # inside quotes as text, and denies a base branch a refspec names on a line read apart' do
       expect([guard("git commit -m \"fix #12\" && git push \\\n  --force origin feat"),
               guard("git commit -m \"a \\\n#b\" && git push --force-with-lease origin master")])

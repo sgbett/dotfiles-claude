@@ -515,12 +515,14 @@ module PushGuard
     # 2>&1, >&2 or &>file.
     SEPARATORS = /\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>)/.freeze
     CONTINUATION = "\\\n"
-    # The code of a line and the comment after it: a # at the start or after
-    # whitespace, outside quotes, to the end of the line. Quoted and escaped
-    # text is stepped over first; a quote opened on an earlier line is not
-    # seen, so a # inside such a string passes for a comment now and then,
-    # which the lines read apart cover.
-    COMMENT = /\A(?<code>(?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|(?<=\S)#|[^'"\\#])*)(?:\A|(?<=\s))#.*\z/.freeze
+    # The code of a line and the comment after it: a # at the start, after
+    # whitespace or glued to a shell operator (; & | and parentheses),
+    # outside quotes, to the end of the line, as bash and zsh read one.
+    # Quoted and escaped text is stepped over first; a quote opened on an
+    # earlier line is not seen, so a # inside such a string passes for a
+    # comment now and then, which the lines read apart cover.
+    COMMENT = /\A(?<code>(?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|(?<=[^\s;&|()])#|[^'"\\#])*)(?:\A|(?<=[\s;&|()]))#.*\z/
+              .freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
