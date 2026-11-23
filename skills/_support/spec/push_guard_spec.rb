@@ -491,6 +491,16 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'asks for a lease with a value in it when the remote’s copy is not here, naming the fetch' do
       expect(guard('git push --force-with-lease=feat:0123abc origin feat'))
         .to eq(unreadable_history_ask('git fetch origin feat'))
+      git('checkout', '--quiet', '-b', 'feat')
+      expect(guard('git push --force-with-lease=feat:0123abc')).to eq(unreadable_history_ask('git fetch origin feat'))
+    end
+
+    it 'reads --force-with-lease=<ref> as an expectation of that ref, not as a push to it' do
+      repository_with_origin
+      expect(guard('git push origin --force-with-lease=master')).to be_nil
+      git('checkout', '--quiet', 'master')
+      expect(guard('git push origin --force-with-lease=master'))
+        .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
     end
 
     it 'asks when the base is not here, naming the fetch' do

@@ -216,12 +216,12 @@ module PushGuard
     MIRROR_FORMS = (3..8).map { |length| '--mirror'[0, length] }.freeze
     SHORT_BUNDLE = /\A-[A-Za-z46]+\z/.freeze
 
-    attr_reader :remote, :refspecs, :lease_ref, :directory, :unknown_option
+    attr_reader :remote, :refspecs, :directory, :unknown_option
 
     def initialize(arguments, directory)
       @directory = directory
       @force = @lease = @lease_value = @mirror = @delete = @all = @prune = false
-      @lease_ref = @repo = @unknown_option = nil
+      @repo = @unknown_option = nil
       positionals = read(arguments)
       # A positional repository wins over --repo, as git ranks them.
       @remote = positionals.first || @repo
@@ -309,21 +309,17 @@ module PushGuard
       case word
       when '--force' then @force = true
       when '--force-with-lease' then @lease = true
-      when /\A--force-with-lease=([^:]*)(:.*)?\z/ then lease_on(Regexp.last_match(1), Regexp.last_match(2))
-      when '--no-force-with-lease' then clear_lease
+      when /\A--force-with-lease=[^:]*(:.*)?\z/ then lease_on(Regexp.last_match(1))
+      when '--no-force-with-lease' then @lease = @lease_value = false
       else @unknown_option = word if @unknown_option.nil?
       end
     end
 
-    def lease_on(ref, value)
+    # --force-with-lease=<ref> expects something of <ref> and pushes nothing
+    # more for it: the push goes where it would without the lease.
+    def lease_on(value)
       @lease = true
-      @lease_ref = ref.sub(BRANCH_PREFIX, '') unless ref.empty?
       @lease_value = true unless value.nil?
-    end
-
-    def clear_lease
-      @lease = @lease_value = false
-      @lease_ref = nil
     end
 
     # Letters bundled after one dash, as in -fu: f forces, d deletes, and o
@@ -934,7 +930,7 @@ module PushGuard
     end
 
     def decisions_without_git
-      [unnamed_targets_ask, *base_denies(named_targets)].compact
+      [unnamed_targets_ask, *base_denies(refspec_targets)].compact
     end
 
     def base_denies(targets)
@@ -961,13 +957,6 @@ module PushGuard
       push.refspecs.select(&:named?).map { |refspec| [refspec.destination, deleting?(refspec)] }
     end
 
-    # The refspec targets, and the lease's ref when no refspec names a branch.
-    def named_targets
-      targets = refspec_targets
-      targets << [push.lease_ref, false] if push.refspecs.empty? && push.lease_ref
-      targets
-    end
-
     def deleting?(refspec)
       push.deletes? || refspec.deletion?
     end
@@ -990,7 +979,7 @@ module PushGuard
       decisions += [destination&.ask, *base_denies(targets)].compact
       return decisions unless decisions.empty?
 
-      author_asks(push.remote || destination.remote, named_targets + targets)
+      author_asks(push.remote || destination.remote, refspec_targets + targets)
     end
 
     # Where a push with no refspec goes; nil where refspecs name the targets.
