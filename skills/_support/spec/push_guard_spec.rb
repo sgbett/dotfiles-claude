@@ -396,6 +396,14 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard('git push --force-with-lease origin feat 2>&1 && echo ok')]).to eq([nil, nil, nil])
     end
 
+    it 'reads nothing from a trailing comment, which bash does not run' do
+      repository_with_origin
+      commands = ['git push --force-with-lease origin feat # master is protected', 'git push origin feat # --force',
+                  'git push origin feat # costs $5']
+      expect([*commands.map { |command| guard(command) }, guard('git push origin feat --force # --force')])
+        .to eq([nil, nil, nil, ['deny', bare_force]])
+    end
+
     it 'asks when another author has commits there, naming them' do
       repository_with_origin
       push_commit('theirs', another_author)

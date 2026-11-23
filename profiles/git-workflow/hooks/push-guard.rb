@@ -528,11 +528,11 @@ module PushGuard
 
     attr_reader :pushes, :decisions
 
-    # The command's lines as bash joins them: a line whose code ends in an
-    # odd number of backslashes continues into the next, since an even number
-    # is escaped backslashes and a comment runs to the end of the line,
-    # backslash and all; a line that is only a comment is dropped, and ends a
-    # continuation.
+    # The command's lines as bash reads them, comments dropped: a line whose
+    # code ends in an odd number of backslashes continues into the next,
+    # since an even number is escaped backslashes and a comment runs to the
+    # end of the line, backslash and all; a line that is only a comment ends
+    # a continuation.
     def self.join(command)
       lines = []
       continued = false
@@ -540,7 +540,7 @@ module PushGuard
         code = line.sub(COMMENT, '\k<code>')
         continues = code[/\\*\z/].length.odd?
         lines << '' unless continued
-        lines[-1] += continues ? line.chomp('\\') : line unless code.strip.empty?
+        lines[-1] += continues ? code.chomp('\\') : code
         continued = continues
       end
       lines.join("\n")
