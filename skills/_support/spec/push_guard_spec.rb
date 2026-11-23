@@ -443,8 +443,17 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       bury_stranger_under(log_bound - 1)
       expect(guard('git push --force-with-lease'))
         .to eq(['ask', "push-guard: feat on origin has #{log_bound} or more commits beyond its base, more than the " \
-                       'hook reads, so the push could not be checked; git shortlog -sne refs/remotes/origin/master..' \
-                       'refs/remotes/origin/feat lists their authors'])
+                       'hook reads, so the push could not be checked; git shortlog -sne refs/remotes/origin/feat ' \
+                       '--not refs/remotes/origin/master lists their authors'])
+    end
+
+    it 'measures a pull-request branch beyond its project base, not beyond master alone' do
+      repository_with_origin
+      push_branch('project/x/master', another_author)
+      push_branch('project/x/y')
+      expect(guard('git push --force-with-lease origin project/x/y')).to be_nil
+      push_branch('project/x/y', another_author)
+      expect(guard('git push --force-with-lease origin project/x/y')).to eq(other_authors_ask('project/x/y', 'origin'))
     end
 
     it 'does not count a second address of the pusher’s that .mailmap folds onto the first' do

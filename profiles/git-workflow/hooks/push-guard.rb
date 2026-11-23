@@ -690,12 +690,19 @@ module PushGuard
       git('check-mailmap', "<#{email}>").to_s[/<([^>]*)>/, 1] || email
     end
 
-    # [email, name] per commit in +range+, newest first and MAX_COMMITS at
-    # most, the email as .mailmap maps it and otherwise as the commit has it;
-    # nil when git cannot read the range. Identity is the email alone; the
-    # name is kept because a bot is known by its name.
-    def authors(range)
-      output = git('log', '--no-show-signature', "--max-count=#{MAX_COMMITS}", '--format=%aE%x00%aN', range)
+    # The refs matching +patterns+ as for-each-ref matches them, a literal
+    # exactly and a * within one path segment; none where git fails.
+    def refs(patterns)
+      git('for-each-ref', '--format=%(refname)', *patterns).to_s.lines.map(&:chomp)
+    end
+
+    # [email, name] per commit of +ref+ beyond every ref in +excluded+,
+    # newest first and MAX_COMMITS at most, the email as .mailmap maps it and
+    # otherwise as the commit has it; nil when git cannot read them. Identity
+    # is the email alone; the name is kept because a bot is known by its name.
+    def authors(ref, excluded)
+      output = git('log', '--no-show-signature', "--max-count=#{MAX_COMMITS}", '--format=%aE%x00%aN', ref, '--not',
+                   *excluded)
       return if output.nil?
 
       output.lines.map do |line|
@@ -795,7 +802,7 @@ module PushGuard
       base, mend = base_and_mend
       return unreadable(mend) unless repository.ref?(base)
 
-      strangers_ask("#{base}..#{tracking_ref}", own)
+      strangers_ask(own, ([base] + fetched_bases).uniq)
     end
 
     private
@@ -829,10 +836,18 @@ module PushGuard
       Decision.ask(Reasons.unreadable_history(branch, remote, mend))
     end
 
-    def strangers_ask(range, own)
-      authors = repository.authors(range)
+    # Every base fetched from the remote, since the branch is measured beyond
+    # all of them and not the default branch alone: a pull-request branch
+    # under project/<id>/ carries all of project/<id>/master, which is not
+    # its own authors' doing.
+    def fetched_bases
+      repository.refs(BASE_BRANCHES.map { |pattern| "refs/remotes/#{remote}/#{pattern}" })
+    end
+
+    def strangers_ask(own, excluded)
+      authors = repository.authors(tracking_ref, excluded)
       return unreadable("git fetch #{remote} #{branch}") if authors.nil?
-      return long_history(range) if authors.length == Repository::MAX_COMMITS
+      return long_history(excluded) if authors.length == Repository::MAX_COMMITS
 
       addresses = strangers(authors, own)
       return if addresses.empty?
@@ -842,7 +857,8 @@ module PushGuard
 
     # A log that fills the bound may have older commits, and authors, below
     # it, so it cannot be counted.
-    def long_history(range)
+    def long_history(excluded)
+      range = "#{tracking_ref} --not #{excluded.join(' ')}"
       Decision.ask(Reasons.long_history(branch, remote, Repository::MAX_COMMITS, range))
     end
 
