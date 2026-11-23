@@ -550,6 +550,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('cd work && git push --force-with-lease 2>&1', cwd: sandbox.root).first).to eq('ask')
     end
 
+    it 'follows a cd past a parenthesis inside quotes, which opens no subshell' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect(guard('cd work && git commit -m "fix (typo)" && git push --force-with-lease origin feat', cwd: sandbox.root))
+        .to eq(['ask', another_on_feat])
+    end
+
     it 'judges a continued lease push by its joined lines, not by the first line alone from a checkout of master' do
       repository_with_origin
       push_commit('theirs', another_author)

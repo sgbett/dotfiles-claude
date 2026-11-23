@@ -523,6 +523,9 @@ module PushGuard
               .freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
+    # A parenthesis outside quotes, quoted and escaped text stepped over as
+    # COMMENT steps over it.
+    SUBSHELL = /\A(?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|[^'"\\()])*[()]/m.freeze
 
     attr_reader :pushes, :decisions
 
@@ -550,7 +553,7 @@ module PushGuard
       # A cd inside parentheses is a subshell's, which the next command does
       # not inherit; the hook does not read the nesting, so any cd in such a
       # command loses the directory.
-      @subshell = @command.match?(/[()]/)
+      @subshell = SUBSHELL.match?(@command)
       @pushes = []
       @decisions = []
     end
