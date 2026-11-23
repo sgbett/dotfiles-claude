@@ -450,9 +450,9 @@ module PushGuard
     WITH_ARGUMENT = %w[-c --namespace --exec-path --config-env].freeze
     INLINE_ARGUMENT = /\A--(?:namespace|exec-path|config-env|super-prefix)=/.freeze
     MOVES_REPOSITORY = /\A--(?:git-dir|work-tree)(?:=|\z)/.freeze
-    # alias.* can rename push; remote.*, push.* and url.* change what, where
-    # and how it pushes.
-    PUSH_CONFIG = /\A(?:alias|remote|push|url)\./i.freeze
+    # alias.* can rename push; branch.*, remote.*, push.* and url.* change
+    # what, where and how it pushes.
+    PUSH_CONFIG = /\A(?:alias|branch|remote|push|url)\./i.freeze
 
     attr_reader :directories, :subcommand, :arguments, :unknown_option, :config_override
 

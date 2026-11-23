@@ -746,6 +746,8 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     { 'git -c alias.st=push st -f' => 'alias.st', 'git -c remote.origin.push=+refs/heads/*:refs/heads/* push' =>
       'remote.origin.push', 'git -c remote.origin.mirror=true push' => 'remote.origin.mirror',
       'git --config-env=alias.st=PUSH_ALIAS st && git push' => 'alias.st',
+      'git -c branch.feat2.remote=origin -c branch.feat2.merge=refs/heads/master push --force-with-lease' =>
+      'branch.feat2.remote', 'git -c branch.feat.pushRemote=upstream push --force-with-lease' => 'branch.feat.pushRemote',
       %q(GIT_CONFIG_PARAMETERS="'push.default=matching'" git push --force-with-lease) => 'GIT_CONFIG_PARAMETERS',
       'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.st GIT_CONFIG_VALUE_0=push git st' => 'GIT_CONFIG_COUNT' }
       .each do |command, key|
