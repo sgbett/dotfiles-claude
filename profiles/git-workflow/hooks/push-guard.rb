@@ -347,8 +347,9 @@ module PushGuard
     DIRECTORY_ASSIGNMENT = /\AGIT_(?:DIR|WORK_TREE)=/.freeze
     # GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT with its KEY and VALUE pairs,
     # and GIT_CONFIG_GLOBAL or _SYSTEM set configuration the hook does not
-    # see.
-    CONFIG_ASSIGNMENT = /\AGIT_CONFIG_[A-Z0-9_]+=/.freeze
+    # see; HOME and XDG_CONFIG_HOME move the global configuration just as
+    # GIT_CONFIG_GLOBAL does.
+    CONFIG_ASSIGNMENT = /\A(?:GIT_CONFIG_[A-Z0-9_]+|HOME|XDG_CONFIG_HOME)=/.freeze
     # An operator on its own (`>`, `2>`, `>>`, `<`, `&>`, `&>>`, `>&`, `<&`
     # or `2>&`): the next word is its file or descriptor.
     REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>>?|\d*[<>]&)\z/.freeze

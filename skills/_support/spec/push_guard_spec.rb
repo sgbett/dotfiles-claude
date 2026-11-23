@@ -790,7 +790,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       'git -c branch.feat2.remote=origin -c branch.feat2.merge=refs/heads/master push --force-with-lease' =>
       'branch.feat2.remote', 'git -c branch.feat.pushRemote=upstream push --force-with-lease' => 'branch.feat.pushRemote',
       %q(GIT_CONFIG_PARAMETERS="'push.default=matching'" git push --force-with-lease) => 'GIT_CONFIG_PARAMETERS',
-      'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.st GIT_CONFIG_VALUE_0=push git st' => 'GIT_CONFIG_COUNT' }
+      'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.st GIT_CONFIG_VALUE_0=push git st' => 'GIT_CONFIG_COUNT',
+      'HOME=/tmp git push --force-with-lease' => 'HOME',
+      'XDG_CONFIG_HOME=/tmp git push --force-with-lease' => 'XDG_CONFIG_HOME' }
       .each do |command, key|
       it "asks for `#{command}`, whose configuration changes what push does" do
         reason = "push-guard: setting #{key} on the command line changes what push does, " \
