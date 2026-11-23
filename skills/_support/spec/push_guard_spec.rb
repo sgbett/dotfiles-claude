@@ -729,8 +729,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('echo $(git status)')).to be_nil
     end
 
-    it 'says nothing for a command whose words say push but not git' do
-      expect(guard('make push')).to be_nil
+    it 'says nothing for a command whose words say push but not git, or git only as a path or after push' do
+      commands = ['make push', 'grep -rn push git/', 'rg push /opt/git', 'ls ~/.config/git | grep push']
+      expect(commands.map { |command| guard(command) }).to eq([nil] * 4)
     end
 
     it 'asks for a push in a segment whose quotes do not balance' do

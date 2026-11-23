@@ -390,14 +390,16 @@ module PushGuard
     end
 
     def git?
-      !words.empty? && File.basename(words.first) == 'git'
+      !words.empty? && git_word?(words.first)
     end
 
-    # Something other than git runs, with git and push among its words: a
-    # wrapper the hook does not know, timeout or nohup say, that may hand
-    # them on.
+    # Something other than git runs, with git and then push among its words:
+    # a wrapper the hook does not know, timeout or nohup say, that may hand
+    # them on. A directory named git, or git after push, is an argument.
     def wraps_push?
-      words.include?('push') && words.any? { |word| File.basename(word) == 'git' }
+      git_at = words.index { |word| git_word?(word) }
+      push_at = words.index('push')
+      !git_at.nil? && !push_at.nil? && git_at < push_at
     end
 
     def git_arguments
@@ -414,6 +416,11 @@ module PushGuard
     end
 
     private
+
+    # git by name or by path, as in /usr/bin/git.
+    def git_word?(word)
+      word == 'git' || word.end_with?('/git')
+    end
 
     def without_redirections(words)
       rest = words.dup
