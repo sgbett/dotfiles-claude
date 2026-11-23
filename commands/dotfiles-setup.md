@@ -130,7 +130,22 @@ done
 
 It prints nothing when every link is right. Otherwise list what it printed for the user and don't report the pin; a wrong entry is fixed by removing it and copying the source's link (`cp -RP <source>/skills/<name> ~/.claude/skills/`), which is the user's call.
 
-### Step 7: Set Up Git Tracking (Optional)
+### Step 7: Link Non-code Project Conventions
+
+If Documentation was installed, `/opt/claude/CLAUDE.md` should be a symlink to `~/.claude/docs/personal-projects.md`, so every session under `/opt/claude` loads it:
+
+```bash
+target="$HOME/.claude/docs/personal-projects.md"
+link=/opt/claude/CLAUDE.md
+[ "$(readlink "$link")" = "$target" ] && echo "already linked"
+```
+
+- **Already linked:** nothing to do.
+- **`/opt/claude` doesn't exist:** skip and tell the user; creating it under `/opt` needs `sudo`, which is their call.
+- **`$link` exists but isn't that symlink:** show it and ask Replace/Skip.
+- **Otherwise:** `ln -s "$target" "$link"`.
+
+### Step 8: Set Up Git Tracking (Optional)
 
 Ask if they want to track their ~/.claude with git:
 
@@ -150,7 +165,7 @@ git branch -m master
 git branch --set-upstream-to=origin/master master
 ```
 
-### Step 8: Report Results
+### Step 9: Report Results
 
 ```
 ✓ Dotfiles setup complete
@@ -166,6 +181,7 @@ Installed components:
   ✓ Documentation
 
 Vendored skills: ai-software-architect at its pin
+Non-code conventions: /opt/claude/CLAUDE.md linked
 Git tracking: Enabled
 
 Next steps:
