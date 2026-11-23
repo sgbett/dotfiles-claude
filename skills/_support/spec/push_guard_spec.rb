@@ -722,12 +722,18 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq(['ask', "push-guard: the command's quotes do not balance, so the push in it could not be read"])
     end
 
-    it 'asks for a refspec with a redirection run against it, where the same written apart is denied' do
-      expect([guard('git push --force-with-lease origin master&>/dev/null'),
-              guard('git push --force-with-lease origin master &>/dev/null')])
-        .to eq([['ask', 'push-guard: master&>/dev/null runs a shell character into the remote or refspec, so the ' \
-                        'push could not be checked; write the redirection apart from the refspec'],
-                ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']])
+    it 'splits a redirection glued to a refspec as bash does, so a base branch there is still denied' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard('git push --force-with-lease origin master&>/dev/null'), guard('git push --delete origin master>log'),
+              guard('git push --force-with-lease origin master>log'),
+              guard('git push --force-with-lease origin master &>/dev/null')]).to eq([denied] * 4)
+    end
+
+    it 'splits a redirection glued to a work branch or the remote the same way' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect([guard('git push --force-with-lease origin feat>log'), guard('git push origin>log --delete feat')])
+        .to eq([['ask', another_on_feat]] * 2)
     end
 
     ['git push $REMOTE feat', 'git push origin $BRANCH', '$GIT push -f'].each do |command|

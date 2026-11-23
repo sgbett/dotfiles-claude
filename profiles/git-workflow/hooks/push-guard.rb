@@ -97,11 +97,6 @@ module PushGuard
         "so the push could not be checked; git shortlog -sne #{range} lists their authors"
     end
 
-    def self.shell_word(word)
-      "push-guard: #{word} runs a shell character into the remote or refspec, so the push could not be checked; " \
-        'write the redirection apart from the refspec'
-    end
-
     def self.unreadable(construct)
       "push-guard: a push behind #{construct} cannot be read; " \
         'run git push on its own command line with the remote and refspec written out'
@@ -220,9 +215,6 @@ module PushGuard
     # --m onwards is unambiguous: no other push option starts with m.
     MIRROR_FORMS = (3..8).map { |length| '--mirror'[0, length] }.freeze
     SHORT_BUNDLE = /\A-[A-Za-z46]+\z/.freeze
-    # A redirection or control operator run against a word, as in
-    # master&>/dev/null, which the shell splits and the hook cannot.
-    SHELL_CHARACTER = /[<>&|()]/.freeze
 
     attr_reader :remote, :refspecs, :lease_ref, :directory, :unknown_option
 
@@ -234,11 +226,6 @@ module PushGuard
       # A positional repository wins over --repo, as git ranks them.
       @remote = positionals.first || @repo
       @refspecs = positionals.drop(1).map { |text| Refspec.new(text) }
-    end
-
-    # The remote or refspec a shell character was run against, if any.
-    def shell_word
-      [remote, *refspecs.map(&:text)].compact.find { |word| SHELL_CHARACTER.match?(word) }
     end
 
     # --mirror, --force or -f, or a + refspec: nothing checks what the remote
@@ -434,10 +421,20 @@ module PushGuard
       until rest.empty?
         word = rest.shift
         if REDIRECTION_OPERATOR.match?(word) then rest.shift
-        elsif !REDIRECTION.match?(word) then kept << word
+        elsif !REDIRECTION.match?(word) then kept << before_redirection(word, rest)
         end
       end
       kept
+    end
+
+    # A redirection glued to a word, master>log, is split as bash splits it:
+    # the word stays and the operator goes back to be read next.
+    def before_redirection(word, rest)
+      glued = word.index(/[<>&]/)
+      return word if glued.nil?
+
+      rest.unshift(word[glued..])
+      word[0, glued]
     end
   end
 
@@ -880,15 +877,15 @@ module PushGuard
     end
 
     # What the text of the push settles on its own: a bare force, an option
-    # not understood, and for a destructive push a shell character run into
-    # a target or a refspec naming a base branch outright. A reading of the
-    # command that may be wrong about the current branch contributes no more.
+    # not understood, and for a destructive push a refspec naming a base
+    # branch outright. A reading of the command that may be wrong about the
+    # current branch contributes no more.
     def decide_from_text
       return Decision.deny(Reasons::BARE_FORCE) if push.bare_force?
       return Decision.ask(Reasons.unknown_push_option(push.unknown_option)) if push.unknown_option
       return unless push.destructive?
 
-      Decision.strictest([shell_word_ask, *base_denies(refspec_targets)])
+      Decision.strictest(base_denies(refspec_targets))
     end
 
     private
@@ -912,12 +909,6 @@ module PushGuard
 
     def decisions_without_git
       [unnamed_targets_ask, *base_denies(named_targets)].compact
-    end
-
-    # A word like master&>/dev/null is neither the branch nor the redirection
-    # it was meant as, so the targets cannot be read from it.
-    def shell_word_ask
-      Decision.ask(Reasons.shell_word(push.shell_word)) if push.shell_word
     end
 
     def base_denies(targets)
