@@ -272,8 +272,8 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
 
   describe 'a plain push' do
     ['git push', 'git push -u origin feat', 'git push --tags', 'git push -n origin x', 'git push --no-prune origin',
-     'git push origin :', 'GIT_DIR=/elsewhere git push', 'cd "$d" && git push',
-     'pushd work && git push origin feat'].each do |command|
+     'git push origin :', 'GIT_DIR=/elsewhere git push', 'cd "$d" && git push', 'pushd work && git push origin feat',
+     'git push -ofoo origin feat', 'git push -odeploy origin feat', 'git push -uo opt origin feat'].each do |command|
       it "leaves `#{command}` to the permission rules" do
         expect(guard(command)).to be_nil
       end
@@ -285,7 +285,7 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
   end
 
   describe 'a bare force' do
-    ['git push --force', 'git push -f', 'git push -fu origin x', 'git push -uf origin x',
+    ['git push --force', 'git push -f', 'git push -fu origin x', 'git push -uf origin x', 'git push -fo opt origin x',
      'git push origin +HEAD:refs/heads/x', 'git push --mirror origin', 'git push --mirr origin',
      'git push origin x --force', 'cd x && git push -f', 'A=b git push -f', 'sudo git push -f',
      'git push -f origin x 2>&1', '(git push -f)', 'git push -f &', 'if git push -f; then echo pushed; fi',

@@ -339,13 +339,14 @@ module PushGuard
       @lease_ref = nil
     end
 
-    # Letters bundled after one dash, as in -fu: f forces, d deletes, and a
-    # trailing o takes the next word as its push option.
+    # Letters bundled after one dash, as in -fu: f forces, d deletes, and o
+    # takes the rest of the bundle as its push option, or the next word when
+    # nothing follows it, as git reads -ofoo and -o foo.
     def short_options(word, rest)
-      letters = word[1..]
+      letters, value = word[1..].split('o', 2)
       @force = true if letters.include?('f')
       @delete = true if letters.include?('d')
-      rest.shift if letters.end_with?('o')
+      rest.shift if value == ''
     end
   end
 
