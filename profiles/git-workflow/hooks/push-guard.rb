@@ -812,14 +812,15 @@ module PushGuard
 
   # The depth of compound commands across a command's segments: braces, if,
   # loops and case open one, whose cds bash may not run, until the closing
-  # word. An opener or closer counts only in command position, at the start
-  # of a segment or after then, do, else, elif, ! or {, where a quoted word
-  # cannot stand for it (echo done is a common line), and the depth never
-  # falls below zero, so a stray closer cancels nothing.
+  # word. A word counts only in command position: at the segment's start,
+  # past nothing but a run of then, do, else, elif, !, { or time, where a
+  # quoted word cannot stand for it and echo done is just an echo; the
+  # depth never falls below zero, so a stray closer cancels nothing.
   class Compounds
-    OPENERS = %w[if while until for case {].freeze
-    WORD = /(?:\A|\b(?:then|do|else|elif)\s+|[!{]\s+)\s*(if|while|until|for|case|\{|fi|done|esac|\})(?=\s|\z)/
-           .freeze
+    CHAIN = /\A\s*((?:(?:then|do|else|elif|!|\{|time(?:\s+-p)?)\s+)*)/.freeze
+    KEYWORD = /\A(if|while|until|for|case|fi|done|esac|\})(?=\s|\z)/.freeze
+    OPENERS = %w[if while until for case].freeze
+    CLOSERS = %w[fi done esac }].freeze
 
     def initialize
       @depth = 0
@@ -829,8 +830,12 @@ module PushGuard
       @depth.positive?
     end
 
+    # The braces in the chain open; the word after it opens or closes.
     def note(text)
-      text.scan(WORD).flatten.each { |word| @depth = [@depth + (OPENERS.include?(word) ? 1 : -1), 0].max }
+      chain = CHAIN.match(text)
+      word = text[chain.end(0)..][KEYWORD, 1]
+      change = chain[1].count('{') + (OPENERS.include?(word) ? 1 : 0) - (CLOSERS.include?(word) ? 1 : 0)
+      @depth = [@depth + change, 0].max
     end
   end
 
