@@ -1075,9 +1075,16 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([['ask', unknown_directory]] * 2)
     end
 
-    it 'still follows a plain cd before &&' do
-      expect(guard('cd work && git push --force-with-lease', cwd: sandbox.root))
-        .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    it 'counts an opener or closer only in command position, so echo done or a quoted fi changes nothing' do
+      expect([guard('echo done; if false; then cd work; fi; git push --force-with-lease', cwd: sandbox.root),
+              guard('if false; then echo "fi"; cd work; fi; git push --force-with-lease', cwd: sandbox.root)])
+        .to eq([['ask', unknown_directory]] * 2)
+    end
+
+    it 'still follows a plain cd before &&, a stray closer before it notwithstanding' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard('cd work && git push --force-with-lease', cwd: sandbox.root),
+              guard('echo fi; cd work && git push --force-with-lease', cwd: sandbox.root)]).to eq([denied] * 2)
     end
 
     it 'follows no cd in a pipeline or in the background, which ran in a subshell' do
