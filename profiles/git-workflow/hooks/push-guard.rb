@@ -847,11 +847,12 @@ module PushGuard
       @fetch_layouts = {}
     end
 
-    # Whether every fetch refspec of +remote+ that could take a branch lands
-    # it under refs/remotes/<remote>/ by the same name, as the default layout
-    # does, so the push atoms and the tracking refs the hook reads name what
-    # git pushes over. Refspecs that cannot take a branch (pull requests,
-    # tags) are not read. Answered once per remote.
+    # Whether every fetch refspec of +remote+ that could take a branch, or
+    # that fills refs/remotes/<remote>/, lands branches there by their own
+    # names, as the default layout does, so the push atoms and the tracking
+    # refs the hook reads name what git pushes over. Refspecs that do neither
+    # (tags, a line with no destination) are not read. Answered once per
+    # remote.
     def default_fetch_layout?(remote)
       return @fetch_layouts[remote] if @fetch_layouts.key?(remote)
 
@@ -929,13 +930,17 @@ module PushGuard
       end
     end
 
-    # A refspec that could take a branch must land refs/heads/X at
-    # refs/remotes/<remote>/X; one that cannot is not read.
+    # A refspec that could take a branch, or that lands anything under the
+    # remote's tracking namespace, must be the by-name mapping, refs/heads/X
+    # to refs/remotes/<remote>/X, or a tracking ref may hold something other
+    # than the branch of its name; one with no destination fetches into
+    # FETCH_HEAD alone and has no bearing.
     def keeps_name?(source, into, remote)
-      return true unless branch_source?(source)
+      tracking = "refs/remotes/#{remote}/"
+      return true if into.empty? || !(branch_source?(source) || into.start_with?(tracking))
 
       full = source.start_with?('refs/') || source.include?('*') ? source : "refs/heads/#{source}"
-      into == full.sub(%r{\Arefs/heads/}, "refs/remotes/#{remote}/")
+      into == full.sub(%r{\Arefs/heads/}, tracking)
     end
 
     # Whether a fetch source could take a branch: refs/heads/… itself, a

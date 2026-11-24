@@ -779,12 +779,20 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(answers).to eq([['ask', another_on_feat]] * 4)
     end
 
-    it 'accepts a single-branch layout, and refspecs with other sources' do
+    it 'accepts a single-branch layout, a tag refspec and a line with no destination, which feeds FETCH_HEAD alone' do
       repository_with_origin
       push_commit('theirs', another_author)
-      configure('remote.origin.fetch', '+refs/heads/master:refs/remotes/origin/master')
-      git('config', '--add', 'remote.origin.fetch', '+refs/pull/*/head:refs/remotes/origin/pr/*')
+      fetch_layout('+refs/heads/master:refs/remotes/origin/master', '+refs/tags/*:refs/tags/*', 'refs/heads/master')
       expect(guard('git push --force-with-lease')).to eq(['ask', another_on_feat])
+    end
+
+    it 'asks when anything but the branches lands under the tracking namespace, since a tracking ref may lie' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      fetch_layout('+refs/remotes/upstream/*:refs/remotes/origin/*')
+      expect(guard('git push origin --delete feat')).to eq(['ask', remapped_fetch])
+      fetch_layout('+refs/heads/*:refs/remotes/origin/*', '+refs/pull/*/head:refs/remotes/origin/pr/*')
+      expect(guard('git push --force-with-lease')).to eq(['ask', remapped_fetch])
     end
   end
 
