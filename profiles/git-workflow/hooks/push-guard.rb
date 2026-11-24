@@ -689,7 +689,8 @@ module PushGuard
       return if output.nil?
 
       line = output.lines.find { |candidate| candidate.start_with?("refs/heads/#{branch}\0") }
-      line.to_s.chomp.split("\0", 3).drop(1)
+      _refname, atom, short = line.to_s.chomp.split("\0", 3)
+      [atom.to_s, short.to_s]
     end
 
     # user.email as .mailmap maps it; nil where it is not set.
@@ -736,7 +737,7 @@ module PushGuard
   # for the remote the command names when it names one, so the hook keeps
   # none of those rules itself. Two settings the push atoms fold away,
   # push.default=matching and a configured remote.<name>.push, are read from
-  # config and asked about, as is a git that fails.
+  # config and asked about, as are a detached HEAD and a git that fails.
   class Destination
     attr_reader :remote, :branch, :ask
 
@@ -749,17 +750,22 @@ module PushGuard
     private
 
     def resolve
-      current = @repository.current_branch
-      return if current.nil?
       return refuse(Reasons.every_branch('push.default=matching')) if matching?
 
-      resolved = @repository.push_destination(current, @named_remote)
+      current = @repository.current_branch
+      resolved = @repository.push_destination(current, @named_remote) unless current.nil?
       return refuse(Reasons::UNRESOLVED_DESTINATION) if resolved.nil?
 
-      @remote = remote_name(resolved[0])
+      place(*resolved, current)
+    end
+
+    # The remote and branch from the push atoms' remote name and short
+    # destination.
+    def place(atom, short, current)
+      @remote = remote_name(atom)
       return refuse(Reasons.every_branch("the configured remote.#{remote}.push")) if configured_refspec?
 
-      @branch = branch_name(resolved[1], current)
+      @branch = branch_name(short, current)
     end
 
     def refuse(reason)

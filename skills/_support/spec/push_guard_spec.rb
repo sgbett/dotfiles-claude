@@ -21,6 +21,10 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     'push-guard: the directory the push runs in could not be followed, so the push could not be checked; ' \
       'write it as git -C <path> push'
   end
+  let(:unresolved_destination) do
+    'push-guard: where a push with no refspec goes could not be resolved, so the push could not be checked; ' \
+      'name the remote and branch, as git push <remote> <branch>'
+  end
   let(:another_author) { { 'GIT_AUTHOR_NAME' => 'Another Author', 'GIT_AUTHOR_EMAIL' => 'another@example.invalid' } }
   let(:same_name_stranger) { { 'GIT_AUTHOR_NAME' => 'Skill Spec', 'GIT_AUTHOR_EMAIL' => 'stranger@example.invalid' } }
   let(:aliased_pusher) { { 'GIT_AUTHOR_NAME' => 'S. Spec', 'GIT_AUTHOR_EMAIL' => 'other@example.invalid' } }
@@ -540,12 +544,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
                         'could not be checked; run git fetch origin solo first']] * 2)
     end
 
-    it 'asks the repository that -C names, relative to cwd' do
+    it 'asks the repository that -C names, relative to cwd, where cwd itself resolves nothing' do
       repository_with_origin
       push_commit('theirs', another_author)
       expect([guard('git push --force-with-lease', cwd: sandbox.root),
-              guard('git -C work push --force-with-lease', cwd: sandbox.root).first])
-        .to eq([nil, 'ask'])
+              guard('git -C work push --force-with-lease', cwd: sandbox.root)])
+        .to eq([['ask', unresolved_destination], ['ask', another_on_feat]])
     end
 
     it 'joins repeated -C paths in order' do
@@ -667,6 +671,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([other_authors_ask('feat', 'upstream')] * 2)
     end
 
+    it 'asks from a detached HEAD, where a configured remote.origin.push would still push master' do
+      repository_with_origin
+      configure('remote.origin.push', 'refs/heads/master:refs/heads/master')
+      git('checkout', '--quiet', '--detach')
+      expect(guard('git push origin --force-with-lease')).to eq(['ask', unresolved_destination])
+    end
+
     it 'says nothing with remote.origin.push configured when the command names the refspec' do
       repository_with_origin
       configure('remote.origin.push', 'refs/heads/master:refs/heads/master')
@@ -704,10 +715,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --force-with-lease origin :')).to eq(['ask', cannot_name('the refspec :')])
     end
 
-    it 'asks under push.default=matching' do
+    it 'asks under push.default=matching, from a detached HEAD as well' do
       repository_with_origin
       configure('push.default', 'matching')
       expect(guard('git push --force-with-lease')).to eq(['ask', cannot_name('push.default=matching')])
+      git('checkout', '--quiet', '--detach')
+      expect(guard('git push origin --force-with-lease')).to eq(['ask', cannot_name('push.default=matching')])
     end
 
     it 'asks when remote.origin.push is configured and the command names no refspec' do
