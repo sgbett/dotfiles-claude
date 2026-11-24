@@ -658,10 +658,14 @@ module PushGuard
       consumed
     end
 
+    # A body says git push when a word ending in git (git itself, a path to
+    # it, a quoted git) comes before a push word; gitpush and git-push as one
+    # word do not.
     def note(delimiter, unquoted, text)
       @substituting << delimiter if unquoted && text.match?(/\$\(|`/)
-      words = text.split
-      @pushing << delimiter if words.include?('git') && words.include?('push')
+      words = text.split.map { |word| word.delete("'\"") }
+      git_at = words.index { |word| word.end_with?('git') }
+      @pushing << delimiter if git_at && words.drop(git_at + 1).include?('push')
     end
   end
 

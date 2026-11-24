@@ -887,6 +887,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard("bash <<'EOF'\ngit push --force origin master\nEOF")]).to eq([['ask', fed_push]] * 2)
     end
 
+    it 'reads git by its path or in quotes in a body, and gitpush or git-push as neither' do
+      expect([guard("bash <<'EOF'\n/usr/bin/git push --force origin master\nEOF"),
+              guard("bash <<'EOF'\n\"git\" push --force origin master\nEOF"),
+              guard("cat <<'EOF'\ngitpush now, or git-push\nEOF\ngit push origin feat")])
+        .to eq([['ask', fed_push], ['ask', fed_push], nil])
+    end
+
     it 'asks about a command substitution in an unquoted body, which bash runs' do
       expect(guard("cat <<EOF\n$(git push --force origin master)\nEOF"))
         .to eq(['ask', 'push-guard: a push behind a substitution in the here-document ending at EOF cannot be read; ' \
