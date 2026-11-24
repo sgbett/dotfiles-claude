@@ -405,6 +405,11 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
     end
 
+    it 'still sets a glued redirection apart inside what may be arithmetic or nested subshells' do
+      expect(guard('((git push --force-with-lease origin master>/dev/null) )'))
+        .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    end
+
     it 'reads $\'…\' as a quote a backslash escapes in, so an escaped apostrophe closes nothing' do
       expect(guard("echo $'it\\'s'\ngit push \\\n--force origin master")).to eq(['deny', bare_force])
     end

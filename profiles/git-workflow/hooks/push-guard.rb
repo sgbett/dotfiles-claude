@@ -760,13 +760,13 @@ module PushGuard
       @out.write(char)
     end
 
-    # A redirection glued to a word is set apart; << opens a here-document,
-    # while <<< is a here-string and opens nothing, nor does a shift.
+    # A redirection glued to a word is set apart, inside arithmetic too, where
+    # bash may have nested subshells instead; << opens a here-document, while
+    # a shift and a here-string (<<<) open nothing.
     def operator(index, char)
-      return @out.write(char) if @arithmetic.positive?
-
       @out.write(' ') if @out.glued?
       return @out.write(char) unless char == '<' && @chars[index + 1] == '<'
+      return @out.write('<<') if @arithmetic.positive?
       return @out.write('<<<') if @chars[index + 2] == '<'
 
       @heredocs.open(index)
