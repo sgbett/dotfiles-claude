@@ -1069,6 +1069,17 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard('cd missing || git push --force-with-lease origin feat')]).to eq([['ask', unknown_directory]] * 2)
     end
 
+    it 'loses the directory to a cd inside braces or a branch of if, which bash may not run' do
+      expect([guard('true || { echo x; cd work; }; git push --force-with-lease', cwd: sandbox.root),
+              guard('if false; then cd work; fi; git push --force-with-lease', cwd: sandbox.root)])
+        .to eq([['ask', unknown_directory]] * 2)
+    end
+
+    it 'still follows a plain cd before &&' do
+      expect(guard('cd work && git push --force-with-lease', cwd: sandbox.root))
+        .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    end
+
     it 'follows no cd in a pipeline or in the background, which ran in a subshell' do
       denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
       expect([guard('cd elsewhere | true; git push --force-with-lease'),

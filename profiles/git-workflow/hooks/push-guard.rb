@@ -820,6 +820,9 @@ module PushGuard
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
     PIPE = ['|', '|&'].freeze
+    # Compound commands, whose cds bash may not run, lie between these words.
+    OPENERS = %w[if while until for case {].freeze
+    CLOSERS = %w[fi done esac }].freeze
 
     attr_reader :pushes, :decisions
 
@@ -830,6 +833,7 @@ module PushGuard
       @command = command
       @cwd = cwd
       @subshell = subshell
+      @compound = 0
       @pushes = []
       @decisions = []
     end
@@ -886,6 +890,7 @@ module PushGuard
       words = split(text)
       return ask_about_push(text, Reasons::UNBALANCED_QUOTES) if words.nil?
 
+      note_compounds(words)
       segment = Segment.new(words)
       return follow(segment, before, after) if segment.change_directory?
       return ask_about_push(text, Reasons::VARIABLE) if text.include?('$')
@@ -930,8 +935,20 @@ module PushGuard
     def follow(segment, before, after)
       return if subshell_cd?(before, after)
 
-      target = segment.change_directory_target unless @subshell || before == '||' || after == '||'
+      target = segment.change_directory_target unless unfollowable?(before, after)
       @cwd = target.nil? ? nil : Directory.follow(@cwd, target)
+    end
+
+    # The depth of compound commands, kept across segments until the closing
+    # word; a cd inside one may not run.
+    def note_compounds(words)
+      @compound += words.count { |word| OPENERS.include?(word) } - words.count { |word| CLOSERS.include?(word) }
+    end
+
+    # Where a cd may not have run by the next command: in a subshell, in a
+    # compound command, or on either side of ||.
+    def unfollowable?(before, after)
+      @subshell || @compound.positive? || before == '||' || after == '||'
     end
 
     # In a pipeline, or backgrounded, a cd runs in a subshell and changes
