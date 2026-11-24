@@ -537,20 +537,25 @@ module PushGuard
     def initialize
       @text = +''
       @last = nil
+      @last_escaped = false
       @word_length = 0
       @word_digits = true
     end
 
-    # Appends +string+ and gives its length.
-    def write(string)
+    # Appends +string+ and gives its length; +escaped+ says it came from an
+    # escape, so its last character bounds nothing.
+    def write(string, escaped: false)
       string.each_char { |char| note(char) }
+      @last_escaped = escaped
       @text << string
       string.length
     end
 
     # A # here starts a comment: at the start, after whitespace or glued to
-    # an operator.
+    # an operator, none of them escaped.
     def comment_start?
+      return false if @last_escaped
+
       @last.nil? || COMMENT_START.match?(@last)
     end
 
@@ -713,7 +718,7 @@ module PushGuard
     # is kept whole for Shellwords to read.
     def escaped(index)
       following = @chars[index + 1]
-      @out.write("\\#{following}") unless following == "\n"
+      @out.write("\\#{following}", escaped: true) unless following == "\n"
       following.nil? ? 1 : 2
     end
 
@@ -777,9 +782,10 @@ module PushGuard
   # Reads the Bash text into the pushes it holds, following cd between
   # commands as far as it can, and into asks for what it cannot read.
   class CommandReader
-    # A newline, ;, pipe, &&, ||, |& or a background &, but not the & of
-    # 2>&1, >&2 or &>file.
-    SEPARATORS = /\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>)/.freeze
+    # Each piece of the text: an escaped character, which separates nothing;
+    # a separator (a newline, ;, &&, ||, |&, | or a background &, but not
+    # the & of 2>&1, >&2 or &>file); or a run of anything else.
+    TOKENS = /(\\.)|(\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>))|(&|[^\\\n;|&]+)/m.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
 
@@ -801,12 +807,26 @@ module PushGuard
       if construct
         ask(Reasons.unreadable(construct)) if @command.include?('git') && @command.include?('push')
       else
-        @command.split(SEPARATORS).each { |text| read_segment(text.delete('()')) }
+        segments.map(&:first).each { |text| read_segment(text.delete('()')) }
       end
       self
     end
 
     private
+
+    # [text, the separator after it] per segment of the text.
+    def segments
+      segments = [[+'', nil]]
+      @command.scan(TOKENS) do |escaped, separator, text|
+        if separator
+          segments.last[1] = separator
+          segments << [+'', nil]
+        else
+          segments.last[0] << (escaped || text)
+        end
+      end
+      segments
+    end
 
     def ask(reason)
       @decisions << Decision.ask(reason)

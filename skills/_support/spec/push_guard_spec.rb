@@ -371,6 +371,19 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard("git status # C:\\\ngit push \\\n  --delete origin master")]).to eq([denied] * 3)
     end
 
+    it 'starts no comment after an escaped character, and splits no segment at an escaped separator' do
+      denied_master = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard('echo \;#note && git push --force origin master'),
+              guard('echo \ #note && git push --force origin master'),
+              guard('echo \(#note && git push --force origin master'),
+              guard('echo \|#note && git push --force-with-lease origin master'),
+              guard('echo \\\\;#note && git push --force origin master'),
+              guard('echo \; git push --force origin master')])
+        .to eq([['deny', bare_force], ['deny', bare_force], ['deny', bare_force], denied_master, nil,
+                ['ask', 'push-guard: a push behind echo cannot be read; run git push on its own command line with ' \
+                        'the remote and refspec written out']])
+    end
+
     it 'starts a comment at a # glued to a shell operator too, as bash and zsh do' do
       denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
       expect([guard("true;# C:\\\ngit push --force-with-lease"), guard("true&&# C:\\\ngit push origin --delete HEAD")])
