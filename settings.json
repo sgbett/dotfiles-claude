@@ -88,20 +88,6 @@
       "Bash(gh run rerun *)"
     ]
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh \"$HOME/.claude/profiles/git-workflow/hooks/push-guard\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  },
   "enabledPlugins": {
     "ruby-lsp@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
