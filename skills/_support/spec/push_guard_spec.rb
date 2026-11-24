@@ -1091,11 +1091,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard("false &&\n\ncd elsewhere;\ngit push --force-with-lease")]).to eq([['ask', unknown_directory]] * 2)
     end
 
-    it 'splits no list at a separator inside quotes' do
+    it 'splits no list at a separator inside quotes, $\'…\' with its escapes included' do
       denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
       expect([guard('cd elsewhere && echo "a;b" & wait; git push --force-with-lease'),
+              guard(%q(cd elsewhere && echo $'it\'s;x' & wait; git push --force-with-lease)),
               guard('true && cd work && echo "a;b" && git push --force-with-lease', cwd: sandbox.root),
-              guard('echo "a;b"; git push --force origin master')]).to eq([denied, denied, ['deny', bare_force]])
+              guard('echo "a;b"; git push --force origin master'), guard(%q(echo $'a;b'; git push --force origin master))])
+        .to eq([denied, denied, denied, ['deny', bare_force], ['deny', bare_force]])
     end
 
     it 'undoes every cd of a list that ends in &, which ran whole in a subshell' do

@@ -842,6 +842,33 @@ module PushGuard
     end
   end
 
+  # The text split at its separators, each piece with the separator after it.
+  # An escaped character or a quoted string ($'…' with its escapes, as the
+  # scanner reads it, before a plain '…') separates nothing; a separator is a
+  # newline, ;, &&, ||, |&, | or a background &, but not the & of 2>&1, >&2
+  # or &>file; a lone quote or $ is text.
+  module Segments
+    TOKENS = /
+      (\\.)
+      |(\$'(?:[^'\\]|\\.)*'|'[^']*'|"(?:[^"\\]|\\.)*")
+      |(\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>))
+      |(&|['"$]|[^\\\n;|&'"$]+)
+    /mx.freeze
+
+    def self.of(command)
+      segments = [[+'', nil]]
+      command.scan(TOKENS) do |escaped, quoted, separator, text|
+        if separator
+          segments.last[1] = separator
+          segments << [+'', nil]
+        else
+          segments.last[0] << (escaped || quoted || text)
+        end
+      end
+      segments
+    end
+  end
+
   # An and-or list: the commands between one ; & or newline and the next,
   # joined by && || and pipes. A cd entered by && ran only if what came
   # before it succeeded, which the hook cannot know, so it holds within its
@@ -882,11 +909,6 @@ module PushGuard
   # Reads the Bash text into the pushes it holds, following cd between
   # commands as far as it can, and into asks for what it cannot read.
   class CommandReader
-    # Each piece of the text: an escaped character or a quoted string, which
-    # separate nothing; a separator (a newline, ;, &&, ||, |&, | or a
-    # background &, but not the & of 2>&1, >&2 or &>file); or a run of
-    # anything else.
-    TOKENS = /(\\.)|('[^']*'|"(?:[^"\\]|\\.)*")|(\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>))|(&|['"]|[^\\\n;|&'"]+)/m.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
     PIPE = ['|', '|&'].freeze
@@ -924,27 +946,13 @@ module PushGuard
     # included, so the operator carries to the next command.
     def read_segments
       before = nil
-      segments.each do |text, after|
+      Segments.of(@command).each do |text, after|
         next if text.strip.empty? && AndOrList::CONTINUERS.include?(before)
 
         read_segment(text.delete('()'), before, after)
         @cwd = @list.close(after, @cwd) if AndOrList.ends?(after)
         before = after
       end
-    end
-
-    # [text, the separator after it] per segment of the text.
-    def segments
-      segments = [[+'', nil]]
-      @command.scan(TOKENS) do |escaped, quoted, separator, text|
-        if separator
-          segments.last[1] = separator
-          segments << [+'', nil]
-        else
-          segments.last[0] << (escaped || quoted || text)
-        end
-      end
-      segments
     end
 
     def ask(reason)
