@@ -102,6 +102,13 @@ module PushGuard
         'run git push on its own command line with the remote and refspec written out'
     end
 
+    def self.remapped_fetch(remote)
+      "push-guard: remote.#{remote}.fetch does not keep the remote's branches under refs/remotes/#{remote}/ by " \
+        'name, so what the push would rewrite could not be read and the push could not be checked; name the remote ' \
+        "and branch, as git push #{remote} <branch>, from a clone fetching under the default layout, " \
+        "+refs/heads/*:refs/remotes/#{remote}/*"
+    end
+
     def self.prefix_option(option)
       "push-guard: the option #{option} before the command is not understood, so the push could not be checked"
     end
@@ -659,6 +666,18 @@ module PushGuard
 
     def initialize(directory)
       @directory = directory
+      @fetch_layouts = {}
+    end
+
+    # Whether every fetch refspec of +remote+ that takes from refs/heads/
+    # lands under refs/remotes/<remote>/ by the same name, as the default
+    # layout does, so the push atoms and the tracking refs the hook reads
+    # name what git pushes over. Refspecs with other sources (pull requests,
+    # tags) are not read. Answered once per remote.
+    def default_fetch_layout?(remote)
+      return @fetch_layouts[remote] if @fetch_layouts.key?(remote)
+
+      @fetch_layouts[remote] = branch_fetches(remote).all? { |name, into| into == "refs/remotes/#{remote}/#{name}" }
     end
 
     def current_branch
@@ -724,6 +743,16 @@ module PushGuard
 
     private
 
+    # [branch, destination] per fetch refspec of +remote+ taking from
+    # refs/heads/, the + stripped; the branch may be * or one name.
+    def branch_fetches(remote)
+      refspecs = git('config', '--get-all', "remote.#{remote}.fetch").to_s.lines.map do |line|
+        line.chomp.sub(/\A\+/, '').split(':', 2)
+      end
+      refspecs.select { |source, _into| source.to_s.start_with?('refs/heads/') }
+              .map { |source, into| [source.delete_prefix('refs/heads/'), into.to_s] }
+    end
+
     # git writes bytes, read here as UTF-8 whatever the locale says, so a
     # non-ASCII name or address is text and not an encoding error.
     def git(*arguments)
@@ -763,6 +792,7 @@ module PushGuard
     # destination.
     def place(atom, short, current)
       @remote = remote_name(atom)
+      return refuse(Reasons.remapped_fetch(remote)) unless @repository.default_fetch_layout?(remote)
       return refuse(Reasons.every_branch("the configured remote.#{remote}.push")) if configured_refspec?
 
       @branch = branch_name(short, current)
@@ -810,11 +840,17 @@ module PushGuard
     end
 
     def ask
+      return Decision.ask(Reasons.remapped_fetch(remote)) unless repository.default_fetch_layout?(remote)
       return missing_copy unless repository.ref?(tracking_ref)
 
       own = repository.own_email
       return Decision.ask(Reasons::NO_EMAIL) if own.nil?
 
+      base_ask(own)
+    end
+
+    # The branch beyond its bases, once the default branch's copy is here.
+    def base_ask(own)
       base, mend = base_and_mend
       return unreadable(mend) unless repository.ref?(base)
 

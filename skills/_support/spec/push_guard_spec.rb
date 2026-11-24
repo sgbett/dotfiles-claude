@@ -130,6 +130,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     File.write('.mailmap', "#{line}\n")
   end
 
+  # origin's branches fetched under refs/remotes/origin/cache/ rather than
+  # the default layout.
+  def remap_fetch
+    configure('remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/cache/*')
+    git('fetch', '--quiet', 'origin')
+  end
+
   # What a single-branch fetch leaves: the remote's HEAD known, its copy of
   # master not here.
   def forget_base
@@ -682,6 +689,38 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       repository_with_origin
       configure('remote.origin.push', 'refs/heads/master:refs/heads/master')
       expect(guard('git push --force-with-lease origin feat')).to be_nil
+    end
+  end
+
+  describe 'a remote fetched under another layout' do
+    let(:remapped_fetch) do
+      "push-guard: remote.origin.fetch does not keep the remote's branches under refs/remotes/origin/ by name, so " \
+        'what the push would rewrite could not be read and the push could not be checked; name the remote and ' \
+        'branch, as git push origin <branch>, from a clone fetching under the default layout, ' \
+        '+refs/heads/*:refs/remotes/origin/*'
+    end
+
+    it 'asks before resolving a destination through it' do
+      repository_with_origin
+      remap_fetch
+      configure('push.default', 'upstream')
+      git('checkout', '--quiet', 'master')
+      expect(guard('git push --force-with-lease')).to eq(['ask', remapped_fetch])
+    end
+
+    it 'asks before reading authors through it' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      remap_fetch
+      expect(guard('git push --force-with-lease origin feat')).to eq(['ask', remapped_fetch])
+    end
+
+    it 'accepts a single-branch layout, and refspecs with other sources' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      configure('remote.origin.fetch', '+refs/heads/master:refs/remotes/origin/master')
+      git('config', '--add', 'remote.origin.fetch', '+refs/pull/*/head:refs/remotes/origin/pr/*')
+      expect(guard('git push --force-with-lease')).to eq(['ask', another_on_feat])
     end
   end
 
