@@ -522,7 +522,7 @@ module PushGuard
     COMMENT_START = /[\s;&|()]/.freeze
     OPERATOR_END = /[<>&|;()]/.freeze
 
-    attr_reader :text
+    attr_reader :text, :last
 
     def initialize
       @text = +''
@@ -655,8 +655,15 @@ module PushGuard
       @heredocs = HereDocuments.new(@chars, @out)
       @quote = nil
       @subshell = false
+      @arithmetic = 0
       index = 0
       index += step(index) while index < @chars.length
+    end
+
+    # What the text left open, for the reason given when the raw lines cannot
+    # settle a push.
+    def open_construct
+      @quote ? 'an unclosed quote' : 'an unterminated here-document'
     end
 
     def text
@@ -730,14 +737,25 @@ module PushGuard
       @out.write("$'")
     end
 
+    # ((…)) and $((…)) are arithmetic, where << is a shift; their parentheses
+    # are counted so the context closes with them. Any other parenthesis may
+    # open a subshell.
     def parenthesis(char)
-      @subshell = true
+      if @arithmetic.positive?
+        @arithmetic += char == '(' ? 1 : -1
+      elsif char == '(' && @out.last == '('
+        @arithmetic = 2
+      else
+        @subshell = true
+      end
       @out.write(char)
     end
 
     # A redirection glued to a word is set apart; << opens a here-document,
-    # while <<< is a here-string and opens nothing.
+    # while <<< is a here-string and opens nothing, nor does a shift.
     def operator(index, char)
+      return @out.write(char) if @arithmetic.positive?
+
       @out.write(' ') if @out.glued?
       return @out.write(char) unless char == '<' && @chars[index + 1] == '<'
       return @out.write('<<<') if @chars[index + 2] == '<'
@@ -1208,6 +1226,13 @@ module PushGuard
       Decision.strictest(base_denies(refspec_targets))
     end
 
+    # For a text bash would not run as written, a quote or here-document left
+    # open: what the text settles, else an ask for a destructive push, since
+    # the reading may be wrong about it and no valid command pays for the ask.
+    def decide_from_text_or_ask(construct)
+      decide_from_text || (Decision.ask(Reasons.unreadable(construct)) if push.destructive?)
+    end
+
     private
 
     attr_reader :push
@@ -1373,8 +1398,10 @@ module PushGuard
       decisions = decisions(script.text, cwd, script.subshell?, &:decide)
       return Decision.strictest(decisions) if script.balanced?
 
-      decisions += decisions(Script.join_continuations(command), cwd, true, &:decide_from_text)
-      Decision.strictest(decisions)
+      backstop = decisions(Script.join_continuations(command), cwd, true) do |judge|
+        judge.decide_from_text_or_ask(script.open_construct)
+      end
+      Decision.strictest(decisions + backstop)
     end
 
     def decisions(text, cwd, subshell, &judge)

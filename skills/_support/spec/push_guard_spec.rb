@@ -400,6 +400,11 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([['deny', bare_force], denied_master, ['deny', bare_force], ['deny', bare_force]])
     end
 
+    it 'reads << inside arithmetic as a shift, so a lease push after it is judged' do
+      expect(guard("((x<<2))\ngit push \\\n--force-with-lease"))
+        .to eq(['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'])
+    end
+
     it 'reads $\'…\' as a quote a backslash escapes in, so an escaped apostrophe closes nothing' do
       expect(guard("echo $'it\\'s'\ngit push \\\n--force origin master")).to eq(['deny', bare_force])
     end
@@ -895,6 +900,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
           .to eq(['ask', "push-guard: a push behind #{construct} cannot be read; run git push on its own command " \
                          'line with the remote and refspec written out'])
       end
+    end
+
+    it 'asks for a destructive push the text cannot settle when a quote is left open, which bash would not run' do
+      repository_with_origin
+      expect(guard("echo \"oops\ngit push --force-with-lease"))
+        .to eq(['ask', 'push-guard: a push behind an unclosed quote cannot be read; run git push on its own command ' \
+                       'line with the remote and refspec written out'])
     end
 
     it 'says nothing for an opaque construct that mentions no push' do
