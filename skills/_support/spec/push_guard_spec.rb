@@ -1057,6 +1057,17 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       end
     end
 
+    it 'loses the directory to a cd on either side of ||, which bash may skip or run only on failure' do
+      expect([guard('cd "$d" || cd /; git push --force-with-lease origin feat'),
+              guard('cd missing || git push --force-with-lease origin feat')]).to eq([['ask', unknown_directory]] * 2)
+    end
+
+    it 'follows no cd in a pipeline or in the background, which ran in a subshell' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard('cd elsewhere | true; git push --force-with-lease'),
+              guard('cd elsewhere & git push --force-with-lease')]).to eq([denied] * 2)
+    end
+
     it 'loses the directory to a subshell behind a quote it could not follow, such as a heredoc body' do
       expect(guard("cat <<EOF\ndon't\nEOF\n(cd /tmp); git push --force-with-lease")).to eq(['ask', unknown_directory])
     end

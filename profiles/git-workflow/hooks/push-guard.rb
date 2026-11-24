@@ -815,6 +815,7 @@ module PushGuard
     TOKENS = /(\\.)|(\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>))|(&|[^\\\n;|&]+)/m.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
+    PIPE = ['|', '|&'].freeze
 
     attr_reader :pushes, :decisions
 
@@ -834,12 +835,22 @@ module PushGuard
       if construct
         ask(Reasons.unreadable(construct)) if @command.include?('git') && @command.include?('push')
       else
-        segments.map(&:first).each { |text| read_segment(text.delete('()')) }
+        read_segments
       end
       self
     end
 
     private
+
+    # Each segment with the separators on either side of it, which say
+    # whether a cd in it will have run in this shell by the next command.
+    def read_segments
+      before = nil
+      segments.each do |text, after|
+        read_segment(text.delete('()'), before, after)
+        before = after
+      end
+    end
 
     # [text, the separator after it] per segment of the text.
     def segments
@@ -867,12 +878,12 @@ module PushGuard
 
     # A cd is followed before the $ test, since Shellwords keeps a $d whole
     # and a cd "$d" must lose the directory rather than be passed over.
-    def read_segment(text)
+    def read_segment(text, before, after)
       words = split(text)
       return ask_about_push(text, Reasons::UNBALANCED_QUOTES) if words.nil?
 
       segment = Segment.new(words)
-      return follow(segment) if segment.change_directory?
+      return follow(segment, before, after) if segment.change_directory?
       return ask_about_push(text, Reasons::VARIABLE) if text.include?('$')
 
       read_words(segment, text)
@@ -907,9 +918,22 @@ module PushGuard
       git.directories.reduce(@cwd) { |from, path| Directory.follow(from, path) }
     end
 
-    def follow(segment)
-      target = segment.change_directory_target unless @subshell
+    # A cd is followed where bash will have run it in this shell before the
+    # next command: after && it ran and succeeded; after ; or a newline it
+    # ran, and a failed one leaves git in a missing directory, which asks. On
+    # either side of || it may be skipped, or run only on failure, so the
+    # directory is unknown from there.
+    def follow(segment, before, after)
+      return if subshell_cd?(before, after)
+
+      target = segment.change_directory_target unless @subshell || before == '||' || after == '||'
       @cwd = target.nil? ? nil : Directory.follow(@cwd, target)
+    end
+
+    # In a pipeline, or backgrounded, a cd runs in a subshell and changes
+    # nothing for the next command.
+    def subshell_cd?(before, after)
+      PIPE.include?(before) || PIPE.include?(after) || after == '&'
     end
 
     def split(text)
