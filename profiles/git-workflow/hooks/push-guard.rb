@@ -60,7 +60,7 @@ module PushGuard
     # and a configured remote.<name>.push: the remote's refs decide what is
     # touched, and the hook cannot see them.
     def self.every_branch(form, by_name = BY_NAME)
-      "push-guard: #{form} may rewrite or delete any branch on the remote, base branches included, " \
+      "push-guard: #{clean(form)} may rewrite or delete any branch on the remote, base branches included, " \
         "so the targets could not be checked; name them, as #{by_name}. Push anyway?"
     end
 
@@ -69,32 +69,39 @@ module PushGuard
     end
 
     def self.other_authors(branch, remote, addresses)
-      "push-guard: #{branch} on #{remote} has commits by #{addresses.length} other author(s), " \
+      "push-guard: #{branch} on #{shown(remote)} has commits by #{addresses.length} other author(s), " \
         "#{address_list(addresses)}; a branch with another active committer is theirs until they say otherwise, " \
         'and an address of your own belongs in .mailmap. Push anyway?'
     end
 
-    # An address is whatever the commit says it is, and the text reaches the
-    # permission prompt: only printable characters go in, less the format
-    # characters Ruby counts among them (a direction override, a zero-width
-    # space), each address is cut to ADDRESS_LENGTH and at most
-    # ADDRESSES_LISTED are named.
+    # At most ADDRESSES_LISTED addresses are named, the rest counted.
     def self.address_list(addresses)
-      shown = addresses.first(ADDRESSES_LISTED).map do |address|
-        address.gsub(/[^[:print:]]|\p{Cf}/, '')[0, ADDRESS_LENGTH]
-      end
+      shown = addresses.first(ADDRESSES_LISTED).map { |address| shown(address) }
       rest = addresses.length - shown.length
       rest.positive? ? "#{shown.join(', ')} and #{rest} more" : shown.join(', ')
     end
 
+    # Text from a commit or from the repository's configuration (an address,
+    # a remote name, a ref or command built on one) reaches the permission
+    # prompt: only printable characters go in, less the format characters
+    # Ruby counts among them (a direction override, a zero-width space).
+    def self.clean(text)
+      text.gsub(/[^[:print:]]|\p{Cf}/, '')
+    end
+
+    # A name, cleaned and cut to ADDRESS_LENGTH.
+    def self.shown(name)
+      clean(name)[0, ADDRESS_LENGTH]
+    end
+
     def self.unreadable_history(branch, remote, mend)
-      "push-guard: the commits of #{branch} on #{remote} beyond its base could not be read, " \
-        "so the push could not be checked; run #{mend} first"
+      "push-guard: the commits of #{branch} on #{shown(remote)} beyond its base could not be read, " \
+        "so the push could not be checked; run #{clean(mend)} first"
     end
 
     def self.long_history(branch, remote, bound, range)
-      "push-guard: #{branch} on #{remote} has #{bound} or more commits beyond its base, more than the hook reads, " \
-        "so the push could not be checked; git shortlog -sne #{range} lists their authors"
+      "push-guard: #{branch} on #{shown(remote)} has #{bound} or more commits beyond its base, more than the hook " \
+        "reads, so the push could not be checked; git shortlog -sne #{clean(range)} lists their authors"
     end
 
     def self.unreadable(construct)
@@ -103,17 +110,19 @@ module PushGuard
     end
 
     def self.filled_tracking_ref(remote, ref)
-      "push-guard: remote.#{remote}.fetch fills #{ref} from something other than the branch of that name, so what " \
-        'the push would rewrite could not be read and the push could not be checked; name the remote and branch, ' \
-        "as git push #{remote} <branch>, from a clone fetching under the default layout, " \
-        "+refs/heads/*:refs/remotes/#{remote}/*"
+      name = shown(remote)
+      "push-guard: remote.#{name}.fetch fills #{clean(ref)} from something other than the branch of that name, so " \
+        'what the push would rewrite could not be read and the push could not be checked; name the remote and ' \
+        "branch, as git push #{name} <branch>, from a clone fetching under the default layout, " \
+        "+refs/heads/*:refs/remotes/#{name}/*"
     end
 
     def self.remapped_fetch(remote)
-      "push-guard: remote.#{remote}.fetch does not keep the remote's branches under refs/remotes/#{remote}/ by " \
+      name = shown(remote)
+      "push-guard: remote.#{name}.fetch does not keep the remote's branches under refs/remotes/#{name}/ by " \
         'name, so what the push would rewrite could not be read and the push could not be checked; name the remote ' \
-        "and branch, as git push #{remote} <branch>, from a clone fetching under the default layout, " \
-        "+refs/heads/*:refs/remotes/#{remote}/*"
+        "and branch, as git push #{name} <branch>, from a clone fetching under the default layout, " \
+        "+refs/heads/*:refs/remotes/#{name}/*"
     end
 
     def self.prefix_option(option)

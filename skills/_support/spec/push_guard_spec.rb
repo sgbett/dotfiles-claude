@@ -538,6 +538,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --force-with-lease origin solo')).to be_nil
     end
 
+    it 'shows a remote name with its printable characters only, since the text reaches the prompt' do
+      expect(guard("git push --force-with-lease=feat:0123abc \"up\e[31mstream\" feat"))
+        .to eq(['ask', 'push-guard: the commits of feat on up[31mstream beyond its base could not be read, so the ' \
+                       'push could not be checked; run git fetch up[31mstream feat first'])
+    end
+
     it 'asks for a lease with a value in it when the remote’s copy is not here, naming the fetch' do
       expect(guard('git push --force-with-lease=feat:0123abc origin feat'))
         .to eq(unreadable_history_ask('git fetch origin feat'))
