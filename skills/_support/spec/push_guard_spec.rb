@@ -137,6 +137,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     git('fetch', '--quiet', 'origin')
   end
 
+  # origin's fetch refspecs replaced by +refspecs+, in that order.
+  def fetch_layout(*refspecs)
+    git('config', '--unset-all', 'remote.origin.fetch')
+    refspecs.each { |refspec| git('config', '--add', 'remote.origin.fetch', refspec) }
+  end
+
   # What a single-branch fetch leaves: the remote's HEAD known, its copy of
   # master not here.
   def forget_base
@@ -720,6 +726,31 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       push_commit('theirs', another_author)
       remap_fetch
       expect(guard('git push --force-with-lease origin feat')).to eq(['ask', remapped_fetch])
+    end
+
+    it 'asks for a broader source that takes branches away from their names, wherever it is listed' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      layouts = [['+refs/*:refs/remotes/origin/*'], ['+refs/heads*:refs/remotes/origin/x*'],
+                 ['+refs/*:refs/remotes/origin/all/*', '+refs/heads/*:refs/remotes/origin/*'],
+                 ['+refs/heads/*:refs/remotes/origin/*', '+refs/heads/master:refs/remotes/origin/mirror']]
+      answers = layouts.map do |layout|
+        fetch_layout(*layout)
+        guard('git push --force-with-lease')
+      end
+      expect(answers).to eq([['ask', remapped_fetch]] * 4)
+    end
+
+    it 'accepts a negative refspec, a narrower glob keeping names, a short name and no fetch line at all' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      layouts = [['+refs/heads/*:refs/remotes/origin/*', '^refs/heads/junk'], ['+refs/heads/feat/*:refs/remotes/origin/feat/*'],
+                 ['+master:refs/remotes/origin/master'], []]
+      answers = layouts.map do |layout|
+        fetch_layout(*layout)
+        guard('git push --force-with-lease')
+      end
+      expect(answers).to eq([['ask', another_on_feat]] * 4)
     end
 
     it 'accepts a single-branch layout, and refspecs with other sources' do

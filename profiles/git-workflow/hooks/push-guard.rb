@@ -704,7 +704,8 @@ module PushGuard
     # forbids it on git 2.45 and later and on the May 2024 patch releases
     # (2.39.4, 2.40.2, 2.41.1, 2.42.2, 2.43.4, 2.44.1); any other git ignores
     # it, so an empty GIT_ALLOW_PROTOCOL refuses every transport as the
-    # backstop, and the read then fails and asks.
+    # backstop. A read that needs a missing object then fails, or goes on
+    # without it, and neither reaches the remote.
     ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1', 'GIT_ALLOW_PROTOCOL' => '' }.freeze
     GIT = %w[git --no-pager -c core.fsmonitor=false -c log.showSignature=false].freeze
     DESTINATION_FORMAT = '%(refname)%00%(push:remotename)%00%(push:short)'
@@ -718,15 +719,15 @@ module PushGuard
       @fetch_layouts = {}
     end
 
-    # Whether every fetch refspec of +remote+ that takes from refs/heads/
-    # lands under refs/remotes/<remote>/ by the same name, as the default
-    # layout does, so the push atoms and the tracking refs the hook reads
-    # name what git pushes over. Refspecs with other sources (pull requests,
+    # Whether every fetch refspec of +remote+ that could take a branch lands
+    # it under refs/remotes/<remote>/ by the same name, as the default layout
+    # does, so the push atoms and the tracking refs the hook reads name what
+    # git pushes over. Refspecs that cannot take a branch (pull requests,
     # tags) are not read. Answered once per remote.
     def default_fetch_layout?(remote)
       return @fetch_layouts[remote] if @fetch_layouts.key?(remote)
 
-      @fetch_layouts[remote] = branch_fetches(remote).all? { |name, into| into == "refs/remotes/#{remote}/#{name}" }
+      @fetch_layouts[remote] = fetch_refspecs(remote).all? { |source, into| keeps_name?(source, into, remote) }
     end
 
     def current_branch
@@ -792,14 +793,33 @@ module PushGuard
 
     private
 
-    # [branch, destination] per fetch refspec of +remote+ taking from
-    # refs/heads/, the + stripped; the branch may be * or one name.
-    def branch_fetches(remote)
-      refspecs = git('config', '--get-all', "remote.#{remote}.fetch").to_s.lines.map do |line|
-        line.chomp.sub(/\A\+/, '').split(':', 2)
+    # [source, destination] per fetch refspec of +remote+, the + stripped.
+    def fetch_refspecs(remote)
+      git('config', '--get-all', "remote.#{remote}.fetch").to_s.lines.map do |line|
+        source, into = line.chomp.sub(/\A\+/, '').split(':', 2)
+        [source.to_s, into.to_s]
       end
-      refspecs.select { |source, _into| source.to_s.start_with?('refs/heads/') }
-              .map { |source, into| [source.delete_prefix('refs/heads/'), into.to_s] }
+    end
+
+    # A refspec that could take a branch must land refs/heads/X at
+    # refs/remotes/<remote>/X; one that cannot is not read.
+    def keeps_name?(source, into, remote)
+      return true unless branch_source?(source)
+
+      full = source.start_with?('refs/') || source.include?('*') ? source : "refs/heads/#{source}"
+      into == full.sub(%r{\Arefs/heads/}, "refs/remotes/#{remote}/")
+    end
+
+    # Whether a fetch source could take a branch: refs/heads/… itself, a
+    # short name git resolves to one, or a * within its first two segments
+    # (refs/*, refs/heads*, *), which git matches first when it is listed
+    # first. Tags, pull requests, notes and the like cannot, nor does a
+    # negative refspec, which only removes.
+    def branch_source?(source)
+      return false if source.start_with?('^')
+
+      head, second = source.split('/', 3)
+      head != 'refs' || second == 'heads' || second.to_s.include?('*')
     end
 
     # git writes bytes, read here as UTF-8 whatever the locale says, so a
