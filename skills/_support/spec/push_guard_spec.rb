@@ -383,6 +383,18 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([['deny', bare_force], ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']])
     end
 
+    it 'passes a here-document body through as text, so an apostrophe in it opens no quote' do
+      expect([guard("git commit -F - <<'EOF'\nfix: don't do it\nEOF\ngit push \\\n--force origin master"),
+              guard("git commit -F - <<'EOF'\nfix: don't do it\nEOF\ngit push --force-with-lease \\\n  origin master"),
+              guard("cat <<-EOF\n\tbody\n\tEOF\ngit push --force origin master")])
+        .to eq([['deny', bare_force], ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted'],
+                ['deny', bare_force]])
+    end
+
+    it 'reads $\'…\' as a quote a backslash escapes in, so an escaped apostrophe closes nothing' do
+      expect(guard("echo $'it\\'s'\ngit push \\\n--force origin master")).to eq(['deny', bare_force])
+    end
+
     it 'keeps a # inside quotes as text, across a continuation too' do
       expect([guard("git commit -m \"fix #12\" && git push \\\n  --force origin feat"),
               guard("git commit -m \"a \\\n#b\" && git push --force-with-lease origin master")])
@@ -582,6 +594,20 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       repository_with_origin
       push_commit('theirs', another_author)
       expect(guard('cd work && git push --force-with-lease 2>&1', cwd: sandbox.root).first).to eq('ask')
+    end
+
+    it 'reads nothing from a here-document body: no comment, no subshell, no redirection' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      body = "cd work && cat <<'EOF'\n# note (x) a>b\nEOF\n"
+      expect([guard("#{body}git push --force-with-lease", cwd: sandbox.root), guard("#{body}git push origin feat")])
+        .to eq([['ask', another_on_feat], nil])
+    end
+
+    it 'reads a long run of glued redirections in linear time' do
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect(guard("echo #{'a>' * 5000}b && git push -f")).to eq(['deny', bare_force])
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
     end
 
     it 'follows a cd past a parenthesis inside quotes, which opens no subshell' do

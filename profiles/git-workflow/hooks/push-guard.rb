@@ -357,9 +357,10 @@ module PushGuard
     # see; HOME and XDG_CONFIG_HOME move the global configuration just as
     # GIT_CONFIG_GLOBAL does.
     CONFIG_ASSIGNMENT = /\A(?:GIT_CONFIG_[A-Z0-9_]+|HOME|XDG_CONFIG_HOME)=/.freeze
-    # An operator on its own (`>`, `2>`, `>>`, `<`, `&>`, `&>>`, `>&`, `<&`
-    # or `2>&`): the next word is its file or descriptor.
-    REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<|&>>?|\d*[<>]&)\z/.freeze
+    # An operator on its own (`>`, `2>`, `>>`, `<`, `<<`, `<<-`, `&>`, `&>>`,
+    # `>&`, `<&` or `2>&`): the next word is its file, descriptor or
+    # here-document delimiter.
+    REDIRECTION_OPERATOR = /\A(?:\d*>>?|\d*<<?-?|&>>?|\d*[<>]&)\z/.freeze
     # An operator with its file or descriptor attached: `2>&1`, `>&2`,
     # `>/dev/null`, `&>file` or `&>>log`.
     REDIRECTION = /\A(?:\d*[<>]|&)/.freeze
@@ -507,27 +508,139 @@ module PushGuard
     end
   end
 
-  # The Bash text as bash reads it, character by character with the quotes
-  # and escapes tracked across the whole of it: a comment (a # at the start
-  # of a line, after whitespace or glued to an operator, outside quotes) runs
-  # to the end of its line and no further; a backslash-newline continues the
-  # line outside single quotes; a redirection glued to a word (master>log) is
-  # set apart as bash splits it, a quoted one is not; parentheses count only
-  # unquoted. A quote still open at the end (a heredoc body, say) means the
-  # text was not read as bash will read it.
-  class Script
+  # The text a Script writes, with what the glued-redirection test needs kept
+  # as it grows, the last character and whether the word under way is digits
+  # alone, so a long text is not read again at each operator.
+  class ScannedText
     COMMENT_START = /[\s;&|()]/.freeze
     OPERATOR_END = /[<>&|;()]/.freeze
 
     attr_reader :text
 
+    def initialize
+      @text = +''
+      @last = nil
+      @word_length = 0
+      @word_digits = true
+    end
+
+    # Appends +string+ and gives its length.
+    def write(string)
+      string.each_char { |char| note(char) }
+      @text << string
+      string.length
+    end
+
+    # A # here starts a comment: at the start, after whitespace or glued to
+    # an operator.
+    def comment_start?
+      @last.nil? || COMMENT_START.match?(@last)
+    end
+
+    # A word an operator is run against: not the digits of 2>&1, not the
+    # second character of an operator, not nothing.
+    def glued?
+      @word_length.positive? && !@word_digits && !OPERATOR_END.match?(@last)
+    end
+
+    private
+
+    def note(char)
+      @last = char
+      if char.match?(/\s/)
+        @word_length = 0
+        @word_digits = true
+      else
+        @word_length += 1
+        @word_digits &&= char.match?(/\d/)
+      end
+    end
+  end
+
+  # The here-documents a line opens, read as bash reads them: each delimiter
+  # word is noted at its << (quotes removed, since they say the body is
+  # literal while the word is the same), and when the line ends each body is
+  # copied out as it is up to its terminator line, tabs allowed before the
+  # terminator for <<-, with no quote or escape read in it.
+  class HereDocuments
+    # A delimiter word, quoted in whole, in part or not at all.
+    DELIMITER = /\A(?:'[^']*'|"[^"]*"|\\.|[^\s<>&|;()'"\\])+/.freeze
+
+    def initialize(chars, out)
+      @chars = chars
+      @out = out
+      @pending = []
+    end
+
+    # Reads the operator and delimiter at +index+ as text and notes the
+    # delimiter; gives the count consumed.
+    def open(index)
+      rest = @chars.drop(index).join
+      head = rest[/\A<<-?[ \t]*/]
+      raw = rest[head.length..][DELIMITER].to_s
+      @pending << [raw.delete("'\"\\"), head.start_with?('<<-')]
+      @out.write(head + raw)
+    end
+
+    # Copies out the bodies the line opened, from +index+; gives the count
+    # consumed.
+    def bodies(index)
+      consumed = 0
+      @pending.each do |delimiter, tabs|
+        consumed += body(index + consumed) { |line| (tabs ? line.sub(/\A\t+/, '') : line) == delimiter }
+      end
+      @pending.clear
+      consumed
+    end
+
+    private
+
+    def body(index)
+      consumed = 0
+      while index + consumed < @chars.length
+        line = Script.line_at(@chars, index + consumed)
+        consumed += @out.write(line)
+        break if yield(line.chomp)
+      end
+      consumed
+    end
+  end
+
+  # The Bash text as bash reads it, character by character with the quotes
+  # and escapes tracked across the whole of it: a comment (a # at the start
+  # of a line, after whitespace or glued to an operator, outside quotes) runs
+  # to the end of its line and no further; a backslash-newline continues the
+  # line outside single quotes; $'…' escapes like double quotes and closes on
+  # '; a here-document's body passes through as it is; a redirection glued to
+  # a word (master>log) is set apart as bash splits it, a quoted one is not;
+  # parentheses count only unquoted. A quote still open at the end means the
+  # text was not read as bash will read it.
+  class Script
+    # A backslash-newline joined wherever it stands, line by line, for the
+    # raw lines that back up a text whose quotes the scan could not follow.
+    def self.join_continuations(command)
+      command.gsub(/(?<!\\)((?:\\\\)*)\\\n/, '\1')
+    end
+
+    # The line at +index+ of +chars+ with its newline, or the rest of them.
+    def self.line_at(chars, index)
+      finish = index
+      finish += 1 while finish < chars.length && chars[finish] != "\n"
+      chars[index..finish].join
+    end
+
     def initialize(command)
       @chars = command.chars
-      @text = +''
+      @out = ScannedText.new
+      @heredocs = HereDocuments.new(@chars, @out)
       @quote = nil
       @subshell = false
       index = 0
       index += step(index) while index < @chars.length
+    end
+
+    def text
+      @out.text
     end
 
     def balanced?
@@ -542,57 +655,72 @@ module PushGuard
 
     private
 
-    # Reads the character at +index+ and gives the count consumed.
+    # Reads the character at +index+ and gives the count consumed. The quote
+    # state is the closing character, or $' for ANSI-C quoting, which closes
+    # on ' but escapes as double quotes do.
     def step(index)
       char = @chars[index]
       return quoted(char, "'") if @quote == "'"
       return escaped(index) if char == '\\'
-      return quoted(char, '"') if @quote == '"'
+      return quoted(char, @quote[-1]) if @quote
 
       unquoted(index, char)
     end
 
     def quoted(char, closing)
       @quote = nil if char == closing
-      @text << char
-      1
+      @out.write(char)
     end
 
     # A backslash-newline continues the line and is dropped; any other escape
     # is kept whole for Shellwords to read.
     def escaped(index)
       following = @chars[index + 1]
-      @text << '\\' << following.to_s unless following == "\n"
+      @out.write("\\#{following}") unless following == "\n"
       following.nil? ? 1 : 2
     end
 
     def unquoted(index, char)
-      return comment_length(index) if char == '#' && comment_start?
-
       case char
-      when "'", '"' then @quote = char
-      when '(', ')' then @subshell = true
-      when '<', '>', '&' then @text << ' ' if glued?
+      when '#' then hash(index)
+      when "\n" then @out.write(char) + @heredocs.bodies(index + 1)
+      when "'", '"' then open_quote(char)
+      when '$' then dollar(index)
+      when '(', ')' then parenthesis(char)
+      when '<', '>', '&' then operator(index, char)
+      else @out.write(char)
       end
-      @text << char
-      1
     end
 
-    # The # and the rest of its line; the newline stays to end the segment.
-    def comment_length(index)
-      rest = @chars.drop(index)
-      rest.index("\n") || rest.length
+    # A comment to the end of its line, the newline left to end the segment,
+    # or a # in a word.
+    def hash(index)
+      @out.comment_start? ? Script.line_at(@chars, index).chomp.length : @out.write('#')
     end
 
-    def comment_start?
-      @text.empty? || COMMENT_START.match?(@text[-1])
+    def open_quote(char)
+      @quote = char
+      @out.write(char)
     end
 
-    # A word the operator is run against: not the digits of 2>&1, not the
-    # second character of an operator, not nothing.
-    def glued?
-      word = @text[/\S*\z/]
-      !word.empty? && !word.match?(/\A\d+\z/) && !OPERATOR_END.match?(word[-1])
+    def dollar(index)
+      return @out.write('$') unless @chars[index + 1] == "'"
+
+      @quote = "$'"
+      @out.write("$'")
+    end
+
+    def parenthesis(char)
+      @subshell = true
+      @out.write(char)
+    end
+
+    # A redirection glued to a word is set apart; << opens a here-document.
+    def operator(index, char)
+      @out.write(' ') if @out.glued?
+      return @heredocs.open(index) if char == '<' && @chars[index + 1] == '<'
+
+      @out.write(char)
     end
   end
 
@@ -1188,7 +1316,9 @@ module PushGuard
     def decide(command, cwd)
       script = Script.new(command)
       decisions = decisions(script.text, cwd, script.subshell?, &:decide)
-      decisions += decisions(command, cwd, true, &:decide_from_text) unless script.balanced?
+      return Decision.strictest(decisions) if script.balanced?
+
+      decisions += decisions(Script.join_continuations(command), cwd, true, &:decide_from_text)
       Decision.strictest(decisions)
     end
 
