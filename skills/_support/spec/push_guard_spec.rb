@@ -543,6 +543,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --force-with-lease origin solo')).to be_nil
     end
 
+    it 'shows a branch name without the format characters git accepts in one' do
+      git('checkout', '--quiet', '-b', "feat‮x​y")
+      expect(guard('git push origin --delete HEAD'))
+        .to eq(['ask', 'push-guard: the commits of featxy on origin beyond its base could not be read, so the push ' \
+                       'could not be checked; run git fetch origin featxy first'])
+    end
+
     it 'shows a remote name with its printable characters only, since the text reaches the prompt' do
       expect(guard("git push --force-with-lease=feat:0123abc \"up\e[31mstream\" feat"))
         .to eq(['ask', 'push-guard: the commits of feat on up[31mstream beyond its base could not be read, so the ' \

@@ -53,7 +53,7 @@ module PushGuard
     ADDRESSES_LISTED = 5
 
     def self.base_branch(branch)
-      "push-guard: #{branch} is a base branch; it is never rewritten or deleted"
+      "push-guard: #{shown(branch)} is a base branch; it is never rewritten or deleted"
     end
 
     # --all, --prune, a wildcard or matching refspec, push.default=matching
@@ -69,7 +69,7 @@ module PushGuard
     end
 
     def self.other_authors(branch, remote, addresses)
-      "push-guard: #{branch} on #{shown(remote)} has commits by #{addresses.length} other author(s), " \
+      "push-guard: #{shown(branch)} on #{shown(remote)} has commits by #{addresses.length} other author(s), " \
         "#{address_list(addresses)}; a branch with another active committer is theirs until they say otherwise, " \
         'and an address of your own belongs in .mailmap. Push anyway?'
     end
@@ -81,10 +81,11 @@ module PushGuard
       rest.positive? ? "#{shown.join(', ')} and #{rest} more" : shown.join(', ')
     end
 
-    # Text from a commit or from the repository's configuration (an address,
-    # a remote name, a ref or command built on one) reaches the permission
-    # prompt: only printable characters go in, less the format characters
-    # Ruby counts among them (a direction override, a zero-width space).
+    # Text from a commit, from the repository's configuration or from git's
+    # refs (an address, a remote or branch name, a ref or command built on
+    # one) reaches the permission prompt: only printable characters go in,
+    # less the format characters Ruby counts among them (a direction
+    # override, a zero-width space), which git accepts in a branch name.
     def self.clean(text)
       text.gsub(/[^[:print:]]|\p{Cf}/, '')
     end
@@ -95,13 +96,13 @@ module PushGuard
     end
 
     def self.unreadable_history(branch, remote, mend)
-      "push-guard: the commits of #{branch} on #{shown(remote)} beyond its base could not be read, " \
+      "push-guard: the commits of #{shown(branch)} on #{shown(remote)} beyond its base could not be read, " \
         "so the push could not be checked; run #{clean(mend)} first"
     end
 
     def self.long_history(branch, remote, bound, range)
-      "push-guard: #{branch} on #{shown(remote)} has #{bound} or more commits beyond its base, more than the hook " \
-        "reads, so the push could not be checked; git shortlog -sne #{clean(range)} lists their authors"
+      "push-guard: #{shown(branch)} on #{shown(remote)} has #{bound} or more commits beyond its base, more than " \
+        "the hook reads, so the push could not be checked; git shortlog -sne #{clean(range)} lists their authors"
     end
 
     def self.unreadable(construct)
