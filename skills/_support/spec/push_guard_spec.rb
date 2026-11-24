@@ -247,9 +247,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         expect(guard('git push -fu origin x', env: system_path)).to eq(['deny', bare_force])
       end
 
-      it 'forbids the git it runs a lazy fetch, which in a partial clone would reach the promisor remote' do
-        expect(File.read(decider))
-          .to include("ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1' }.freeze")
+      it 'forbids the git it runs a lazy fetch and every transport, so a partial clone cannot reach its remote' do
+        expect(File.read(decider)).to include("ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1', " \
+                                              "'GIT_ALLOW_PROTOCOL' => '' }.freeze")
       end
 
       it 'resolves the destination through push.default=upstream end to end' do

@@ -644,9 +644,12 @@ module PushGuard
   class Repository
     # In a partial clone a log, or check-mailmap with mailmap.blob set, can
     # fetch a missing object from the promisor remote, which runs that
-    # remote's uploadpack before anyone has answered; GIT_NO_LAZY_FETCH
-    # forbids it (git before 2.44 ignores the variable).
-    ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1' }.freeze
+    # remote's uploadpack before anyone has answered. GIT_NO_LAZY_FETCH
+    # forbids it on git 2.45 and later and on the May 2024 patch releases
+    # (2.39.4, 2.40.2, 2.41.1, 2.42.2, 2.43.4, 2.44.1); any other git ignores
+    # it, so an empty GIT_ALLOW_PROTOCOL refuses every transport as the
+    # backstop, and the read then fails and asks.
+    ENVIRONMENT = { 'GIT_OPTIONAL_LOCKS' => '0', 'GIT_NO_LAZY_FETCH' => '1', 'GIT_ALLOW_PROTOCOL' => '' }.freeze
     GIT = %w[git --no-pager -c core.fsmonitor=false -c log.showSignature=false].freeze
     DESTINATION_FORMAT = '%(refname)%00%(push:remotename)%00%(push:short)'
     # Keeps the log within the hook's timeout on a branch of any length; a
