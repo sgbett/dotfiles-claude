@@ -786,13 +786,14 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --force-with-lease')).to eq(['ask', another_on_feat])
     end
 
-    it 'asks when anything but the branches lands under the tracking namespace, since a tracking ref may lie' do
+    it 'asks when another source fills the pushed branch’s tracking ref, and not for a branch it leaves alone' do
       repository_with_origin
       push_commit('theirs', another_author)
       fetch_layout('+refs/remotes/upstream/*:refs/remotes/origin/*')
       expect(guard('git push origin --delete feat')).to eq(['ask', remapped_fetch])
       fetch_layout('+refs/heads/*:refs/remotes/origin/*', '+refs/pull/*/head:refs/remotes/origin/pr/*')
-      expect(guard('git push --force-with-lease')).to eq(['ask', remapped_fetch])
+      expect([guard('git push --force-with-lease'), guard('git push --force-with-lease origin pr/7')])
+        .to eq([['ask', another_on_feat], ['ask', remapped_fetch]])
     end
   end
 
