@@ -801,6 +801,14 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(guard('git push --force-with-lease')).to eq(['ask', another_on_feat])
     end
 
+    # The ask for a tracking ref a fetch from another source fills.
+    def filled_from_elsewhere(ref)
+      ['ask', "push-guard: remote.origin.fetch fills #{ref} from something other than the branch of that name, so " \
+              'what the push would rewrite could not be read and the push could not be checked; name the remote and ' \
+              'branch, as git push origin <branch>, from a clone fetching under the default layout, ' \
+              '+refs/heads/*:refs/remotes/origin/*']
+    end
+
     it 'asks when another source fills the pushed branch’s tracking ref, and not for a branch it leaves alone' do
       repository_with_origin
       push_commit('theirs', another_author)
@@ -810,10 +818,19 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         fetch_layout(*layout)
         guard('git push origin --delete feat')
       end
-      expect(answers).to eq([['ask', remapped_fetch]] * 3)
+      expect(answers).to eq([filled_from_elsewhere('refs/remotes/origin/feat')] * 3)
       fetch_layout('+refs/heads/*:refs/remotes/origin/*', '+refs/pull/*/head:refs/remotes/origin/pr/*')
       expect([guard('git push --force-with-lease'), guard('git push --force-with-lease origin pr/7')])
-        .to eq([['ask', another_on_feat], ['ask', remapped_fetch]])
+        .to eq([['ask', another_on_feat], filled_from_elsewhere('refs/remotes/origin/pr/7')])
+    end
+
+    it 'asks when another source fills a base the author check subtracts, not only the pushed branch' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      git('push', '--quiet', 'origin', 'feat:refs/pull/9/head')
+      fetch_layout('+refs/heads/*:refs/remotes/origin/*', '+refs/pull/9/head:refs/remotes/origin/releases/x')
+      git('fetch', '--quiet', 'origin')
+      expect(guard('git push origin --delete feat')).to eq(filled_from_elsewhere('refs/remotes/origin/releases/x'))
     end
   end
 

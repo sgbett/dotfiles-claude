@@ -102,6 +102,13 @@ module PushGuard
         'run git push on its own command line with the remote and refspec written out'
     end
 
+    def self.filled_tracking_ref(remote, ref)
+      "push-guard: remote.#{remote}.fetch fills #{ref} from something other than the branch of that name, so what " \
+        'the push would rewrite could not be read and the push could not be checked; name the remote and branch, ' \
+        "as git push #{remote} <branch>, from a clone fetching under the default layout, " \
+        "+refs/heads/*:refs/remotes/#{remote}/*"
+    end
+
     def self.remapped_fetch(remote)
       "push-guard: remote.#{remote}.fetch does not keep the remote's branches under refs/remotes/#{remote}/ by " \
         'name, so what the push would rewrite could not be read and the push could not be checked; name the remote ' \
@@ -859,20 +866,27 @@ module PushGuard
 
     def initialize(directory)
       @directory = directory
-      @fetch_layouts = {}
+      @fetch_refspecs = {}
     end
 
     # Whether every fetch refspec of +remote+ that could take a branch lands
     # it under refs/remotes/<remote>/ by its own name, as the default layout
     # does, so the push atoms and the tracking refs the hook reads name what
-    # git pushes over; and, given +branch+, whether no refspec from elsewhere
-    # fills that branch's tracking ref. Refspecs that do neither (tags, a
-    # line with no destination) are not read. Answered once per pair.
-    def default_fetch_layout?(remote, branch = nil)
-      key = [remote, branch]
-      return @fetch_layouts[key] if @fetch_layouts.key?(key)
+    # git pushes over. A line with no destination fetches into FETCH_HEAD
+    # alone and has no bearing.
+    def default_fetch_layout?(remote)
+      fetch_refspecs(remote).all? do |source, into|
+        into.empty? || !branch_source?(source) || by_name?(source, into, remote)
+      end
+    end
 
-      @fetch_layouts[key] = fetch_refspecs(remote).all? { |source, into| keeps_name?(source, into, remote, branch) }
+    # The first of +refs+ that a fetch refspec of +remote+ from a source that
+    # cannot take a branch fills, its one * matching across slashes as git's
+    # do, so the ref holds something other than the branch of its name; nil
+    # where none does.
+    def filled_from_elsewhere(remote, refs)
+      elsewhere = fetch_refspecs(remote).reject { |source, into| into.empty? || branch_source?(source) }
+      refs.find { |ref| elsewhere.any? { |_source, into| refspec_match?(into, ref) } }
     end
 
     def current_branch
@@ -938,30 +952,20 @@ module PushGuard
 
     private
 
-    # [source, destination] per fetch refspec of +remote+, the + stripped.
+    # [source, destination] per fetch refspec of +remote+, the + stripped;
+    # read once per remote.
     def fetch_refspecs(remote)
-      git('config', '--get-all', "remote.#{remote}.fetch").to_s.lines.map do |line|
+      @fetch_refspecs[remote] ||= git('config', '--get-all', "remote.#{remote}.fetch").to_s.lines.map do |line|
         source, into = line.chomp.sub(/\A\+/, '').split(':', 2)
         [source.to_s, into.to_s]
       end
     end
 
-    # A refspec that could take a branch must be the by-name mapping,
-    # refs/heads/X to refs/remotes/<remote>/X; one from elsewhere must not
-    # fill +branch+'s tracking ref, which would then hold something other
-    # than the branch of its name; one with no destination fetches into
-    # FETCH_HEAD alone and has no bearing.
-    def keeps_name?(source, into, remote, branch)
-      tracking = "refs/remotes/#{remote}/"
-      return true if into.empty?
-      return by_name?(source, into, tracking) if branch_source?(source)
-
-      branch.nil? || !refspec_match?(into, "#{tracking}#{branch}")
-    end
-
-    def by_name?(source, into, tracking)
+    # Whether the refspec is the by-name mapping, refs/heads/X to
+    # refs/remotes/<remote>/X; a short name stands for refs/heads/<name>.
+    def by_name?(source, into, remote)
       full = source.start_with?('refs/') || source.include?('*') ? source : "refs/heads/#{source}"
-      into == full.sub(%r{\Arefs/heads/}, tracking)
+      into == full.sub(%r{\Arefs/heads/}, "refs/remotes/#{remote}/")
     end
 
     # Whether a refspec pattern takes +ref+: its one * matches anything,
@@ -1072,7 +1076,14 @@ module PushGuard
     end
 
     def ask
-      return Decision.ask(Reasons.remapped_fetch(remote)) unless repository.default_fetch_layout?(remote, branch)
+      return Decision.ask(Reasons.remapped_fetch(remote)) unless repository.default_fetch_layout?(remote)
+
+      filled_ask([tracking_ref]) || copy_ask
+    end
+
+    # Once the tracking ref is the branch of its name: whether it is here,
+    # who the pusher is, then the branch beyond its bases.
+    def copy_ask
       return missing_copy unless repository.ref?(tracking_ref)
 
       own = repository.own_email
@@ -1081,12 +1092,21 @@ module PushGuard
       base_ask(own)
     end
 
-    # The branch beyond its bases, once the default branch's copy is here.
+    # A ref the check reads that a fetch from elsewhere fills holds something
+    # other than the branch of its name, so nothing read through it counts.
+    def filled_ask(refs)
+      filled = repository.filled_from_elsewhere(remote, refs)
+      Decision.ask(Reasons.filled_tracking_ref(remote, filled)) if filled
+    end
+
+    # The branch beyond its bases, once the default branch's copy is here
+    # and every base read is the branch of its name.
     def base_ask(own)
       base, mend = base_and_mend
       return unreadable(mend) unless repository.ref?(base)
 
-      strangers_ask(own, ([base] + fetched_bases).uniq)
+      bases = ([base] + fetched_bases).uniq
+      filled_ask(bases) || strangers_ask(own, bases)
     end
 
     private
