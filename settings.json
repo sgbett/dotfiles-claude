@@ -88,6 +88,7 @@
       "Bash(gh run rerun *)"
     ]
   },
+  "model": "opus",
   "enabledPlugins": {
     "ruby-lsp@claude-plugins-official": true,
     "clangd-lsp@claude-plugins-official": true,
@@ -97,10 +98,13 @@
   "effortLevel": "xhigh",
   "modelSettings": {
     "claude-opus-5-5": {
-      "effortLevel": "xhigh"
+      "effortLevel": "high"
     },
     "claude-fable-5-1": {
       "effortLevel": "xhigh"
+    },
+    "claude-fable-5-2": {
+      "effortLevel": "high"
     }
   },
   "promptSuggestionEnabled": false,
