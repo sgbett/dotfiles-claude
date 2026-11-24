@@ -842,6 +842,38 @@ module PushGuard
     end
   end
 
+  # An and-or list: the commands between one ; & or newline and the next,
+  # joined by && || and pipes. A cd entered by && ran only if what came
+  # before it succeeded, which the hook cannot know, so it holds within its
+  # list and the directory is unknown after.
+  class AndOrList
+    CONTINUERS = ['&&', '||', '|', '|&'].freeze
+
+    # Whether the list ends after a segment: at ; or &, or at a newline that
+    # does not merely continue a line broken after && || or a pipe.
+    def self.ends?(text, before, after)
+      return true if [';', '&'].include?(after)
+
+      after == "\n" && !(text.strip.empty? && CONTINUERS.include?(before))
+    end
+
+    def initialize
+      @entered = false
+    end
+
+    # A cd was followed after +separator+.
+    def entered_by(separator)
+      @entered = true if separator == '&&'
+    end
+
+    # The directory after the list ends, given the one it ends with.
+    def close(cwd)
+      entered = @entered
+      @entered = false
+      entered ? nil : cwd
+    end
+  end
+
   # Reads the Bash text into the pushes it holds, following cd between
   # commands as far as it can, and into asks for what it cannot read.
   class CommandReader
@@ -863,6 +895,7 @@ module PushGuard
       @cwd = cwd
       @subshell = subshell
       @compounds = Compounds.new
+      @list = AndOrList.new
       @pushes = []
       @decisions = []
     end
@@ -885,6 +918,7 @@ module PushGuard
       before = nil
       segments.each do |text, after|
         read_segment(text.delete('()'), before, after)
+        @cwd = @list.close(@cwd) if AndOrList.ends?(text, before, after)
         before = after
       end
     end
@@ -966,6 +1000,7 @@ module PushGuard
 
       target = segment.change_directory_target unless unfollowable?(before, after)
       @cwd = target.nil? ? nil : Directory.follow(@cwd, target)
+      @list.entered_by(before)
     end
 
     # Where a cd may not have run by the next command: in a subshell, in a

@@ -1075,6 +1075,22 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard('cd missing || git push --force-with-lease origin feat')]).to eq([['ask', unknown_directory]] * 2)
     end
 
+    it 'holds a cd entered by && only until its list ends, since bash may have skipped it' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect(guard('false && cd /tmp; git push --force-with-lease origin feat')).to eq(['ask', unknown_directory])
+    end
+
+    it 'leaves the directory unknown after such a list, whether ; or a newline ends it' do
+      expect([guard('false && cd elsewhere; git push --force-with-lease'),
+              guard("false && cd elsewhere\ngit push --force-with-lease")]).to eq([['ask', unknown_directory]] * 2)
+    end
+
+    it 'follows a cd entered by && to the end of its own list' do
+      expect(guard('mkdir -p d && cd d && git init && git push --force-with-lease'))
+        .to match(['ask', start_with('push-guard: Errno::ENOENT: ')])
+    end
+
     it 'loses the directory to a cd inside braces or a branch of if, which bash may not run' do
       expect([guard('true || { echo x; cd work; }; git push --force-with-lease', cwd: sandbox.root),
               guard('if false; then cd work; fi; git push --force-with-lease', cwd: sandbox.root)])
