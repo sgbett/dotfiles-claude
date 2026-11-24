@@ -1,0 +1,11 @@
+{
+  "name": "Project and release branches",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": { "ref_name": { "include": ["refs/heads/project/*/master", "refs/heads/releases/*"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ]
+}
