@@ -1081,6 +1081,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([['ask', unknown_directory]] * 2)
     end
 
+    it 'opens a compound at a brace ending its line, as at one followed by a command' do
+      expect(guard("true || {\ncd work\n}\ngit push --force-with-lease", cwd: sandbox.root))
+        .to eq(['ask', unknown_directory])
+      repository_with_origin
+      expect(guard("{\ncd work\n}\ngit push --force-with-lease")).to eq(['ask', unknown_directory])
+    end
+
     it 'reads the compound words past time or a run of then, and nowhere else in the segment' do
       expect([guard('time if false; then cd work; fi; git push --force-with-lease', cwd: sandbox.root),
               guard('if false; then echo do done; cd work; fi; git push --force-with-lease', cwd: sandbox.root)])

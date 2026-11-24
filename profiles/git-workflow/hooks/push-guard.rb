@@ -817,7 +817,9 @@ module PushGuard
   # quoted word cannot stand for it and echo done is just an echo; the
   # depth never falls below zero, so a stray closer cancels nothing.
   class Compounds
-    CHAIN = /\A\s*((?:(?:then|do|else|elif|!|\{|time(?:\s+-p)?)\s+)*)/.freeze
+    # A chain word ends at whitespace or at the end of the segment, so a
+    # brace ending its line opens as one followed by a command does.
+    CHAIN = /\A\s*((?:(?:then|do|else|elif|!|\{|time(?:\s+-p)?)(?:\s+|\z))*)/.freeze
     KEYWORD = /\A(if|while|until|for|case|fi|done|esac|\})(?=\s|\z)/.freeze
     OPENERS = %w[if while until for case].freeze
     CLOSERS = %w[fi done esac }].freeze
