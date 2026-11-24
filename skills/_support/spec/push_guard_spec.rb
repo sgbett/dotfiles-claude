@@ -870,6 +870,35 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     end
   end
 
+  describe 'a here-document body' do
+    let(:fed_push) do
+      'push-guard: the here-document ending at EOF says git push, and what reads it may run it, ' \
+        'so the push could not be checked; run git push on its own command line'
+    end
+
+    it 'is not read as commands, so a cd in it moves nothing' do
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect(guard("cat <<'EOF'\ncd /tmp\nEOF\ngit push --force-with-lease origin feat")).to eq(['ask', another_on_feat])
+    end
+
+    it 'asks rather than denies when it says git push, since what reads it may run it' do
+      expect([guard("cat <<'EOF'\ngit push --force origin master\nEOF"),
+              guard("bash <<'EOF'\ngit push --force origin master\nEOF")]).to eq([['ask', fed_push]] * 2)
+    end
+
+    it 'asks about a command substitution in an unquoted body, which bash runs' do
+      expect(guard("cat <<EOF\n$(git push --force origin master)\nEOF"))
+        .to eq(['ask', 'push-guard: a push behind a substitution in the here-document ending at EOF cannot be read; ' \
+                       'run git push on its own command line with the remote and refspec written out'])
+    end
+
+    it 'says nothing for prose, or for git alone beside a cd, before a safe push' do
+      expect([guard("cat <<'EOF'\nhello there\nEOF\ngit push origin feat"),
+              guard("cat <<'EOF'\ncd /tmp\ngit status\nEOF\ngit push origin feat")]).to eq([nil, nil])
+    end
+  end
+
   describe 'a push whose targets it cannot name' do
     let(:prune) do
       'push-guard: --prune may rewrite or delete any branch on the remote, base branches included, so the targets ' \

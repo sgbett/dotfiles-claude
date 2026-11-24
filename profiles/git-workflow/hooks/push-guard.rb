@@ -110,6 +110,11 @@ module PushGuard
         'run git push on its own command line with the remote and refspec written out'
     end
 
+    def self.here_document(delimiter)
+      "push-guard: the here-document ending at #{shown(delimiter)} says git push, and what reads it may run it, " \
+        'so the push could not be checked; run git push on its own command line'
+    end
+
     def self.filled_tracking_ref(remote, ref)
       name = shown(remote)
       "push-guard: remote.#{name}.fetch fills #{clean(ref)} from something other than the branch of that name, so " \
@@ -592,11 +597,18 @@ module PushGuard
     # its body runs to the end and leaves the text unbalanced, which is safe.
     WINDOW = 128
 
+    # Delimiters of the bodies that hold a command substitution bash would
+    # run, the delimiter being unquoted, and of those that say git and push,
+    # which whatever reads them may run.
+    attr_reader :substituting, :pushing
+
     def initialize(chars, out)
       @chars = chars
       @out = out
       @pending = []
       @terminated = true
+      @substituting = []
+      @pushing = []
     end
 
     # Whether every body so far ended at its terminator line; one that ran to
@@ -611,16 +623,21 @@ module PushGuard
       rest = @chars[index, WINDOW].join
       head = rest[/\A<<-?[ \t]*/]
       raw = rest[head.length..][DELIMITER].to_s
-      @pending << [raw.delete("'\"\\"), head.start_with?('<<-')] unless raw.empty?
+      delimiter = raw.delete("'\"\\")
+      @pending << [delimiter, head.start_with?('<<-'), raw == delimiter] unless raw.empty?
       @out.write(head + raw)
     end
 
-    # Copies out the bodies the line opened, from +index+; gives the count
-    # consumed.
+    # Blanks the bodies the line opened out of the text, from +index+ up to
+    # each terminator line (tabs allowed before it for <<-), the newlines
+    # kept so the lines after stand where they were, and reads each for what
+    # bash or the program fed it may run; gives the count consumed.
     def bodies(index)
       consumed = 0
-      @pending.each do |delimiter, tabs|
-        consumed += body(index + consumed) { |line| (tabs ? line.sub(/\A\t+/, '') : line) == delimiter }
+      @pending.each do |delimiter, tabs, unquoted|
+        lines = []
+        consumed += body(index + consumed, lines) { |line| (tabs ? line.sub(/\A\t+/, '') : line) == delimiter }
+        note(delimiter, unquoted, lines.join)
       end
       @pending.clear
       consumed
@@ -628,15 +645,23 @@ module PushGuard
 
     private
 
-    def body(index)
+    def body(index, lines)
       consumed = 0
       while index + consumed < @chars.length
         line = Script.line_at(@chars, index + consumed)
-        consumed += @out.write(line)
+        lines << line
+        consumed += line.length
+        @out.write(line.end_with?("\n") ? "\n" : '')
         return consumed if yield(line.chomp)
       end
       @terminated = false
       consumed
+    end
+
+    def note(delimiter, unquoted, text)
+      @substituting << delimiter if unquoted && text.match?(/\$\(|`/)
+      words = text.split
+      @pushing << delimiter if words.include?('git') && words.include?('push')
     end
   end
 
@@ -663,6 +688,8 @@ module PushGuard
       finish += 1 while finish < chars.length && chars[finish] != "\n"
       chars[index..finish].join
     end
+
+    attr_reader :heredocs
 
     def initialize(command)
       @chars = command.chars
@@ -1425,7 +1452,7 @@ module PushGuard
     # settles, since apart they may be wrong about its targets.
     def decide(command, cwd)
       script = Script.new(command)
-      decisions = decisions(script.text, cwd, script.subshell?, &:decide)
+      decisions = body_asks(script, command) + decisions(script.text, cwd, script.subshell?, &:decide)
       return Decision.strictest(decisions) if script.balanced?
 
       backstop = decisions(Script.join_continuations(command), cwd, true) do |judge|
@@ -1437,6 +1464,20 @@ module PushGuard
     def decisions(text, cwd, subshell, &judge)
       reader = CommandReader.new(text, cwd, subshell).read
       reader.decisions + reader.pushes.map { |push| judge.call(Judge.new(push)) }
+    end
+
+    # A here-document's body is blanked from what is read as commands, but
+    # an unquoted one runs its command substitutions, asked about as any
+    # substitution is where the command says git and push, and one fed to a
+    # shell or interpreter may run what it says.
+    def body_asks(script, command)
+      fed = script.heredocs.pushing.map { |delimiter| Decision.ask(Reasons.here_document(delimiter)) }
+      return fed unless command.include?('git') && command.include?('push')
+
+      substitutions = script.heredocs.substituting.map do |delimiter|
+        Decision.ask(Reasons.unreadable("a substitution in the here-document ending at #{delimiter}"))
+      end
+      substitutions + fed
     end
   end
 end
