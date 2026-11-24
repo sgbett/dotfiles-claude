@@ -432,20 +432,10 @@ module PushGuard
       until rest.empty?
         word = rest.shift
         if REDIRECTION_OPERATOR.match?(word) then rest.shift
-        elsif !REDIRECTION.match?(word) then kept << before_redirection(word, rest)
+        elsif !REDIRECTION.match?(word) then kept << word
         end
       end
       kept
-    end
-
-    # A redirection glued to a word, master>log, is split as bash splits it:
-    # the word stays and the operator goes back to be read next.
-    def before_redirection(word, rest)
-      glued = word.index(/[<>&]/)
-      return word if glued.nil?
-
-      rest.unshift(word[glued..])
-      word[0, glued]
     end
   end
 
@@ -517,54 +507,113 @@ module PushGuard
     end
   end
 
+  # The Bash text as bash reads it, character by character with the quotes
+  # and escapes tracked across the whole of it: a comment (a # at the start
+  # of a line, after whitespace or glued to an operator, outside quotes) runs
+  # to the end of its line and no further; a backslash-newline continues the
+  # line outside single quotes; a redirection glued to a word (master>log) is
+  # set apart as bash splits it, a quoted one is not; parentheses count only
+  # unquoted. A quote still open at the end (a heredoc body, say) means the
+  # text was not read as bash will read it.
+  class Script
+    COMMENT_START = /[\s;&|()]/.freeze
+    OPERATOR_END = /[<>&|;()]/.freeze
+
+    attr_reader :text
+
+    def initialize(command)
+      @chars = command.chars
+      @text = +''
+      @quote = nil
+      @subshell = false
+      index = 0
+      index += step(index) while index < @chars.length
+    end
+
+    def balanced?
+      @quote.nil?
+    end
+
+    # Where a subshell may hide: unquoted parentheses, or a text whose quotes
+    # the hook could not follow.
+    def subshell?
+      @subshell || !balanced?
+    end
+
+    private
+
+    # Reads the character at +index+ and gives the count consumed.
+    def step(index)
+      char = @chars[index]
+      return quoted(char, "'") if @quote == "'"
+      return escaped(index) if char == '\\'
+      return quoted(char, '"') if @quote == '"'
+
+      unquoted(index, char)
+    end
+
+    def quoted(char, closing)
+      @quote = nil if char == closing
+      @text << char
+      1
+    end
+
+    # A backslash-newline continues the line and is dropped; any other escape
+    # is kept whole for Shellwords to read.
+    def escaped(index)
+      following = @chars[index + 1]
+      @text << '\\' << following.to_s unless following == "\n"
+      following.nil? ? 1 : 2
+    end
+
+    def unquoted(index, char)
+      return comment_length(index) if char == '#' && comment_start?
+
+      case char
+      when "'", '"' then @quote = char
+      when '(', ')' then @subshell = true
+      when '<', '>', '&' then @text << ' ' if glued?
+      end
+      @text << char
+      1
+    end
+
+    # The # and the rest of its line; the newline stays to end the segment.
+    def comment_length(index)
+      rest = @chars.drop(index)
+      rest.index("\n") || rest.length
+    end
+
+    def comment_start?
+      @text.empty? || COMMENT_START.match?(@text[-1])
+    end
+
+    # A word the operator is run against: not the digits of 2>&1, not the
+    # second character of an operator, not nothing.
+    def glued?
+      word = @text[/\S*\z/]
+      !word.empty? && !word.match?(/\A\d+\z/) && !OPERATOR_END.match?(word[-1])
+    end
+  end
+
   # Reads the Bash text into the pushes it holds, following cd between
   # commands as far as it can, and into asks for what it cannot read.
   class CommandReader
     # A newline, ;, pipe, &&, ||, |& or a background &, but not the & of
     # 2>&1, >&2 or &>file.
     SEPARATORS = /\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>)/.freeze
-    CONTINUATION = "\\\n"
-    # The code of a line and the comment after it: a # at the start, after
-    # whitespace or glued to a shell operator (; & | and parentheses),
-    # outside quotes, to the end of the line, as bash and zsh read one.
-    # Quoted and escaped text is stepped over first; a quote opened on an
-    # earlier line is not seen, so a # inside such a string passes for a
-    # comment now and then, which the lines read apart cover.
-    COMMENT = /\A(?<code>(?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|(?<=[^\s;&|()])#|[^'"\\#])*)(?:\A|(?<=[\s;&|()]))#.*\z/
-              .freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
-    # A parenthesis outside quotes, quoted and escaped text stepped over as
-    # COMMENT steps over it.
-    SUBSHELL = /\A(?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|[^'"\\()])*[()]/m.freeze
 
     attr_reader :pushes, :decisions
 
-    # The command's lines as bash reads them, comments dropped: a line whose
-    # code ends in an odd number of backslashes continues into the next,
-    # since an even number is escaped backslashes and a comment runs to the
-    # end of the line, backslash and all; a line that is only a comment ends
-    # a continuation.
-    def self.join(command)
-      lines = []
-      continued = false
-      command.split("\n", -1).each do |line|
-        code = line.sub(COMMENT, '\k<code>')
-        continues = code[/\\*\z/].length.odd?
-        lines << '' unless continued
-        lines[-1] += continues ? code.chomp('\\') : code
-        continued = continues
-      end
-      lines.join("\n")
-    end
-
-    def initialize(command, cwd)
+    # A cd inside a subshell is not inherited by the next command; the hook
+    # does not read the nesting, so with +subshell+ any cd loses the
+    # directory.
+    def initialize(command, cwd, subshell)
       @command = command
       @cwd = cwd
-      # A cd inside parentheses is a subshell's, which the next command does
-      # not inherit; the hook does not read the nesting, so any cd in such a
-      # command loses the directory.
-      @subshell = SUBSHELL.match?(@command)
+      @subshell = subshell
       @pushes = []
       @decisions = []
     end
@@ -1112,18 +1161,19 @@ module PushGuard
 
     private
 
-    # The command as bash joins its lines decides everything. Where it had a
-    # backslash-newline the lines read apart are a backstop against a join
-    # the hook got wrong, and contribute only what a push's text settles,
-    # since apart they may be wrong about its targets.
+    # The text as bash reads it decides everything. Where a quote is left
+    # open the text was not read as bash will read it (a heredoc body, say),
+    # so the raw lines are a backstop, contributing only what a push's text
+    # settles, since apart they may be wrong about its targets.
     def decide(command, cwd)
-      decisions = decisions(CommandReader.join(command), cwd, &:decide)
-      decisions += decisions(command, cwd, &:decide_from_text) if command.include?(CommandReader::CONTINUATION)
+      script = Script.new(command)
+      decisions = decisions(script.text, cwd, script.subshell?, &:decide)
+      decisions += decisions(command, cwd, true, &:decide_from_text) unless script.balanced?
       Decision.strictest(decisions)
     end
 
-    def decisions(text, cwd, &judge)
-      reader = CommandReader.new(text, cwd).read
+    def decisions(text, cwd, subshell, &judge)
+      reader = CommandReader.new(text, cwd, subshell).read
       reader.decisions + reader.pushes.map { |push| judge.call(Judge.new(push)) }
     end
   end

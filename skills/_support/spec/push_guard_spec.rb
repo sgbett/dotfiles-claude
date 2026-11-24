@@ -345,7 +345,8 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       'git push origin :master' => 'master',
       'git push origin :refs/heads/master' => 'master',
       'git push origin :heads/master' => 'master',
-      'cd "$d" && git push --force-with-lease origin master' => 'master' }.each do |command, branch|
+      'cd "$d" && git push --force-with-lease origin master' => 'master',
+      'git push --force-with-lease origin "feat>" master' => 'master' }.each do |command, branch|
       it "denies `#{command}`" do
         expect(guard(command))
           .to eq(['deny', "push-guard: #{branch} is a base branch; it is never rewritten or deleted"])
@@ -370,7 +371,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
         .to eq([denied] * 2)
     end
 
-    it 'keeps a # inside quotes as text, and denies a base branch a refspec names on a line read apart' do
+    it 'keeps a # inside a quote opened on an earlier line as text, so the push after the string is read' do
+      expect([guard("git commit -m \"fix: a thing\n\nCloses #38\" && git push --force origin master"),
+              guard("git commit -m 'fix\nRefs #38' && git push --delete origin master")])
+        .to eq([['deny', bare_force], ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']])
+    end
+
+    it 'keeps a # inside quotes as text, across a continuation too' do
       expect([guard("git commit -m \"fix #12\" && git push \\\n  --force origin feat"),
               guard("git commit -m \"a \\\n#b\" && git push --force-with-lease origin master")])
         .to eq([['deny', bare_force], ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']])
@@ -873,6 +880,10 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       it "asks for `#{command}`, whose push it cannot place" do
         expect(guard(command)).to eq(['ask', unknown_directory])
       end
+    end
+
+    it 'loses the directory to a subshell behind a quote it could not follow, such as a heredoc body' do
+      expect(guard("cat <<EOF\ndon't\nEOF\n(cd /tmp); git push --force-with-lease")).to eq(['ask', unknown_directory])
     end
   end
 
