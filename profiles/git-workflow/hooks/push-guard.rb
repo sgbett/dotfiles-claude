@@ -845,7 +845,9 @@ module PushGuard
   # An and-or list: the commands between one ; & or newline and the next,
   # joined by && || and pipes. A cd entered by && ran only if what came
   # before it succeeded, which the hook cannot know, so it holds within its
-  # list and the directory is unknown after.
+  # list and the directory is unknown after; a list ending in & ran whole in
+  # a background subshell, so the directory after it is what it was at the
+  # list's start.
   class AndOrList
     CONTINUERS = ['&&', '||', '|', '|&'].freeze
 
@@ -857,7 +859,8 @@ module PushGuard
       after == "\n" && !(text.strip.empty? && CONTINUERS.include?(before))
     end
 
-    def initialize
+    def initialize(cwd)
+      @start = cwd
       @entered = false
     end
 
@@ -866,11 +869,15 @@ module PushGuard
       @entered = true if separator == '&&'
     end
 
-    # The directory after the list ends, given the one it ends with.
-    def close(cwd)
-      entered = @entered
+    # The directory after the list ends with +separator+, given the one it
+    # ends in; the next list starts there.
+    def close(separator, cwd)
+      after = if separator == '&' then @start
+              elsif @entered then nil
+              else cwd
+              end
       @entered = false
-      entered ? nil : cwd
+      @start = after
     end
   end
 
@@ -895,7 +902,7 @@ module PushGuard
       @cwd = cwd
       @subshell = subshell
       @compounds = Compounds.new
-      @list = AndOrList.new
+      @list = AndOrList.new(cwd)
       @pushes = []
       @decisions = []
     end
@@ -918,7 +925,7 @@ module PushGuard
       before = nil
       segments.each do |text, after|
         read_segment(text.delete('()'), before, after)
-        @cwd = @list.close(@cwd) if AndOrList.ends?(text, before, after)
+        @cwd = @list.close(after, @cwd) if AndOrList.ends?(text, before, after)
         before = after
       end
     end

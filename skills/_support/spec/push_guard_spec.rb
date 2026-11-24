@@ -1086,6 +1086,15 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard("false && cd elsewhere\ngit push --force-with-lease")]).to eq([['ask', unknown_directory]] * 2)
     end
 
+    it 'undoes every cd of a list that ends in &, which ran whole in a subshell' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard('cd elsewhere && true & wait; git push --force-with-lease'),
+              guard("cd elsewhere &&\ntrue & wait\ngit push --force-with-lease")]).to eq([denied] * 2)
+      repository_with_origin
+      push_commit('theirs', another_author)
+      expect(guard('cd /tmp && true & wait; git push --force-with-lease origin feat')).to eq(['ask', another_on_feat])
+    end
+
     it 'follows a cd entered by && to the end of its own list' do
       expect(guard('mkdir -p d && cd d && git init && git push --force-with-lease'))
         .to match(['ask', start_with('push-guard: Errno::ENOENT: ')])
