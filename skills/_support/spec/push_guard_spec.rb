@@ -887,6 +887,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
               guard("bash <<'EOF'\ngit push --force origin master\nEOF")]).to eq([['ask', fed_push]] * 2)
     end
 
+    it 'reads push glued to an operator in a body, as a shell cuts the word there' do
+      expect([guard("bash <<'EOF'\ngit push>/dev/null --force origin master\nEOF"),
+              guard("bash <<'EOF'\ngit push|tee log --force origin master\nEOF"),
+              guard("bash <<'EOF'\ngit push<x --force origin master\nEOF")]).to eq([['ask', fed_push]] * 3)
+    end
+
     it 'reads git by its path or in quotes in a body, and gitpush or git-push as neither' do
       expect([guard("bash <<'EOF'\n/usr/bin/git push --force origin master\nEOF"),
               guard("bash <<'EOF'\n\"git\" push --force origin master\nEOF"),
