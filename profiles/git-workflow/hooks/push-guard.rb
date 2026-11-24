@@ -565,20 +565,31 @@ module PushGuard
   class HereDocuments
     # A delimiter word, quoted in whole, in part or not at all.
     DELIMITER = /\A(?:'[^']*'|"[^"]*"|\\.|[^\s<>&|;()'"\\])+/.freeze
+    # The delimiter is read from this many characters after the operator,
+    # rather than from a copy of the rest of the text; one longer is cut, so
+    # its body runs to the end and leaves the text unbalanced, which is safe.
+    WINDOW = 128
 
     def initialize(chars, out)
       @chars = chars
       @out = out
       @pending = []
+      @terminated = true
+    end
+
+    # Whether every body so far ended at its terminator line; one that ran to
+    # the end of the text was not read as bash will read it.
+    def terminated?
+      @terminated
     end
 
     # Reads the operator and delimiter at +index+ as text and notes the
-    # delimiter; gives the count consumed.
+    # delimiter, unless there is none to note; gives the count consumed.
     def open(index)
-      rest = @chars.drop(index).join
+      rest = @chars[index, WINDOW].join
       head = rest[/\A<<-?[ \t]*/]
       raw = rest[head.length..][DELIMITER].to_s
-      @pending << [raw.delete("'\"\\"), head.start_with?('<<-')]
+      @pending << [raw.delete("'\"\\"), head.start_with?('<<-')] unless raw.empty?
       @out.write(head + raw)
     end
 
@@ -600,8 +611,9 @@ module PushGuard
       while index + consumed < @chars.length
         line = Script.line_at(@chars, index + consumed)
         consumed += @out.write(line)
-        break if yield(line.chomp)
+        return consumed if yield(line.chomp)
       end
+      @terminated = false
       consumed
     end
   end
@@ -613,8 +625,9 @@ module PushGuard
   # line outside single quotes; $'…' escapes like double quotes and closes on
   # '; a here-document's body passes through as it is; a redirection glued to
   # a word (master>log) is set apart as bash splits it, a quoted one is not;
-  # parentheses count only unquoted. A quote still open at the end means the
-  # text was not read as bash will read it.
+  # parentheses count only unquoted. A quote still open at the end, or a
+  # here-document with no terminator, means the text was not read as bash
+  # will read it.
   class Script
     # A backslash-newline joined wherever it stands, line by line, for the
     # raw lines that back up a text whose quotes the scan could not follow.
@@ -644,7 +657,7 @@ module PushGuard
     end
 
     def balanced?
-      @quote.nil?
+      @quote.nil? && @heredocs.terminated?
     end
 
     # Where a subshell may hide: unquoted parentheses, or a text whose quotes
@@ -715,12 +728,14 @@ module PushGuard
       @out.write(char)
     end
 
-    # A redirection glued to a word is set apart; << opens a here-document.
+    # A redirection glued to a word is set apart; << opens a here-document,
+    # while <<< is a here-string and opens nothing.
     def operator(index, char)
       @out.write(' ') if @out.glued?
-      return @heredocs.open(index) if char == '<' && @chars[index + 1] == '<'
+      return @out.write(char) unless char == '<' && @chars[index + 1] == '<'
+      return @out.write('<<<') if @chars[index + 2] == '<'
 
-      @out.write(char)
+      @heredocs.open(index)
     end
   end
 

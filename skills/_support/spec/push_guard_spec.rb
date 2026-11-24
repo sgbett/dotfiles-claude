@@ -391,6 +391,15 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
                 ['deny', bare_force]])
     end
 
+    it 'opens no here-document for a here-string or an arithmetic shift, and backs up one with no terminator' do
+      denied_master = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard("cat <<< hi\ngit push \\\n--force origin master"),
+              guard("cat <<< hi\ngit push --force-with-lease origin master>/dev/null"),
+              guard("((x << 2))\ngit push \\\n--force origin master"),
+              guard("cat <<EO\\\nF\nbody\nEOF\ngit push \\\n--force origin master")])
+        .to eq([['deny', bare_force], denied_master, ['deny', bare_force], ['deny', bare_force]])
+    end
+
     it 'reads $\'…\' as a quote a backslash escapes in, so an escaped apostrophe closes nothing' do
       expect(guard("echo $'it\\'s'\ngit push \\\n--force origin master")).to eq(['deny', bare_force])
     end
@@ -610,6 +619,12 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
     end
 
+    it 'reads thousands of here-documents in linear time' do
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect(guard("#{"cat <<A\nA\n" * 3000}git push -f")).to eq(['deny', bare_force])
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+    end
+
     it 'follows a cd past a parenthesis inside quotes, which opens no subshell' do
       repository_with_origin
       push_commit('theirs', another_author)
@@ -789,8 +804,13 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'asks when another source fills the pushed branch’s tracking ref, and not for a branch it leaves alone' do
       repository_with_origin
       push_commit('theirs', another_author)
-      fetch_layout('+refs/remotes/upstream/*:refs/remotes/origin/*')
-      expect(guard('git push origin --delete feat')).to eq(['ask', remapped_fetch])
+      layouts = [['+refs/remotes/upstream/*:refs/remotes/origin/*'], ['+refs/remotes/*:refs/remotes/*'],
+                 ['+refs/remotes/upstream*:refs/remotes/origin*']]
+      answers = layouts.map do |layout|
+        fetch_layout(*layout)
+        guard('git push origin --delete feat')
+      end
+      expect(answers).to eq([['ask', remapped_fetch]] * 3)
       fetch_layout('+refs/heads/*:refs/remotes/origin/*', '+refs/pull/*/head:refs/remotes/origin/pr/*')
       expect([guard('git push --force-with-lease'), guard('git push --force-with-lease origin pr/7')])
         .to eq([['ask', another_on_feat], ['ask', remapped_fetch]])
