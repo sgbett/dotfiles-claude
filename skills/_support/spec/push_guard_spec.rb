@@ -991,9 +991,9 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
       expect(commands.map { |command| guard(command) }).to eq([nil] * 4)
     end
 
-    it 'asks for a push in a segment whose quotes do not balance' do
-      expect(guard('git commit -m "x; git push -f"'))
-        .to eq(['ask', "push-guard: the command's quotes do not balance, so the push in it could not be read"])
+    it 'asks for a push in a segment whose quotes do not balance, and reads a push inside a message as none' do
+      expect([guard('git push --force-with-lease origin "x'), guard('git commit -m "x; git push -f"')])
+        .to eq([['ask', "push-guard: the command's quotes do not balance, so the push in it could not be read"], nil])
     end
 
     it 'splits a redirection glued to a refspec as bash does, so a base branch there is still denied' do
@@ -1084,6 +1084,18 @@ RSpec.describe 'profiles/git-workflow/hooks/push-guard' do
     it 'leaves the directory unknown after such a list, whether ; or a newline ends it' do
       expect([guard('false && cd elsewhere; git push --force-with-lease'),
               guard("false && cd elsewhere\ngit push --force-with-lease")]).to eq([['ask', unknown_directory]] * 2)
+    end
+
+    it 'carries && over the newlines after it, blank lines included, as bash does' do
+      expect([guard("false &&\ncd elsewhere\ngit push --force-with-lease"),
+              guard("false &&\n\ncd elsewhere;\ngit push --force-with-lease")]).to eq([['ask', unknown_directory]] * 2)
+    end
+
+    it 'splits no list at a separator inside quotes' do
+      denied = ['deny', 'push-guard: master is a base branch; it is never rewritten or deleted']
+      expect([guard('cd elsewhere && echo "a;b" & wait; git push --force-with-lease'),
+              guard('true && cd work && echo "a;b" && git push --force-with-lease', cwd: sandbox.root),
+              guard('echo "a;b"; git push --force origin master')]).to eq([denied, denied, ['deny', bare_force]])
     end
 
     it 'undoes every cd of a list that ends in &, which ran whole in a subshell' do

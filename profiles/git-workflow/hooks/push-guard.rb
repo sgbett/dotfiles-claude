@@ -849,14 +849,12 @@ module PushGuard
   # a background subshell, so the directory after it is what it was at the
   # list's start.
   class AndOrList
+    # The operators that join a list, and that bash reads on past a newline.
     CONTINUERS = ['&&', '||', '|', '|&'].freeze
 
-    # Whether the list ends after a segment: at ; or &, or at a newline that
-    # does not merely continue a line broken after && || or a pipe.
-    def self.ends?(text, before, after)
-      return true if [';', '&'].include?(after)
-
-      after == "\n" && !(text.strip.empty? && CONTINUERS.include?(before))
+    # Whether the list ends after a segment: at ; or & or a newline.
+    def self.ends?(after)
+      [';', '&', "\n"].include?(after)
     end
 
     def initialize(cwd)
@@ -884,10 +882,11 @@ module PushGuard
   # Reads the Bash text into the pushes it holds, following cd between
   # commands as far as it can, and into asks for what it cannot read.
   class CommandReader
-    # Each piece of the text: an escaped character, which separates nothing;
-    # a separator (a newline, ;, &&, ||, |&, | or a background &, but not
-    # the & of 2>&1, >&2 or &>file); or a run of anything else.
-    TOKENS = /(\\.)|(\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>))|(&|[^\\\n;|&]+)/m.freeze
+    # Each piece of the text: an escaped character or a quoted string, which
+    # separate nothing; a separator (a newline, ;, &&, ||, |&, | or a
+    # background &, but not the & of 2>&1, >&2 or &>file); or a run of
+    # anything else.
+    TOKENS = /(\\.)|('[^']*'|"(?:[^"\\]|\\.)*")|(\n|;|&&|\|\||\|&|\||(?<![<>])&(?!>))|(&|['"]|[^\\\n;|&'"]+)/m.freeze
     # Behind these the text no longer says what runs.
     OPAQUE = [/`/, /\$\(/, /\beval\b/, /\bxargs\b/, /\b(?:ba|z|da|k|fi)?sh\s+-[A-Za-z]*c\b/].freeze
     PIPE = ['|', '|&'].freeze
@@ -920,12 +919,16 @@ module PushGuard
     private
 
     # Each segment with the separators on either side of it, which say
-    # whether a cd in it will have run in this shell by the next command.
+    # whether a cd in it will have run in this shell by the next command. A
+    # newline after && || or a pipe is skipped as bash skips it, blank lines
+    # included, so the operator carries to the next command.
     def read_segments
       before = nil
       segments.each do |text, after|
+        next if text.strip.empty? && AndOrList::CONTINUERS.include?(before)
+
         read_segment(text.delete('()'), before, after)
-        @cwd = @list.close(after, @cwd) if AndOrList.ends?(text, before, after)
+        @cwd = @list.close(after, @cwd) if AndOrList.ends?(after)
         before = after
       end
     end
@@ -933,12 +936,12 @@ module PushGuard
     # [text, the separator after it] per segment of the text.
     def segments
       segments = [[+'', nil]]
-      @command.scan(TOKENS) do |escaped, separator, text|
+      @command.scan(TOKENS) do |escaped, quoted, separator, text|
         if separator
           segments.last[1] = separator
           segments << [+'', nil]
         else
-          segments.last[0] << (escaped || text)
+          segments.last[0] << (escaped || quoted || text)
         end
       end
       segments
