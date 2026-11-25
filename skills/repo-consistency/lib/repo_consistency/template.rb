@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 require 'json'
-require_relative 'hooks_entry'
 require_relative 'projection'
-require_relative 'tier_line'
+require_relative 'ruleset_shape'
+require_relative 'tier'
 
 module RepoConsistency
   # A template file can't be read as the template needs it: missing, not a
@@ -18,15 +18,14 @@ module RepoConsistency
   end
 
   # The profile's enforcement assets, profiles/git-workflow, read from the
-  # template directory and never restated here: the ruleset and repository
-  # request bodies, the hook files and the settings entry that runs them,
-  # and the profile text beside the directory, which a collaborative
-  # repository vendors.
+  # template directory and never restated here: the three ruleset request
+  # bodies and the repository's, and the profile text beside the directory,
+  # which a protected repository vendors.
   class Template
-    RULESET = 'ruleset.json'
+    # The default branch's ruleset first: its rules are the ones the audit
+    # expects in force there.
+    RULESETS = %w[ruleset.json ruleset-project-release.json ruleset-tags.json].freeze
     REPOSITORY = 'repository.json'
-    HOOKS_SETTINGS = 'hooks.json'
-    HOOK_FILES = %w[hooks/push-guard hooks/push-guard.rb].freeze
     PROFILE = '../git-workflow.md'
     PULL_REQUEST = 'pull_request'
     MERGE_METHODS = 'allowed_merge_methods'
@@ -39,7 +38,7 @@ module RepoConsistency
     # repository still on main is covered by it and reported here.
     DEFAULT_BRANCH = 'master'
 
-    attr_reader :repository_flags, :hooks_settings, :hooks, :profile
+    attr_reader :rulesets, :repository_flags, :profile
 
     def self.load(directory)
       new(directory).load
@@ -50,42 +49,34 @@ module RepoConsistency
     end
 
     def load
-      @ruleset = json(RULESET)
+      @rulesets = RULESETS.map { |file| json(file) }
       @repository_flags = json(REPOSITORY)
-      @hooks_settings = json(HOOKS_SETTINGS)
-      @hooks = HOOK_FILES.to_h { |file| [File.basename(file), text(file)] }
       @profile = text(PROFILE)
       self
-    end
-
-    def ruleset_name
-      @ruleset['name']
     end
 
     # The rules the template puts on the default branch, as GitHub lists
     # them in force.
     def rules
-      Array(@ruleset['rules'])
+      Array(@rulesets.first['rules'])
     end
 
     def rule_types
       rules.map { |rule| rule['type'] }
     end
 
-    # The template as a repository that applied it stands: its ruleset
-    # alone in force on master, granting no bypass; its flags set; the hook
-    # files and the settings entry vendored; the profile vendored under the
-    # header the runbook gives; the tier declared collaborative; and no
-    # skill named that it doesn't ship.
+    # The template as a protected repository that applied it stands: its
+    # rulesets alone in force, granting no bypass; its flags set; the
+    # profile vendored under the header the runbook gives; no tier line;
+    # and no skill named that it doesn't ship.
     def projection
       parameters = rules.find { |rule| rule['type'] == PULL_REQUEST }.fetch('parameters')
-      Projection.new(default_branch: DEFAULT_BRANCH, tier: TierLine::COLLABORATIVE, difference: nil,
+      Projection.new(default_branch: DEFAULT_BRANCH, tier: Tier::PROTECTED, tier_word: nil, difference: nil,
                      rulesets_available: true, rule_types: rule_types, merge_methods: parameters[MERGE_METHODS],
                      approvals: parameters[APPROVALS], extra_approval: parameters[EXTRA_APPROVAL],
-                     ruleset_names: [ruleset_name], ruleset_bypasses: [],
-                     flags: @repository_flags, protection_additions: nil, rules_header_ok: true,
-                     rules_body: @profile, hooks: @hooks, hooks_entry: HooksEntry.of_settings(@hooks_settings),
-                     unshipped_skills: [], skills_unchecked: nil)
+                     rulesets: @rulesets.to_h { |ruleset| [ruleset['name'], RulesetShape.of(ruleset)] },
+                     ruleset_bypasses: [], flags: @repository_flags, protection_additions: nil,
+                     rules_header_ok: true, rules_body: @profile, unshipped_skills: [], skills_unchecked: nil)
     end
 
     private

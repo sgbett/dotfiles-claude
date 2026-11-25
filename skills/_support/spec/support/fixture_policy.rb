@@ -11,6 +11,7 @@ module SkillSupport
       PUBLIC_REPOSITORIES = %w[
         sgbett/dotfiles-claude
         sgbett/bsv-ruby-sdk
+        sgbett/ruleset-scratch
         bettison-org/ai-software-architect
         codenamev/ai-software-architect
         twbs/bootstrap

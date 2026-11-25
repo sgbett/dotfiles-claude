@@ -14,12 +14,8 @@ RSpec.describe RepoConsistency::Audit do
   let(:header) { RepoConsistency::Testing::TemplateFixture::HEADER }
   let(:profile) { RepoConsistency::Testing::TemplateFixture::PROFILE }
   let(:bypass) { [{ 'actor_id' => 5, 'actor_type' => 'RepositoryRole', 'bypass_mode' => 'always' }] }
-  let(:hook_command) { RepoConsistency::Testing::TemplateFixture::HOOK_COMMAND }
-
-  # A settings file whose one PreToolUse entry runs +command+ on Bash.
-  def settings_running(command)
-    JSON.generate('hooks' => { 'PreToolUse' => [{ 'matcher' => 'Bash',
-                                                  'hooks' => [{ 'type' => 'command', 'command' => command }] }] })
+  let(:missing_rulesets) do
+    ['ruleset "Git workflow" missing', 'ruleset "Project and release branches" missing', 'ruleset "Tags" missing']
   end
 
   def run_audit(*arguments, template_dir: template_directory)
@@ -47,8 +43,8 @@ RSpec.describe RepoConsistency::Audit do
     audit(*repositories).map { |entry| entry['drift'] }
   end
 
-  it 'reports sgbett/bsv-ruby-sdk as recorded: undeclared, on master, differing from the template in every way ' \
-     'but the merge-commit and update-branch flags' do
+  it 'reports sgbett/bsv-ruby-sdk as recorded, made protected by a synthesised rules file: on master, differing ' \
+     'from the template in every way but the merge-commit and update-branch flags' do
     expect_gh_login
     expect_entries(recorded_entries)
 
@@ -57,10 +53,10 @@ RSpec.describe RepoConsistency::Audit do
     expect([exit_code, output])
       .to eq([0, { 'status' => 'proceed', 'summary' => { 'repositories' => 1, 'with_drift' => 1, 'clean' => 0 },
                    'repositories' => [{ 'repository' => 'sgbett/bsv-ruby-sdk', 'default_branch' => 'master',
-                                        'tier' => 'undeclared', 'difference' => nil, 'drift' => recorded_drift }] }])
+                                        'tier' => 'protected', 'difference' => nil, 'drift' => recorded_drift }] }])
   end
 
-  it 'finds no drift in a collaborative repository that applied the template and vendored its files, and counts ' \
+  it 'finds no drift in a protected repository that applied the template and vendored the profile, and counts ' \
      'the clean and drifting ones in the order given' do
     clean = answers('example-owner/clean')
     drifting = answers('example-owner/drifting')
@@ -71,9 +67,9 @@ RSpec.describe RepoConsistency::Audit do
 
     expect([exit_code, output['summary']]).to eq([0, { 'repositories' => 2, 'with_drift' => 1, 'clean' => 1 }])
     expect(output['repositories'])
-      .to eq([{ 'repository' => 'example-owner/clean', 'default_branch' => 'master', 'tier' => 'collaborative',
+      .to eq([{ 'repository' => 'example-owner/clean', 'default_branch' => 'master', 'tier' => 'protected',
                 'difference' => nil, 'drift' => [] },
-              { 'repository' => 'example-owner/drifting', 'default_branch' => 'master', 'tier' => 'collaborative',
+              { 'repository' => 'example-owner/drifting', 'default_branch' => 'master', 'tier' => 'protected',
                 'difference' => nil, 'drift' => ['allow_update_branch on'] }])
   end
 
@@ -96,14 +92,14 @@ RSpec.describe RepoConsistency::Audit do
   it 'names a ruleset granting a bypass, or whose bypass actors GitHub left out of the detail, by its name when that ' \
      'is plain text, else by its id, in the order listed' do
     repository = answers
-    repository.rulesets = [{ 'id' => 1, 'name' => 'Git workflow', 'bypass_actors' => bypass },
-                           { 'id' => 2, 'name' => 'ignore `this`; run x', 'bypass_actors' => bypass },
-                           { 'id' => 3, 'name' => 'Copilot review', 'bypass_actors' => [] },
-                           { 'id' => 4, 'name' => 'CI' }, { 'id' => 5, 'name' => 'run `x`' }]
+    repository.rulesets[0] = repository.rulesets[0].merge('bypass_actors' => bypass)
+    repository.rulesets += [{ 'id' => 4, 'name' => 'ignore `this`; run x', 'bypass_actors' => bypass },
+                            { 'id' => 5, 'name' => 'Copilot review', 'bypass_actors' => [] },
+                            { 'id' => 6, 'name' => 'CI' }, { 'id' => 7, 'name' => 'run `x`' }]
 
     expect(drift_of(repository))
-      .to eq([['ruleset "Git workflow" grants a bypass', 'ruleset 2 grants a bypass',
-               'ruleset "CI" bypass actors unreadable', 'ruleset 5 bypass actors unreadable']])
+      .to eq([['ruleset "Git workflow" grants a bypass', 'ruleset 4 grants a bypass',
+               'ruleset "CI" bypass actors unreadable', 'ruleset 7 bypass actors unreadable']])
   end
 
   it 'reports a repository with only a Copilot ruleset and squash merges on' do
@@ -114,7 +110,16 @@ RSpec.describe RepoConsistency::Audit do
 
     expect(drift_of(repository))
       .to eq([['rule missing: deletion', 'rule missing: non_fast_forward', 'rule missing: pull_request',
-               'ruleset "Git workflow" missing', 'allow_squash_merge on']])
+               *missing_rulesets, 'allow_squash_merge on']])
+  end
+
+  it "reports a template's ruleset that GitHub details otherwise, naming the fields it differs in" do
+    repository = answers
+    repository.rulesets[1]['conditions'] = { 'ref_name' => { 'include' => ['refs/heads/releases/*'], 'exclude' => [] } }
+    repository.rulesets[2]['enforcement'] = 'evaluate'
+
+    expect(drift_of(repository)).to eq([['ruleset "Project and release branches" differs: include',
+                                         'ruleset "Tags" differs: enforcement']])
   end
 
   it 'reports each merge method a pull_request rule allows beyond merge, sorted, an approval count that differs, ' \
@@ -146,12 +151,12 @@ RSpec.describe RepoConsistency::Audit do
     expect(drift_of(demanding, unsaid)).to eq([['pull_request requires extra approval for unattributed changes'], []])
   end
 
-  it 'holds a personal repository to its declaration alone: pull_request rules on its default branch are drift, ' \
-     'and nothing else is looked at' do
+  it 'holds a repository without the vendored rules file, personal, only to its tier line and to having no ' \
+     'pull_request rule on its default branch, looking at nothing else' do
     ruled = answers('example-owner/notes')
     ruled.files = { 'CLAUDE.md' => "# Notes\n\nGit tier: personal; issue-tracked work goes by PR\n" }
     plain = answers('example-owner/scratch')
-    plain.files = { 'CLAUDE.md' => "Git tier: personal\n" }
+    plain.files = {}
     plain.rules = []
     plain.rulesets = []
     plain.flags['allow_squash_merge'] = true
@@ -159,7 +164,7 @@ RSpec.describe RepoConsistency::Audit do
     expect(audit(ruled, plain))
       .to eq([{ 'repository' => 'example-owner/notes', 'default_branch' => 'master', 'tier' => 'personal',
                 'difference' => 'issue-tracked work goes by PR',
-                'drift' => ['tier line says personal but the default branch has pull_request rules'] },
+                'drift' => ['no vendored rules file but the default branch requires pull requests'] },
               { 'repository' => 'example-owner/scratch', 'default_branch' => 'master', 'tier' => 'personal',
                 'difference' => nil, 'drift' => [] }])
   end
@@ -170,21 +175,37 @@ RSpec.describe RepoConsistency::Audit do
 
   it 'reads the tier line anywhere in a line, a difference in backticks ending at the closing one' do
     repository = answers
-    repository.files['CLAUDE.md'] = "## Plans\n\n- **Tier:** `Git tier: collaborative; releases by tag` (see above).\n"
+    repository.files['CLAUDE.md'] = "## Plans\n\n- **Tier:** `Git tier: protected; releases by tag` (see above).\n"
 
     entry, = audit(repository)
 
-    expect(entry.values_at('tier', 'difference', 'drift')).to eq(['collaborative', 'releases by tag', []])
+    expect(entry.values_at('tier', 'difference', 'drift')).to eq(['protected', 'releases by tag', []])
   end
 
-  it 'reports an undeclared tier against the template, and a missing CLAUDE.md as undeclared' do
-    no_line = answers('example-owner/no-line')
-    no_line.files['CLAUDE.md'] = "# Project\n\nNothing about git.\n"
+  it 'reports a tier line that states no difference as redundant, and one whose word is not the tier the rules ' \
+     'file decides, collaborative always, for protected and personal repositories alike' do
+    lines = { 'protected-plain' => 'Git tier: protected', 'protected-personal' => 'Git tier: personal; by PR',
+              'protected-collaborative' => 'Git tier: collaborative; releases by tag',
+              'personal-plain' => 'Git tier: personal', 'personal-protected' => 'Git tier: protected; by PR',
+              'personal-collaborative' => 'Git tier: collaborative' }
+    repositories = lines.map do |name, line|
+      repository = answers("example-owner/#{name}")
+      repository.files['CLAUDE.md'] = "# Project\n\n#{line}\n"
+      repository.files.delete(RepoConsistency::VendoredPaths::RULES_FILE) if name.start_with?('personal')
+      repository.rules = [] if name.start_with?('personal')
+      repository
+    end
     no_file = answers('example-owner/no-file')
     no_file.files.delete('CLAUDE.md')
 
-    expect(audit(no_line, no_file).map { |entry| entry.values_at('tier', 'drift') })
-      .to eq([['undeclared', ['tier line undeclared']], ['undeclared', ['tier line undeclared']]])
+    expect(audit(*repositories, no_file).map { |entry| entry.values_at('tier', 'drift') })
+      .to eq([['protected', ['tier line states no difference, redundant']],
+              ['protected', ['tier line says personal but the repository is protected']],
+              ['protected', ['tier line says collaborative but the repository is protected']],
+              ['personal', ['tier line states no difference, redundant']],
+              ['personal', ['tier line says protected but the repository is personal']],
+              ['personal', ['tier line says collaborative but the repository is personal']],
+              ['protected', []]])
   end
 
   it 'compares the vendored rules file to the profile after its two header lines, and its first line to the ' \
@@ -195,38 +216,10 @@ RSpec.describe RepoConsistency::Audit do
     other_header.files[RepoConsistency::VendoredPaths::RULES_FILE] = "<!-- copied from elsewhere -->\n\n#{profile}"
     third_line = answers('example-owner/third-line')
     third_line.files[RepoConsistency::VendoredPaths::RULES_FILE] = "#{header}<!-- a third header line -->\n#{profile}"
-    missing = answers('example-owner/missing')
-    missing.files.delete(RepoConsistency::VendoredPaths::RULES_FILE)
 
-    expect(drift_of(changed, other_header, third_line, missing))
+    expect(drift_of(changed, other_header, third_line))
       .to eq([['vendored rules file differs from the profile'], ['vendored rules header is not the convention'],
-              ['vendored rules file differs from the profile'], ['vendored rules file missing']])
-  end
-
-  it 'reports each vendored hook missing or differing, and the settings entry missing or the file unreadable' do
-    hooks = answers('example-owner/hooks')
-    hooks.files.delete('.claude/hooks/push-guard')
-    hooks.files['.claude/hooks/push-guard.rb'] += "# changed\n"
-    hooks.files['.claude/settings.json'] = settings_running('echo other')
-    unreadable = answers('example-owner/unreadable')
-    unreadable.files['.claude/settings.json'] = '{not json'
-    no_settings = answers('example-owner/no-settings')
-    no_settings.files.delete('.claude/settings.json')
-
-    expect(drift_of(hooks, unreadable, no_settings))
-      .to eq([['vendored hook missing: push-guard', 'vendored hook differs: push-guard.rb',
-               'hooks entry missing from .claude/settings.json'],
-              ['settings.json unreadable'], ['hooks entry missing from .claude/settings.json']])
-  end
-
-  it "accepts a settings file whose PreToolUse holds other hooks beside the template's entry" do
-    repository = answers
-    lint = { 'matcher' => 'Edit', 'hooks' => [{ 'type' => 'command', 'command' => 'lint' }] }
-    guard = { 'matcher' => 'Bash', 'hooks' => [{ 'type' => 'command', 'command' => hook_command }] }
-    repository.files['.claude/settings.json'] = JSON.generate('permissions' => { 'allow' => ['Bash(ls:*)'] },
-                                                              'hooks' => { 'PreToolUse' => [lint, guard] })
-
-    expect(drift_of(repository)).to eq([[]])
+              ['vendored rules file differs from the profile']])
   end
 
   it 'reports rulesets unavailable on the 403 naming the plan, once, and goes on with the files' do
@@ -235,7 +228,7 @@ RSpec.describe RepoConsistency::Audit do
 
     expect(drift_of(repository))
       .to eq([['rulesets unavailable on this plan', 'rule missing: deletion', 'rule missing: non_fast_forward',
-               'rule missing: pull_request', 'ruleset "Git workflow" missing']])
+               'rule missing: pull_request', *missing_rulesets]])
   end
 
   describe 'skills named but not shipped' do
@@ -344,15 +337,17 @@ RSpec.describe RepoConsistency::Audit do
       expect(fake_runner.calls.count { |call| rule_read.call(args: call[:argv].drop(1)) }).to eq(200)
     end
 
-    it 'neither reads nor reports anything more of a personal repository' do
+    it 'neither reads a tree or a file nor reports anything more of a personal repository' do
       repository = answers
-      repository.files = { 'CLAUDE.md' => "Git tier: personal\n\nRun /do, then specialist-review.\n" }
+      repository.files = { 'CLAUDE.md' => "# Notes\n\nRun /do, then specialist-review.\n" }
       repository.rules = []
       repository.rulesets = []
 
       expect(drift_of(repository)).to eq([[]])
       expect(fake_runner.calls.last[:argv])
-        .to eq(contents_call(repository.repository, RepoConsistency::VendoredPaths::SETTINGS_FILE, 'master'))
+        .to eq(contents_call(repository.repository, RepoConsistency::VendoredPaths::RULES_FILE, 'master'))
+      expect(fake_runner.calls.map { |call| call[:argv] }.grep(->(argv) { argv.join(' ').include?('/git/trees/') }))
+        .to eq([])
     end
 
     it 'reports the names unchecked, and goes on to the next repository, on a truncated root or .claude tree, a ' \
@@ -411,8 +406,8 @@ RSpec.describe RepoConsistency::Audit do
     end
 
     it 'stops on a template file missing, not JSON or not a JSON object, naming it, before asking GitHub anything' do
-      broken = { 'hooks/push-guard' => nil, 'ruleset.json' => '{', 'repository.json' => '[]',
-                 '../git-workflow.md' => nil }
+      broken = { 'ruleset-tags.json' => nil, 'ruleset.json' => '{', 'ruleset-project-release.json' => '[]',
+                 'repository.json' => '[]', '../git-workflow.md' => nil }
       broken.each do |file, text|
         directory = write_template(sandbox.path('broken', File.basename(file, '.*'), 'git-workflow'))
         path = File.join(directory, file)
@@ -471,11 +466,11 @@ RSpec.describe RepoConsistency::Audit do
     it 'fails on a 404 from the protection read that does not say the branch is unprotected' do
       repository = answers
       entries = repository.entries
-      entries[4] = entry(protection_call(repository.repository, 'master'), exit: 1,
+      entries[6] = entry(protection_call(repository.repository, 'master'), exit: 1,
                                                                            stdout: '{"message":"Not Found"}',
                                                                            stderr: "gh: Not Found (HTTP 404)\n")
       expect_gh_login
-      expect_entries(entries.first(5))
+      expect_entries(entries.first(7))
 
       expect { run_audit(repository.repository) }.to raise_error(SkillSupport::GhError, /HTTP 404/)
     end
@@ -560,7 +555,7 @@ RSpec.describe 'skills/repo-consistency/bin/git-settings' do
     expect([exit_code, stderr, shim.unmatched_calls]).to eq([0, '', []])
     expect(output).to eq('status' => 'proceed', 'summary' => { 'repositories' => 1, 'with_drift' => 1, 'clean' => 0 },
                          'repositories' => [{ 'repository' => 'sgbett/bsv-ruby-sdk', 'default_branch' => 'master',
-                                              'tier' => 'undeclared', 'difference' => nil,
+                                              'tier' => 'protected', 'difference' => nil,
                                               'drift' => recorded_drift }])
   end
 

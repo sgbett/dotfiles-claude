@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
-require_relative 'hooks_entry'
 require_relative 'projection'
+require_relative 'ruleset_shape'
 require_relative 'skill_mentions'
 require_relative 'template'
+require_relative 'tier'
 require_relative 'tier_line'
 require_relative 'vendored_paths'
 
@@ -37,8 +38,8 @@ module RepoConsistency
 
     def repository_fields
       declaration = TierLine.read(@state.files[VendoredPaths::CLAUDE_MD])
-      { default_branch: @state.default_branch, tier: declaration.tier, difference: declaration.difference,
-        flags: @state.flags, protection_additions: protection_additions }
+      { default_branch: @state.default_branch, tier: Tier.of(@state.files), tier_word: declaration.word,
+        difference: declaration.difference, flags: @state.flags, protection_additions: protection_additions }
     end
 
     def rule_fields
@@ -63,7 +64,8 @@ module RepoConsistency
     end
 
     def ruleset_fields
-      { ruleset_names: @state.rulesets.map { |ruleset| ruleset['name'] },
+      by_name = @state.rulesets.group_by { |ruleset| ruleset['name'] }
+      { rulesets: by_name.transform_values { |named| RulesetShape.of(named.first) },
         ruleset_bypasses: @state.rulesets.filter_map { |ruleset| bypass_entry(ruleset) } }
     end
 
@@ -95,9 +97,7 @@ module RepoConsistency
     def file_fields
       rules_text = @state.files[VendoredPaths::RULES_FILE]
       { rules_header_ok: rules_text && rules_text.lines.first.to_s.include?(HEADER_MARK),
-        rules_body: rules_text && rules_text.lines.drop(HEADER_LINES).join,
-        hooks: VendoredPaths::HOOK_FILES.to_h { |path| [File.basename(path), @state.files[path]] },
-        hooks_entry: HooksEntry.of_text(@state.files[VendoredPaths::SETTINGS_FILE]) }
+        rules_body: rules_text && rules_text.lines.drop(HEADER_LINES).join }
     end
 
     # None for a personal repository, whose instructions aren't read.

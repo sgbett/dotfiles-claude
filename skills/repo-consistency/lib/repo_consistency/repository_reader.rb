@@ -18,7 +18,7 @@ module RepoConsistency
   # Reads what the audit compares for one repository, in a fixed order so
   # that a spec can match every call: the repository, the rules in force on
   # its default branch, its rulesets and each one's detail, its classic
-  # protection, the files a collaborative repository vendors, then what
+  # protection, CLAUDE.md and the vendored rules file, then what
   # SkillScanReader reads. Only here is a 404 on the protection read taken
   # to mean none, and a 403 naming the plan taken to mean rulesets are
   # unavailable rather than failed.

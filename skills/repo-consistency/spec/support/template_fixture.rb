@@ -19,19 +19,23 @@ module RepoConsistency
         'rules' => [{ 'type' => 'deletion' }, { 'type' => 'non_fast_forward' },
                     { 'type' => 'pull_request', 'parameters' => PULL_REQUEST_PARAMETERS }]
       }.freeze
+      PROTECTED_BRANCHES = {
+        'name' => 'Project and release branches', 'target' => 'branch', 'enforcement' => 'active',
+        'bypass_actors' => [],
+        'conditions' => { 'ref_name' => { 'include' => ['refs/heads/project/*/master', 'refs/heads/releases/*'],
+                                          'exclude' => [] } },
+        'rules' => [{ 'type' => 'deletion' }, { 'type' => 'non_fast_forward' }]
+      }.freeze
+      TAGS = {
+        'name' => 'Tags', 'target' => 'tag', 'enforcement' => 'active', 'bypass_actors' => [],
+        'conditions' => { 'ref_name' => { 'include' => ['~ALL'], 'exclude' => [] } },
+        'rules' => [{ 'type' => 'deletion' }, { 'type' => 'update' }]
+      }.freeze
+      # By file, the default branch's first, as Template reads them.
+      RULESETS = { 'ruleset.json' => RULESET, 'ruleset-project-release.json' => PROTECTED_BRANCHES,
+                   'ruleset-tags.json' => TAGS }.freeze
       REPOSITORY = { 'allow_squash_merge' => false, 'allow_rebase_merge' => false, 'allow_merge_commit' => true,
                      'allow_update_branch' => false }.freeze
-      HOOK_COMMAND = 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/push-guard"'
-      HOOKS_SETTINGS = {
-        'hooks' => { 'PreToolUse' => [{ 'matcher' => 'Bash',
-                                        'hooks' => [{ 'type' => 'command', 'command' => HOOK_COMMAND,
-                                                      'timeout' => 5 }] }] }
-      }.freeze
-      HOOKS = {
-        'push-guard' => "#!/bin/sh\n# vendored from sgbett/dotfiles-claude profiles/git-workflow/hooks/push-guard\n" \
-                        "exit 0\n",
-        'push-guard.rb' => "# vendored from sgbett/dotfiles-claude profiles/git-workflow/hooks/push-guard.rb\nexit 0\n"
-      }.freeze
       PROFILE = "<!-- profiles/git-workflow.md -->\n\n# Git workflow\n\n- Default branch: `master`\n" \
                 "- All changes land via PR.\n"
       # The two header lines a vendored copy of the profile carries.
@@ -43,10 +47,9 @@ module RepoConsistency
       end
 
       def write_template(directory)
-        FileUtils.mkdir_p(File.join(directory, 'hooks'))
-        { 'ruleset.json' => RULESET, 'repository.json' => REPOSITORY, 'hooks.json' => HOOKS_SETTINGS }
-          .each { |name, body| File.write(File.join(directory, name), "#{JSON.pretty_generate(body)}\n") }
-        HOOKS.each { |name, text| File.write(File.join(directory, 'hooks', name), text) }
+        FileUtils.mkdir_p(directory)
+        RULESETS.merge('repository.json' => REPOSITORY)
+                .each { |name, body| File.write(File.join(directory, name), "#{JSON.pretty_generate(body)}\n") }
         File.write(File.join(directory, '..', 'git-workflow.md'), PROFILE)
         directory
       end

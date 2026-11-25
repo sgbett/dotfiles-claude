@@ -3,23 +3,20 @@
 require_relative 'shipped_skills'
 require_relative 'skill_paths'
 require_relative 'skill_scan'
-require_relative 'tier_line'
+require_relative 'tier'
 require_relative 'tree_entry'
-require_relative 'vendored_paths'
 
 module RepoConsistency
-  # Reads what the skill-name check compares, for a repository whose
-  # CLAUDE.md doesn't declare it personal, in a fixed order so that a spec
-  # can match every call: the default branch's root tree, the whole of its
-  # .claude directory's, then each instruction file they list that
-  # RepositoryReader hasn't read already, in path order. Only the root and
-  # .claude are read, as a large repository's whole tree comes back
-  # truncated. Then each shipping file that is a link (ShippedSkills), to
-  # see whether it resolves. A personal repository costs no read. A tree
-  # that can't show
-  # everything, or a file the contents API refuses, leaves the check
-  # unchecked rather than stopping the audit, as the repository's other
-  # drift stands without it.
+  # Reads what the skill-name check compares, for a protected repository
+  # (Tier), in a fixed order so that a spec can match every call: the
+  # default branch's root tree, the whole of its .claude directory's, then
+  # each instruction file they list that RepositoryReader hasn't read
+  # already, in path order. Only the root and .claude are read, as a large
+  # repository's whole tree comes back truncated. Then each shipping file
+  # that is a link (ShippedSkills), to see whether it resolves. A personal
+  # repository costs no read. A tree that can't show everything, or a file
+  # the contents API refuses, leaves the check unchecked rather than
+  # stopping the audit, as the repository's other drift stands without it.
   class SkillScanReader
     # Any other failure to read an instruction file: a tool failure whose
     # message names only the repository and how gh failed. Never the path,
@@ -55,7 +52,8 @@ module RepoConsistency
     # a repository needing more goes unchecked rather than spending it.
     MAX_FILE_READS = 200
 
-    # +files+ are RepositoryReader's texts by path, CLAUDE.md's among them.
+    # +files+ are RepositoryReader's texts by path, the rules file's among
+    # them.
     def self.read(github, repository, branch:, files:)
       new(github, repository, branch: branch, files: files).read
     end
@@ -69,7 +67,7 @@ module RepoConsistency
 
     # The SkillScan, or nil for a personal repository.
     def read
-      return if TierLine.read(@files[VendoredPaths::CLAUDE_MD]).tier == TierLine::PERSONAL
+      return if Tier.of(@files) == Tier::PERSONAL
 
       entries = tree
       return SkillScan.new(unchecked: :truncated) if entries.nil?

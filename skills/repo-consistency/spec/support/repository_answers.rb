@@ -24,19 +24,27 @@ module RepoConsistency
         @branch = branch
         @flags = TemplateFixture::REPOSITORY.dup
         @rules = TemplateFixture::RULESET['rules'].map(&:dup)
-        @rulesets = [{ 'id' => 1, 'name' => TemplateFixture::RULESET['name'], 'bypass_actors' => [] }]
+        @rulesets = TemplateFixture::RULESETS.values.map.with_index(1) { |ruleset, id| detail(ruleset, id) }
         @protection = nil
         @plan_forbids = false
         @files = compliant_files
         @tree = TreeAnswers.new
       end
 
+      # A template's ruleset as GitHub details it once applied: with its id,
+      # and with the defaults GitHub adds to a pull_request rule.
+      def detail(ruleset, id)
+        rules = ruleset['rules'].map do |rule|
+          next rule unless rule['type'] == 'pull_request'
+
+          rule.merge('parameters' => rule['parameters'].merge('required_reviewers' => []))
+        end
+        ruleset.merge('id' => id, 'rules' => rules)
+      end
+
       def compliant_files
-        { VendoredPaths::CLAUDE_MD => "# Project\n\nGit tier: collaborative\n",
-          VendoredPaths::RULES_FILE => TemplateFixture::HEADER + TemplateFixture::PROFILE,
-          VendoredPaths::HOOK_FILES[0] => TemplateFixture::HOOKS['push-guard'],
-          VendoredPaths::HOOK_FILES[1] => TemplateFixture::HOOKS['push-guard.rb'],
-          VendoredPaths::SETTINGS_FILE => JSON.generate(TemplateFixture::HOOKS_SETTINGS) }
+        { VendoredPaths::CLAUDE_MD => "# Project\n\nNothing about git.\n",
+          VendoredPaths::RULES_FILE => TemplateFixture::HEADER + TemplateFixture::PROFILE }
       end
 
       def entries
