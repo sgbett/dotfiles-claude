@@ -34,12 +34,19 @@ module RepoConsistency
     # the template's shape. Rules differ when their types do, or when a rule
     # lacks a parameter value the template states; parameters the template
     # leaves unsaid are GitHub's defaults (it adds required_reviewers: [] to
-    # pull_request), so they aren't compared.
+    # pull_request), so they aren't compared. A template shape whose rules
+    # are nil leaves them uncompared.
     def differences(actual)
-      members.reject { |field| field == :rules ? rules_match?(actual.rules) : self[field] == actual[field] }
+      members.reject { |field| matches?(field, actual) }
     end
 
     private
+
+    def matches?(field, actual)
+      return self[field] == actual[field] unless field == :rules
+
+      rules.nil? || rules_match?(actual.rules)
+    end
 
     def rules_match?(actual_rules)
       rules.keys.sort == actual_rules.keys.sort &&

@@ -22,9 +22,8 @@ module RepoConsistency
   # bodies and the repository's, and the profile text beside the directory,
   # which a protected repository vendors.
   class Template
-    # The default branch's ruleset first: its rules are the ones the audit
-    # expects in force there.
-    RULESETS = %w[ruleset.json ruleset-project-release.json ruleset-tags.json].freeze
+    DEFAULT_BRANCH_RULESET = 'ruleset.json'
+    RULESETS = [DEFAULT_BRANCH_RULESET, 'ruleset-project-release.json', 'ruleset-tags.json'].freeze
     REPOSITORY = 'repository.json'
     PROFILE = '../git-workflow.md'
     PULL_REQUEST = 'pull_request'
@@ -38,7 +37,7 @@ module RepoConsistency
     # repository still on main is covered by it and reported here.
     DEFAULT_BRANCH = 'master'
 
-    attr_reader :rulesets, :repository_flags, :profile
+    attr_reader :repository_flags, :profile
 
     def self.load(directory)
       new(directory).load
@@ -49,16 +48,20 @@ module RepoConsistency
     end
 
     def load
-      @rulesets = RULESETS.map { |file| json(file) }
+      @rulesets = RULESETS.to_h { |file| [file, json(file)] }
       @repository_flags = json(REPOSITORY)
       @profile = text(PROFILE)
       self
     end
 
+    def rulesets
+      @rulesets.values
+    end
+
     # The rules the template puts on the default branch, as GitHub lists
     # them in force.
     def rules
-      Array(@rulesets.first['rules'])
+      Array(@rulesets.fetch(DEFAULT_BRANCH_RULESET)['rules'])
     end
 
     def rule_types
@@ -74,12 +77,23 @@ module RepoConsistency
       Projection.new(default_branch: DEFAULT_BRANCH, tier: Tier::PROTECTED, tier_word: nil, difference: nil,
                      rulesets_available: true, rule_types: rule_types, merge_methods: parameters[MERGE_METHODS],
                      approvals: parameters[APPROVALS], extra_approval: parameters[EXTRA_APPROVAL],
-                     rulesets: @rulesets.to_h { |ruleset| [ruleset['name'], RulesetShape.of(ruleset)] },
+                     rulesets: ruleset_shapes,
                      ruleset_bypasses: [], flags: @repository_flags, protection_additions: nil,
                      rules_header_ok: true, rules_body: @profile, unshipped_skills: [], skills_unchecked: nil)
     end
 
     private
+
+    # The default branch's rules are compared from the rules in force there
+    # (rule_types, merge_methods and the rest), so its ruleset's rules are
+    # left uncompared here: comparing them too would report one defect twice.
+    def ruleset_shapes
+      @rulesets.to_h do |file, ruleset|
+        shape = RulesetShape.of(ruleset)
+        shape.rules = nil if file == DEFAULT_BRANCH_RULESET
+        [ruleset['name'], shape]
+      end
+    end
 
     def json(file)
       parsed = JSON.parse(text(file))

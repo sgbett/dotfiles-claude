@@ -222,13 +222,14 @@ RSpec.describe RepoConsistency::Audit do
               ['vendored rules file differs from the profile']])
   end
 
-  it 'reports rulesets unavailable on the 403 naming the plan, once, and goes on with the files' do
+  it 'reports rulesets unavailable on the 403 naming the plan, once, with no line for each template ruleset it ' \
+     'therefore lacks, and goes on with the files' do
     repository = answers('example-owner/private-free')
     repository.plan_forbids = true
 
     expect(drift_of(repository))
       .to eq([['rulesets unavailable on this plan', 'rule missing: deletion', 'rule missing: non_fast_forward',
-               'rule missing: pull_request', *missing_rulesets]])
+               'rule missing: pull_request']])
   end
 
   describe 'skills named but not shipped' do

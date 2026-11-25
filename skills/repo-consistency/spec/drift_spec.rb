@@ -114,9 +114,24 @@ RSpec.describe RepoConsistency::Drift do
       tags['conditions']['ref_name']['exclude'] = ['refs/tags/scratch-*']
 
       expect(drift(applied(real_template, rulesets: [default_branch, protected_branches, tags])))
-        .to eq(['ruleset "Git workflow" differs: include, rules',
+        .to eq(['ruleset "Git workflow" differs: include',
                 'ruleset "Project and release branches" differs: target, rules',
                 'ruleset "Tags" differs: enforcement, exclude, rules'])
+    end
+
+    it "leaves the default branch's ruleset's rules to the rules in force there, so a defect in them is reported " \
+       'once, while the other templates still report theirs' do
+      default_branch, protected_branches, tags = scratch_details
+      default_branch['rules'].delete_at(1)
+      default_branch['rules'][1]['parameters']['allowed_merge_methods'] = %w[merge squash]
+      protected_branches['rules'].pop
+      tags['rules'].pop
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+      state.rules = default_branch['rules']
+
+      expect(drift(state))
+        .to eq(['rule missing: non_fast_forward', 'pull_request allows squash',
+                'ruleset "Project and release branches" differs: rules', 'ruleset "Tags" differs: rules'])
     end
 
     it 'reports a template ruleset missing by name, and reads a malformed detail as differing rather than failing' do

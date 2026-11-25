@@ -66,7 +66,11 @@ module RepoConsistency
       "rule present: #{LINEAR_HISTORY}" if actual.rule_types.include?(LINEAR_HISTORY)
     end
 
+    # Without rulesets on the plan, PLAN is the one cause of every ruleset
+    # being absent, so it stands alone.
     def ruleset_lines(expected, actual)
+      return [] unless actual.rulesets_available
+
       expected.rulesets.filter_map { |name, shape| template_ruleset_line(name, shape, actual.rulesets[name]) } +
         actual.ruleset_bypasses.map { |id, name, bypass| "ruleset #{label(id, name)} #{BYPASS.fetch(bypass)}" }
     end
