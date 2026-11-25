@@ -1,7 +1,7 @@
 # Git strategy review
 
 **Date:** 2026-11-17
-**Status:** Review complete. Tier 1 landed (#31 and the vendoring PR); Tiers 2 and 3 are in progress under #30, with the decisions of 2026-11-18 in section 12. On 2026-11-24 #41 superseded the push-guard hook and the `collaborative` tier (section 12); notes in sections 7, 8 and 10 mark where.
+**Status:** Review complete. Tier 1 landed (#31 and the vendoring PR); Tiers 2 and 3 were taken up under #30, with the decisions of 2026-11-18 in section 12, and #30 closed into #41. On 2026-11-24 #41 superseded the push-guard hook and the `collaborative` tier (section 12); notes in sections 7, 8 and 10 mark where.
 **Tracking:** [sgbett/dotfiles-claude#30](https://github.com/sgbett/dotfiles-claude/issues/30)
 **Sibling:** [#7 Config profiles](https://github.com/sgbett/dotfiles-claude/issues/7) delivered the `profiles/` mechanism this review builds on.
 **Names:** below, "the app repository" is portfoliobuilder and "its support repository" is portfoliobuilder-support.
