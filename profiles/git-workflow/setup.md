@@ -57,7 +57,7 @@ gh api repos/OWNER/REPO/rulesets
 gh api -X PUT repos/OWNER/REPO/rulesets/ID --input ruleset.json
 ```
 
-**Check the effective rules.** The default branch lists `pull_request`, `non_fast_forward` and `deletion`; a project base or release branch lists `deletion` and `non_fast_forward`; a work branch beside a project base (`project/<id>/<issue>_<title>`) lists none. A branch name's slashes are written `%2F`.
+**Check the effective rules.** The default branch lists `pull_request`, `non_fast_forward` and `deletion`; a project base or release branch lists `deletion` and `non_fast_forward`; a work branch beside a project base (`project/<id>/<issue>_<title>`) lists none. In a branch name, a slash is written `%2F` and a `#` `%23`.
 
 ```sh
 gh api repos/OWNER/REPO/rules/branches/master
@@ -96,7 +96,7 @@ A version bump is a change like any other and lands by PR. The tag is pushed dir
 | Overwriting commits someone else pushed to a work branch, which you have not integrated | Git's lease with `push.useForceIfIncludes` |
 | The agent force-pushing, pushing a `+` refspec or `--mirror`, or changing a ruleset, a branch protection, a ref, the default branch or a branch's name through `gh api` | The `permissions.ask` entries in the owner's Claude Code settings (sgbett/dotfiles-claude `settings.json`): a permission prompt, present in a collaborator's session only if they add them |
 
-The rulesets bind every account, admins included. The asks read command text, so combined short flags (`-fu`), abbreviated options, git aliases and config-driven forcing (`remote.<name>.push=+…`), `bash -c`, a GraphQL query or REST body sent from a file (`--input`) and `curl` with a token all pass without a prompt. Deleting a branch (`--delete`, `:<ref>`, `--prune`) has no ask, since deleting your own merged work branch is routine: a base branch is covered only once its ruleset is applied, and another author's work branch never. A trigger word inside a path or branch name (a branch called `…-protection`, a worktree path containing `push`) prompts needlessly. An admin token can change a ruleset by any route, so the token's permissions are the real control.
+The rulesets bind every account, admins included. The asks read command text, so combined short flags (`-fu`), abbreviated options, git aliases and config-driven forcing (`remote.<name>.push=+…`), `bash -c`, a GraphQL query or REST body sent from a file (`--input`) and `curl` with a token all pass without a prompt. Deleting a branch (`--delete`, `:<ref>`, `--prune`) has no ask, since deleting your own merged work branch is routine: a base branch is covered only once its ruleset is applied, and another author's work branch never. A trigger word elsewhere in the command prompts needlessly: in a path or branch name (a branch called `…-protection`, a worktree path containing `push`), in a commit message about pushing, or `git stash push` with a `+` or ` -f` after it. An admin token can change a ruleset by any route, so the token's permissions are the real control.
 
 To retire a project base or release branch, or to fix a mistagged release, an admin disables the ruleset, acts, and re-enables it at once, since nothing it covers is bound meanwhile. For the tag ruleset (the project-and-release one is the same with its template):
 

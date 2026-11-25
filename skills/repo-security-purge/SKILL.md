@@ -283,6 +283,10 @@ Backup location: ../repo-backup-20260118
 
 2. FORCE PUSH TO REMOTE
    ⚠️  This will break existing clones and forks!
+   On a repository with the git-workflow rulesets, both pushes are
+   rejected (GH013): an admin disables the rulesets first and
+   re-enables them straight after, as profiles/git-workflow/setup.md
+   ("Coverage") in sgbett/dotfiles-claude describes.
 
    git push --force --all origin
    git push --force --tags origin
