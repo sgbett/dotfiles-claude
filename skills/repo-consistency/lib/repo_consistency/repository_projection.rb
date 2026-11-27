@@ -15,6 +15,7 @@ module RepoConsistency
   # checked here, and a ruleset's name is left for Drift to judge.
   class RepositoryProjection
     MERGE_METHOD = /\A[a-z_]+\z/
+    ALL_MERGE_METHODS = %w[merge squash rebase].freeze
     HEADER_MARK = 'vendored from sgbett/dotfiles-claude'
     HEADER_LINES = 2
     BYPASS_ACTORS = 'bypass_actors'
@@ -47,17 +48,37 @@ module RepoConsistency
       parameters = pull_request_parameters
       { rulesets_available: @state.rulesets_available, rule_types: @state.rules.map { |rule| rule['type'] },
         merge_methods: parameters && merge_methods!(parameters[Template::MERGE_METHODS]),
-        approvals: parameters && Integer(parameters[Template::APPROVALS]),
+        approvals: parameters && approvals!(parameters[Template::APPROVALS]),
         extra_approval: parameters && parameters[Template::EXTRA_APPROVAL] }
     end
 
+    # A personal repository is held only to having no pull_request rule, so
+    # its parameters go unread. A protected one's rule without them would
+    # leave every one unchecked, so it fails rather than reading clean.
     def pull_request_parameters
+      return if Tier.of(@state.files) == Tier::PERSONAL
+
       rule = @state.rules.find { |candidate| candidate['type'] == Template::PULL_REQUEST }
-      rule&.fetch('parameters', {})
+      return if rule.nil?
+      return rule['parameters'] if rule['parameters'].is_a?(Hash)
+
+      raise SkillSupport::UnexpectedResponse, 'a pull_request rule carries no parameters'
     end
 
+    # Integer() would round 0.9 down to a template's 0 and read clean.
+    def approvals!(count)
+      return count if count.is_a?(Integer)
+
+      raise SkillSupport::UnexpectedResponse, 'an approval count is not a whole number'
+    end
+
+    # The list is optional in GitHub's schema, and absent before GHES 3.17,
+    # so its absence is read as the worst case rather than as none.
     def merge_methods!(methods)
-      Array(methods).each do |method|
+      methods = ALL_MERGE_METHODS if methods.nil?
+      raise SkillSupport::UnexpectedResponse, 'merge methods are not a list' unless methods.is_a?(Array)
+
+      methods.each do |method|
         next if MERGE_METHOD.match?(method.to_s)
 
         raise SkillSupport::UnexpectedResponse, 'a merge method is not a plain name'

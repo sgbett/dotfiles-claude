@@ -138,6 +138,51 @@ RSpec.describe RepoConsistency::Audit do
                'rule present: required_linear_history']])
   end
 
+  it 'fails on a pull_request rule in force on a protected repository with no parameters, an approval count ' \
+     "that isn't a whole number or merge methods that aren't a list, rather than leaving them unchecked" do
+    parameters = RepoConsistency::Testing::TemplateFixture::PULL_REQUEST_PARAMETERS
+    count = 'required_approving_review_count'
+    methods = 'allowed_merge_methods'
+    { nil => 'a pull_request rule carries no parameters', [] => 'a pull_request rule carries no parameters',
+      parameters.except(count) => 'an approval count is not a whole number',
+      parameters.merge(count => 'two') => 'an approval count is not a whole number',
+      parameters.merge(count => 0.9) => 'an approval count is not a whole number',
+      parameters.merge(methods => 'merge') => 'merge methods are not a list' }.each do |given, message|
+      repository = answers
+      repository.rules[2] = { 'type' => 'pull_request', 'parameters' => given }
+      expect_audit(repository)
+
+      expect { run_audit(repository.repository) }.to raise_error(SkillSupport::UnexpectedResponse, message),
+                                                     given.inspect
+    end
+  end
+
+  it 'fails on a pull_request rule in force without a parameters key' do
+    repository = answers
+    repository.rules[2] = { 'type' => 'pull_request' }
+    expect_audit(repository)
+
+    expect { run_audit(repository.repository) }
+      .to raise_error(SkillSupport::UnexpectedResponse, 'a pull_request rule carries no parameters')
+  end
+
+  it 'reads a pull_request rule that leaves out its merge methods, which GitHub allows, as allowing all three' do
+    repository = answers
+    repository.rules[2] = { 'type' => 'pull_request',
+                            'parameters' => RepoConsistency::Testing::TemplateFixture::PULL_REQUEST_PARAMETERS
+                                            .except('allowed_merge_methods') }
+
+    expect(drift_of(repository)).to eq([['pull_request allows rebase', 'pull_request allows squash']])
+  end
+
+  it 'reads no parameters on a personal repository, so a pull_request rule without them is drift, not a failure' do
+    repository = answers('example-owner/notes')
+    repository.files = {}
+    repository.rules = [{ 'type' => 'pull_request', 'parameters' => nil }]
+
+    expect(drift_of(repository)).to eq([['no vendored rules file but the default branch requires pull requests']])
+  end
+
   it 'reports the extra approval alone when it is all that differs, and not when the rule leaves it unsaid' do
     demanding = answers('example-owner/demanding')
     demanding.rules[2] = { 'type' => 'pull_request',
