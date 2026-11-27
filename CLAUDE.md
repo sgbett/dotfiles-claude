@@ -137,3 +137,5 @@ If `WebFetch` fails (403, Cloudflare block, etc.), try `mcp__ruby-fetch__fetch_u
 - For Cloudflare-protected sites, use `mcp__ruby-fetch__fetch_url_flaresolverr` (requires FlareSolverr running: `docker run -d -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest`)
 
 **Note:** Claude.ai shared conversations cannot be fetched programmatically - the content is loaded client-side via authenticated API calls with IP/fingerprint-bound sessions. See [GitHub issue #15542](https://github.com/anthropics/claude-code/issues/15542) for feature request.
+
+**Past claude.ai chats** are exported to `/opt/claude/history/conversations/`, one markdown file per chat. Grep there before asking me to recall a claude.ai conversation; `/opt/claude/history/CLAUDE.md` has the rules and known gaps.
