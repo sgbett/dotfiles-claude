@@ -114,7 +114,7 @@ RSpec.describe RepoConsistency::Drift do
       tags['conditions']['ref_name']['exclude'] = ['refs/tags/scratch-*']
 
       expect(drift(applied(real_template, rulesets: [default_branch, protected_branches, tags])))
-        .to eq(['ruleset "Git workflow" differs: include',
+        .to eq(['ruleset "Git workflow" differs: include, rules',
                 'ruleset "Project and release branches" differs: target, rules',
                 'ruleset "Tags" differs: enforcement, exclude, rules'])
     end
@@ -151,6 +151,21 @@ RSpec.describe RepoConsistency::Drift do
       default_branch['rules'] << { 'type' => 'required_signatures' }
 
       expect(drift(state)).to eq(['rule present: required_linear_history', 'ruleset "Git workflow" differs: rules'])
+    end
+
+    it "reports a default branch's ruleset requiring approvals once, whichever pull_request rule in force is first" do
+      default_branch, protected_branches, tags = scratch_details
+      compliant = default_branch['rules'][2]
+      strict = Marshal.load(Marshal.dump(compliant))
+      strict['parameters']['required_approving_review_count'] = 2
+      default_branch['rules'][2] = strict
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+
+      state.rules = default_branch['rules'][0, 2] + [compliant, strict]
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+
+      state.rules = default_branch['rules'][0, 2] + [strict, compliant]
+      expect(drift(state)).to eq(['pull_request requires 2 approvals'])
     end
 
     it "reports a default branch's ruleset lacking a rule, or with malformed rules, that the rules in force carry " \

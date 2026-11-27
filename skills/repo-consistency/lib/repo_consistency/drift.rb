@@ -39,7 +39,7 @@ module RepoConsistency
     end
 
     def protected_lines(expected, actual)
-      [plan_line(actual), rule_lines(expected, actual), pull_request_lines(expected, actual),
+      [plan_line(actual), rule_lines(expected, actual), pull_request_findings(expected, actual).values,
        linear_history_line(actual), ruleset_lines(expected, actual), flag_lines(expected, actual),
        protection_line(actual), branch_line(expected, actual), tier_line(actual),
        rules_file_lines(expected, actual), skill_lines(actual)].flatten.compact
@@ -53,13 +53,26 @@ module RepoConsistency
       (expected.rule_types - actual.rule_types).map { |type| "rule missing: #{type}" }
     end
 
-    def pull_request_lines(expected, actual)
-      return if actual.merge_methods.nil?
+    # The lines on the first pull_request rule in force, by the parameter
+    # each reports.
+    def pull_request_findings(expected, actual)
+      return {} if actual.merge_methods.nil?
 
-      lines = (actual.merge_methods - expected.merge_methods).sort.map { |method| "pull_request allows #{method}" }
-      lines << "pull_request requires #{actual.approvals} approvals" unless actual.approvals == expected.approvals
-      lines << EXTRA_APPROVAL if actual.extra_approval == true && expected.extra_approval == false
-      lines
+      { Template::MERGE_METHODS => merge_method_lines(expected, actual),
+        Template::APPROVALS => approval_lines(expected, actual),
+        Template::EXTRA_APPROVAL => extra_approval_lines(expected, actual) }.reject { |_, lines| lines.empty? }
+    end
+
+    def merge_method_lines(expected, actual)
+      (actual.merge_methods - expected.merge_methods).sort.map { |method| "pull_request allows #{method}" }
+    end
+
+    def approval_lines(expected, actual)
+      actual.approvals == expected.approvals ? [] : ["pull_request requires #{actual.approvals} approvals"]
+    end
+
+    def extra_approval_lines(expected, actual)
+      actual.extra_approval == true && expected.extra_approval == false ? [EXTRA_APPROVAL] : []
     end
 
     def linear_history_line(actual)
@@ -71,7 +84,8 @@ module RepoConsistency
     def ruleset_lines(expected, actual)
       return [] unless actual.rulesets_available
 
-      reported = rule_types_reported(expected, actual)
+      reported = { types: rule_types_reported(expected, actual),
+                   parameters: pull_request_findings(expected, actual).keys }
       expected.rulesets.filter_map do |name, shape|
         template_ruleset_line(name, shape, actual.rulesets[name], reported)
       end + actual.ruleset_bypasses.map { |id, name, bypass| "ruleset #{label(id, name)} #{BYPASS.fetch(bypass)}" }
@@ -86,7 +100,7 @@ module RepoConsistency
     def template_ruleset_line(name, shape, actual_shape, reported)
       return "ruleset \"#{name}\" missing" if actual_shape.nil?
 
-      differences = shape.differences(actual_shape, reported)
+      differences = shape.differences(actual_shape, **reported)
                          .map { |field| RULESET_FIELD_NAMES.fetch(field, field.to_s) }
       "ruleset \"#{name}\" differs: #{differences.join(', ')}" unless differences.empty?
     end
@@ -136,8 +150,9 @@ module RepoConsistency
       actual.unshipped_skills.map { |name| "#{UNSHIPPED_SKILL} #{name}" }
     end
 
-    private_class_method :personal_lines, :protected_lines, :plan_line, :rule_lines, :pull_request_lines,
-                         :linear_history_line, :ruleset_lines, :template_ruleset_line, :label, :flag_lines,
+    private_class_method :personal_lines, :protected_lines, :plan_line, :rule_lines, :pull_request_findings,
+                         :merge_method_lines, :approval_lines, :extra_approval_lines, :linear_history_line,
+                         :ruleset_lines, :rule_types_reported, :template_ruleset_line, :label, :flag_lines,
                          :protection_line, :branch_line, :tier_line, :rules_file_lines, :skill_lines
   end
 end
