@@ -134,6 +134,39 @@ RSpec.describe RepoConsistency::Drift do
                 'ruleset "Project and release branches" differs: rules', 'ruleset "Tags" differs: rules'])
     end
 
+    it "still compares the default branch's ruleset for what the rules in force aren't checked for: the other " \
+       'parameters the template states, and rule types beyond its own and linear history' do
+      default_branch, protected_branches, tags = scratch_details
+      default_branch['rules'][2]['parameters']['require_code_owner_review'] = true
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+      state.rules = default_branch['rules']
+
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+
+      default_branch['rules'][2]['parameters']['require_code_owner_review'] = false
+      default_branch['rules'] << { 'type' => 'required_linear_history' }
+
+      expect(drift(state)).to eq(['rule present: required_linear_history'])
+
+      default_branch['rules'] << { 'type' => 'required_signatures' }
+
+      expect(drift(state)).to eq(['rule present: required_linear_history', 'ruleset "Git workflow" differs: rules'])
+    end
+
+    it "reports a default branch's ruleset lacking a rule, or with malformed rules, that the rules in force carry " \
+       'from elsewhere' do
+      default_branch, protected_branches, tags = scratch_details
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+      state.rules = default_branch['rules'].map(&:dup)
+      default_branch['rules'].pop
+
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+
+      default_branch['rules'] = 'not an array'
+
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+    end
+
     it 'reports a template ruleset missing by name, and reads a malformed detail as differing rather than failing' do
       default_branch, protected_branches, = scratch_details
       protected_branches['conditions'] = 'not an object'

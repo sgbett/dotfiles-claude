@@ -34,23 +34,36 @@ module RepoConsistency
     # the template's shape. Rules differ when their types do, or when a rule
     # lacks a parameter value the template states; parameters the template
     # leaves unsaid are GitHub's defaults (it adds required_reviewers: [] to
-    # pull_request), so they aren't compared. A template shape whose rules
-    # are nil leaves them uncompared.
-    def differences(actual)
-      members.reject { |field| matches?(field, actual) }
+    # pull_request), so they aren't compared. On a shape left to the rules
+    # in force, the +reported+ rule types, whose difference a line on those
+    # rules already reports, aren't compared either.
+    def differences(actual, reported = [])
+      skipped = @left_to_rules_in_force ? reported : []
+      members.reject { |field| matches?(field, actual, skipped) }
+    end
+
+    # Marks this the default branch's ruleset, whose rules in force are
+    # checked too, and drops the +parameters+ that check compares.
+    def leave_to_rules_in_force(parameters)
+      @left_to_rules_in_force = true
+      self.rules = rules.transform_values { |stated| stated.except(*parameters) }
     end
 
     private
 
-    def matches?(field, actual)
+    def matches?(field, actual, skipped)
       return self[field] == actual[field] unless field == :rules
 
-      rules.nil? || rules_match?(actual.rules)
+      rules_match?(actual.rules, skipped)
     end
 
-    def rules_match?(actual_rules)
-      rules.keys.sort == actual_rules.keys.sort &&
-        rules.all? { |type, parameters| parameters.all? { |key, value| actual_rules[type][key] == value } }
+    # Equal compared types leave every unskipped template type in
+    # +actual_rules+, so its parameters can be read there.
+    def rules_match?(actual_rules, skipped)
+      (rules.keys - skipped).sort == (actual_rules.keys - skipped).sort &&
+        rules.all? do |type, parameters|
+          skipped.include?(type) || parameters.all? { |key, value| actual_rules[type][key] == value }
+        end
     end
   end
 end

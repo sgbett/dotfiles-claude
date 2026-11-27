@@ -33,6 +33,7 @@ module RepoConsistency
     # required approvals and a sole owner demands an approval nobody can
     # give, so the template pins it and the audit compares it.
     EXTRA_APPROVAL = 'require_extra_approval_for_unattributed_changes'
+    PARAMETERS_IN_FORCE = [MERGE_METHODS, APPROVALS, EXTRA_APPROVAL].freeze
     # The profile's first rule. The ruleset targets ~DEFAULT_BRANCH, so a
     # repository still on main is covered by it and reported here.
     DEFAULT_BRANCH = 'master'
@@ -84,13 +85,13 @@ module RepoConsistency
 
     private
 
-    # The default branch's rules are compared from the rules in force there
-    # (rule_types, merge_methods and the rest), so its ruleset's rules are
-    # left uncompared here: comparing them too would report one defect twice.
+    # The rules in force on the default branch are already checked for
+    # PARAMETERS_IN_FORCE and for some rule types, so its ruleset is compared
+    # without those, or one defect would be reported twice.
     def ruleset_shapes
       @rulesets.to_h do |file, ruleset|
         shape = RulesetShape.of(ruleset)
-        shape.rules = nil if file == DEFAULT_BRANCH_RULESET
+        shape.leave_to_rules_in_force(PARAMETERS_IN_FORCE) if file == DEFAULT_BRANCH_RULESET
         [ruleset['name'], shape]
       end
     end

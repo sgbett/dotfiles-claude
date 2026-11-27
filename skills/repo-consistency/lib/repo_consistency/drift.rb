@@ -71,14 +71,23 @@ module RepoConsistency
     def ruleset_lines(expected, actual)
       return [] unless actual.rulesets_available
 
-      expected.rulesets.filter_map { |name, shape| template_ruleset_line(name, shape, actual.rulesets[name]) } +
-        actual.ruleset_bypasses.map { |id, name, bypass| "ruleset #{label(id, name)} #{BYPASS.fetch(bypass)}" }
+      reported = rule_types_reported(expected, actual)
+      expected.rulesets.filter_map do |name, shape|
+        template_ruleset_line(name, shape, actual.rulesets[name], reported)
+      end + actual.ruleset_bypasses.map { |id, name, bypass| "ruleset #{label(id, name)} #{BYPASS.fetch(bypass)}" }
     end
 
-    def template_ruleset_line(name, shape, actual_shape)
+    # The rule types whose difference on the default branch rule_lines and
+    # linear_history_line already report.
+    def rule_types_reported(expected, actual)
+      (expected.rule_types - actual.rule_types) + ([LINEAR_HISTORY] & actual.rule_types)
+    end
+
+    def template_ruleset_line(name, shape, actual_shape, reported)
       return "ruleset \"#{name}\" missing" if actual_shape.nil?
 
-      differences = shape.differences(actual_shape).map { |field| RULESET_FIELD_NAMES.fetch(field, field.to_s) }
+      differences = shape.differences(actual_shape, reported)
+                         .map { |field| RULESET_FIELD_NAMES.fetch(field, field.to_s) }
       "ruleset \"#{name}\" differs: #{differences.join(', ')}" unless differences.empty?
     end
 

@@ -102,8 +102,8 @@ To retire a project base or release branch, or to fix a mistagged release, an ad
 
 ```sh
 jq '.enforcement = "disabled"' ruleset-tags.json | gh api -X PUT repos/OWNER/REPO/rulesets/ID --input - &&
-  git push origin :refs/tags/TAG &&
-  gh api -X PUT repos/OWNER/REPO/rulesets/ID --input ruleset-tags.json
+  git push origin :refs/tags/TAG
+gh api -X PUT repos/OWNER/REPO/rulesets/ID --input ruleset-tags.json
 ```
 
-If the chain stops part-way, the ruleset stays disabled: run the last command on its own, and `git-settings audit` reports `ruleset "Tags" differs: enforcement` until it has.
+The last command re-enables the ruleset whether or not the steps before it succeeded. If it fails or is interrupted, the ruleset stays disabled: run it again on its own, and `git-settings audit` reports `ruleset "Tags" differs: enforcement` until it has.
