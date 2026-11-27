@@ -6,7 +6,7 @@ Portable git and pull-request conventions — safe to adopt standalone, imported
 
 - Default branch: `master` (not `main`)
 - Create a branch from `master` for each task
-- **Tier.** A **protected** repository is part of the product, where the production tenants and the other committers are; any other is **personal**. The declaration is the file `.claude/rules/git-workflow.md` at the root of the repository being worked in: check that it exists, since this profile is also imported globally and having its text in context does not make a repository protected.
+- **Tier.** A **protected** repository is one that other committers work in or that production depends on; any other is **personal**. The declaration is the file `.claude/rules/git-workflow.md` at the root of the repository being worked in: check that it exists, since this profile is also imported globally and having its text in context does not make a repository protected.
 - **A protected repository lands every change via PR — never push directly to `master`** (code, docs, ADRs, plans alike); a personal one commits straight to `master`. A push to `master` rejected by a ruleset (GH013) means open a PR, never route around it.
 - **Tier line.** A repository with a genuine difference states it in one line of its `CLAUDE.md`, `Git tier: <protected|personal>; <difference>` (`Git tier: personal; issue-tracked work goes by PR`); any other has no such line.
 - **Never close a PR without explicit instruction** — if a PR isn't right, fix it, don't close it.
