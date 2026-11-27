@@ -139,7 +139,8 @@ RSpec.describe RepoConsistency::Audit do
   end
 
   it 'fails on a pull_request rule in force on a protected repository with no parameters, an approval count ' \
-     "that isn't a whole number or merge methods that aren't a list, rather than leaving them unchecked" do
+     "that isn't a whole number or merge methods that aren't a list, rather than leaving them unchecked, " \
+     'whether it is the only one or follows a sound one' do
     parameters = RepoConsistency::Testing::TemplateFixture::PULL_REQUEST_PARAMETERS
     count = 'required_approving_review_count'
     methods = 'allowed_merge_methods'
@@ -148,12 +149,15 @@ RSpec.describe RepoConsistency::Audit do
       parameters.merge(count => 'two') => 'an approval count is not a whole number',
       parameters.merge(count => 0.9) => 'an approval count is not a whole number',
       parameters.merge(methods => 'merge') => 'merge methods are not a list' }.each do |given, message|
-      repository = answers
-      repository.rules[2] = { 'type' => 'pull_request', 'parameters' => given }
-      expect_audit(repository)
+      %i[only second].each do |placement|
+        repository = answers
+        malformed = { 'type' => 'pull_request', 'parameters' => given }
+        placement == :only ? repository.rules[2] = malformed : repository.rules << malformed
+        expect_audit(repository)
 
-      expect { run_audit(repository.repository) }.to raise_error(SkillSupport::UnexpectedResponse, message),
-                                                     given.inspect
+        expect { run_audit(repository.repository) }.to raise_error(SkillSupport::UnexpectedResponse, message),
+                                                       "#{placement}: #{given.inspect}"
+      end
     end
   end
 

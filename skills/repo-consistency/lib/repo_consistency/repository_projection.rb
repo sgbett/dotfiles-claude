@@ -45,24 +45,34 @@ module RepoConsistency
     end
 
     def rule_fields
-      parameters = pull_request_parameters
       { rulesets_available: @state.rulesets_available, rule_types: @state.rules.map { |rule| rule['type'] },
-        merge_methods: parameters && merge_methods!(parameters[Template::MERGE_METHODS]),
-        approvals: parameters && approvals!(parameters[Template::APPROVALS]),
-        extra_approval: parameters && parameters[Template::EXTRA_APPROVAL] }
+        **first_pull_request_fields }
+    end
+
+    # Only the first rule's values are compared, but every one is checked,
+    # so a malformed rule can't read clean behind a sound one before it.
+    def first_pull_request_fields
+      pull_request_rules.map { |rule| pull_request_fields(rule) }.first ||
+        { merge_methods: nil, approvals: nil, extra_approval: nil }
     end
 
     # A personal repository is held only to having no pull_request rule, so
-    # its parameters go unread. A protected one's rule without them would
-    # leave every one unchecked, so it fails rather than reading clean.
-    def pull_request_parameters
-      return if Tier.of(@state.files) == Tier::PERSONAL
+    # its parameters go unread.
+    def pull_request_rules
+      return [] if Tier.of(@state.files) == Tier::PERSONAL
 
-      rule = @state.rules.find { |candidate| candidate['type'] == Template::PULL_REQUEST }
-      return if rule.nil?
-      return rule['parameters'] if rule['parameters'].is_a?(Hash)
+      @state.rules.select { |rule| rule['type'] == Template::PULL_REQUEST }
+    end
 
-      raise SkillSupport::UnexpectedResponse, 'a pull_request rule carries no parameters'
+    # A rule without parameters would leave every one unchecked, so it fails
+    # rather than reading clean.
+    def pull_request_fields(rule)
+      parameters = rule['parameters']
+      raise SkillSupport::UnexpectedResponse, 'a pull_request rule carries no parameters' unless parameters.is_a?(Hash)
+
+      { merge_methods: merge_methods!(parameters[Template::MERGE_METHODS]),
+        approvals: approvals!(parameters[Template::APPROVALS]),
+        extra_approval: parameters[Template::EXTRA_APPROVAL] }
     end
 
     # Integer() would round 0.9 down to a template's 0 and read clean.
