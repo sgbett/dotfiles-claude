@@ -39,7 +39,8 @@ module RepoConsistency
     def repository_fields
       declaration = TierLine.read(@state.files[VendoredPaths::CLAUDE_MD])
       { default_branch: @state.default_branch, tier: Tier.of(@state.files), tier_word: declaration.word,
-        difference: declaration.difference, flags: @state.flags, protection_additions: protection_additions }
+        difference: declaration.difference, flags: @state.flags, protection_additions: protection_additions,
+        pull_requests_required: pull_requests_required? }
     end
 
     def rule_fields
@@ -78,6 +79,12 @@ module RepoConsistency
                elsif !Array(ruleset[BYPASS_ACTORS]).empty? then :granted
                end
       [Integer(ruleset['id']), ruleset['name'], bypass] if bypass
+    end
+
+    # At any approval count, which protection_additions leaves out.
+    def pull_requests_required?
+      @state.rules.any? { |rule| rule['type'] == Template::PULL_REQUEST } ||
+        (!@state.protection.nil? && !@state.protection[REVIEWS].nil?)
     end
 
     def protection_additions

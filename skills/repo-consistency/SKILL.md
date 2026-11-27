@@ -197,7 +197,7 @@ Run it exactly as written, unpiped. It prints one JSON object. On `proceed`, `su
 | `classic protection present, redundant` | A classic branch protection carries nothing the template lacks, so it can go once the ruleset is in force |
 | `classic protection present, adds: <fields>` | It carries required reviews, status checks or push restrictions the template doesn't: keep or move them before removing it |
 | `default branch is <name>` | The default branch isn't `master` |
-| `no vendored rules file but the default branch requires pull requests` | A personal repository with a `pull_request` rule: vendor the rules file if it is protected, else drop the rule |
+| `no vendored rules file but the default branch requires pull requests` | A personal repository with a `pull_request` rule, or a classic protection requiring pull requests: vendor the rules file if it is protected, else drop the requirement |
 | `tier line states no difference, redundant` | The `Git tier:` line states only the tier: remove it |
 | `tier line says <word> but the repository is <tier>` | The line's word isn't the tier the rules file decides; `collaborative`, the retired name, never is |
 | `vendored rules file differs from the profile`, `vendored rules header is not the convention` | `.claude/rules/git-workflow.md` differs from `profiles/git-workflow.md` after its two header lines, or its first line lacks `vendored from sgbett/dotfiles-claude` |

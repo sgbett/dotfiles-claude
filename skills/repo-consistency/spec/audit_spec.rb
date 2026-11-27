@@ -169,6 +169,21 @@ RSpec.describe RepoConsistency::Audit do
                 'difference' => nil, 'drift' => [] }])
   end
 
+  it 'reports a personal repository whose classic protection requires pull requests, with no approvals or with ' \
+     'some, and not one whose classic protection requires none' do
+    drift = [0, 1, nil].map do |approvals|
+      repository = answers('example-owner/scratch')
+      repository.files = {}
+      repository.rules = []
+      repository.rulesets = []
+      reviews = approvals && { 'required_pull_request_reviews' => { 'required_approving_review_count' => approvals } }
+      repository.protection = { 'enforce_admins' => { 'enabled' => false } }.merge(reviews.to_h)
+      drift_of(repository).first
+    end
+
+    expect(drift).to eq(([['no vendored rules file but the default branch requires pull requests']] * 2) + [[]])
+  end
+
   it 'reports a default branch other than master, having read the rules, protection and files on that branch' do
     expect(drift_of(answers('example-owner/main-line', branch: 'main'))).to eq([['default branch is main']])
   end

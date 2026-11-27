@@ -16,6 +16,8 @@ module RepoConsistency
   # ruleset whose bypass actors are granted or unreadable, and which of the
   # two; protection_additions is nil without a classic protection, else
   # what it adds beyond the template, so [] for a redundant one;
+  # pull_requests_required is whether a pull_request rule or a classic
+  # protection requires pull requests, at any approval count;
   # rules_body is the vendored rules file after its header, nil when the
   # file is missing; unshipped_skills lists, sorted, each of UserSkills'
   # names the instruction files invoke that the repository doesn't ship;
@@ -23,6 +25,6 @@ module RepoConsistency
   # unchecked, unshipped_skills then being [].
   Projection = Struct.new(:default_branch, :tier, :tier_word, :difference, :rulesets_available, :rule_types,
                           :merge_methods, :approvals, :extra_approval, :rulesets, :ruleset_bypasses, :flags,
-                          :protection_additions, :rules_header_ok, :rules_body, :unshipped_skills,
-                          :skills_unchecked, keyword_init: true)
+                          :protection_additions, :pull_requests_required, :rules_header_ok, :rules_body,
+                          :unshipped_skills, :skills_unchecked, keyword_init: true)
 end

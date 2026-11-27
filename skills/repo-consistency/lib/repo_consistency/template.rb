@@ -77,7 +77,7 @@ module RepoConsistency
       Projection.new(default_branch: DEFAULT_BRANCH, tier: Tier::PROTECTED, tier_word: nil, difference: nil,
                      rulesets_available: true, rule_types: rule_types, merge_methods: parameters[MERGE_METHODS],
                      approvals: parameters[APPROVALS], extra_approval: parameters[EXTRA_APPROVAL],
-                     rulesets: ruleset_shapes,
+                     rulesets: ruleset_shapes, pull_requests_required: true,
                      ruleset_bypasses: [], flags: @repository_flags, protection_additions: nil,
                      rules_header_ok: true, rules_body: @profile, unshipped_skills: [], skills_unchecked: nil)
     end

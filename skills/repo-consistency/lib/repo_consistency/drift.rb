@@ -35,7 +35,7 @@ module RepoConsistency
     end
 
     def personal_lines(actual)
-      [(PERSONAL_WITH_PULL_REQUESTS if actual.rule_types.include?(Template::PULL_REQUEST)), tier_line(actual)].compact
+      [(PERSONAL_WITH_PULL_REQUESTS if actual.pull_requests_required), tier_line(actual)].compact
     end
 
     def protected_lines(expected, actual)
