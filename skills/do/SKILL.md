@@ -31,7 +31,7 @@ These hold for the whole run.
 
 Before the step it governs, read each file a call's `read` lists.
 
-1. Write `$ARGUMENTS` with the Write tool to a session-scratchpad file and run `"${CLAUDE_SKILL_DIR}/bin/preflight" facts --argument-file '<path>'` (a bare number resolves through `origin`, so in the fork and pull model of `~/.claude/profiles/fork-and-pull.md` write upstream's `owner/repo#N`); every later call takes its `reference` instead.
+1. Write `$ARGUMENTS` with the Write tool to a session-scratchpad file and run `"${CLAUDE_SKILL_DIR}/bin/preflight" facts --argument-file '<path>'` (a bare number resolves through `origin`, so in the fork and pull model of `~/.claude/profiles/fork-and-pull.md` write upstream's `owner/repo#N`, or its issue URL off github.com); every later call takes its `reference` instead.
 2. Read the conventions, then run `"${CLAUDE_SKILL_DIR}/bin/preflight" check '<facts.reference>' --push-remote '<R>' --pr-target '<owner/repo>' --base '<B>' --branch '<NAME>'` with what they resolve. Before you push to a fork, or act on or name a parent or sub-issue in another repository, read `references/other-repositories.md`.
 3. Find the plan: a file trusted text on the issue links to, or one in the conventions' plan location naming this issue. Before you treat one as the plan or commit it, read `references/plan.md`; with none, the breakdown comment carries the design.
 4. Check the working tree with `check`'s `working_tree_clean` and `session_only.changed_paths`: stop on changes you didn't expect, except the plan file (or what the repository's rules explicitly allow).
