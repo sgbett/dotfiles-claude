@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'support/script_calls'
 require_relative 'support/template_fixture'
 require_relative '../lib/repo_consistency/drift'
 require_relative '../lib/repo_consistency/repository_projection'
@@ -16,64 +17,178 @@ RSpec.describe RepoConsistency::Drift do
   include RepoConsistency::Testing::TemplateFixture
 
   let(:real_template) { RepoConsistency::Template.load(File.join(repository_root, 'profiles', 'git-workflow')) }
+  # GitHub's detail of the three real templates as applied to a public
+  # scratch repository (spec/fixtures/README.md), in template order.
+  let(:scratch_details) do
+    [28_033_488, 28_033_490, 28_033_491].map do |id|
+      JSON.parse(File.read(File.join(RepoConsistency::Testing::ScriptCalls::FIXTURES, 'rulesets',
+                                     "ruleset-scratch-#{id}.json")))
+    end
+  end
 
   # The state of a repository that applied +template+ and vendored its
-  # files under the runbook's header, as GitHub would answer for it.
-  def applied(template)
+  # profile under the runbook's header, as GitHub would answer for it.
+  def applied(template, rulesets: template.rulesets.map.with_index(1) { |ruleset, id| ruleset.merge('id' => id) })
     files = vendored(template)
-    ruleset = { 'id' => 1, 'name' => template.ruleset_name, 'bypass_actors' => [] }
     scan = RepoConsistency::SkillScan.new(texts: files.values_at('.claude/rules/git-workflow.md', 'CLAUDE.md'),
                                           shipped: [])
     RepoConsistency::RepositoryState.new(repository: 'example-owner/applied', default_branch: 'master',
-                                         flags: template.repository_flags, rules: template.rules, rulesets: [ruleset],
+                                         flags: template.repository_flags, rules: template.rules, rulesets: rulesets,
                                          protection: nil, rulesets_available: true, files: files, skill_scan: scan)
   end
 
   def vendored(template)
     header = "<!-- vendored from sgbett/dotfiles-claude profiles/git-workflow.md -->\n\n"
-    { 'CLAUDE.md' => "# Project\n\nGit tier: collaborative\n",
-      '.claude/rules/git-workflow.md' => header + template.profile,
-      '.claude/hooks/push-guard' => template.hooks['push-guard'],
-      '.claude/hooks/push-guard.rb' => template.hooks['push-guard.rb'],
-      '.claude/settings.json' => JSON.generate(template.hooks_settings) }
+    { 'CLAUDE.md' => "# Project\n", '.claude/rules/git-workflow.md' => header + template.profile }
+  end
+
+  def drift(state, template = real_template)
+    described_class.lines(template.projection, RepoConsistency::RepositoryProjection.call(state))
   end
 
   it 'finds none between the template fixture and itself, nor against a repository that applied it' do
     template = RepoConsistency::Template.load(template_directory)
 
     expect(described_class.lines(template.projection, template.projection)).to eq([])
-    expect(described_class.lines(template.projection, RepoConsistency::RepositoryProjection.call(applied(template))))
-      .to eq([])
+    expect(drift(applied(template), template)).to eq([])
   end
 
   it 'finds none between profiles/git-workflow, the real template, and itself, nor against a repository that ' \
      'applied it' do
     expect(described_class.lines(real_template.projection, real_template.projection)).to eq([])
-    expect(described_class.lines(real_template.projection,
-                                 RepoConsistency::RepositoryProjection.call(applied(real_template)))).to eq([])
+    expect(drift(applied(real_template))).to eq([])
   end
 
   it "reports a ruleset's bypass actors unreadable when GitHub leaves them out of its detail, as it does for a " \
      'caller without admin rights, rather than clean where it cannot see' do
     state = applied(real_template)
-    state.rulesets = [{ 'id' => 1, 'name' => real_template.ruleset_name }]
+    state.rulesets[0] = state.rulesets[0].except('bypass_actors')
 
-    expect(described_class.lines(real_template.projection, RepoConsistency::RepositoryProjection.call(state)))
-      .to eq(['ruleset "Git workflow" bypass actors unreadable'])
+    expect(drift(state)).to eq(['ruleset "Git workflow" bypass actors unreadable'])
   end
 
-  it 'reads the real template as the runbook describes it: three rules, merge commits alone, no bypass, no ' \
-     'approvals, and no extra approval for unattributed changes' do
+  it 'reads the real template as the runbook describes it: three rules on the default branch, merge commits alone, ' \
+     'no approvals, and no extra approval for unattributed changes' do
     projection = real_template.projection
 
-    expect(real_template.ruleset_name).to eq('Git workflow')
     expect(projection.rule_types).to eq(%w[deletion non_fast_forward pull_request])
     expect(projection.to_h.values_at(:merge_methods, :approvals, :extra_approval, :ruleset_bypasses, :default_branch,
                                      :tier))
-      .to eq([['merge'], 0, false, [], 'master', 'collaborative'])
+      .to eq([['merge'], 0, false, [], 'master', 'protected'])
     expect(projection.flags).to eq('allow_squash_merge' => false, 'allow_rebase_merge' => false,
                                    'allow_merge_commit' => true, 'allow_update_branch' => false)
-    expect(projection.hooks.keys).to eq(%w[push-guard push-guard.rb])
-    expect(projection.hooks_entry).to eq(:present)
+  end
+
+  it 'pins the real ruleset templates: project bases and release branches by pattern, tags against deletion and ' \
+     'update but not creation, and no bypass actors in any' do
+    by_name = real_template.rulesets.to_h { |ruleset| [ruleset['name'], ruleset] }
+    shape = ->(name) { RepoConsistency::RulesetShape.of(by_name.fetch(name)).to_h }
+
+    expect(by_name.keys).to eq(['Git workflow', 'Project and release branches', 'Tags'])
+    expect(real_template.rulesets.map { |ruleset| ruleset['bypass_actors'] }).to eq([[], [], []])
+    expect(shape.call('Git workflow').values_at(:target, :enforcement, :includes, :excludes))
+      .to eq(['branch', 'active', ['~DEFAULT_BRANCH'], []])
+    expect(shape.call('Project and release branches'))
+      .to eq(target: 'branch', enforcement: 'active', includes: %w[refs/heads/project/*/master refs/heads/releases/*],
+             excludes: [], rules: { 'deletion' => {}, 'non_fast_forward' => {} })
+    expect(shape.call('Tags'))
+      .to eq(target: 'tag', enforcement: 'active', includes: ['~ALL'], excludes: [],
+             rules: { 'deletion' => {}, 'update' => {} })
+  end
+
+  describe 'rulesets compared with the templates' do
+    it "finds none in GitHub's detail of the real templates as applied, whatever defaults GitHub adds" do
+      expect(drift(applied(real_template, rulesets: scratch_details))).to eq([])
+    end
+
+    it 'names, for each template ruleset that differs, the fields it differs in, comparing patterns in either ' \
+       'order and only the parameters the template states' do
+      default_branch, protected_branches, tags = scratch_details
+      default_branch['rules'][2]['parameters']['allowed_merge_methods'] = %w[merge squash]
+      default_branch['conditions']['ref_name']['include'] = ['~DEFAULT_BRANCH', 'refs/heads/main']
+      protected_branches['conditions']['ref_name']['include'].reverse!
+      protected_branches['rules'].pop
+      protected_branches['target'] = 'push'
+      tags['enforcement'] = 'disabled'
+      tags['rules'] << { 'type' => 'creation' }
+      tags['conditions']['ref_name']['exclude'] = ['refs/tags/scratch-*']
+
+      expect(drift(applied(real_template, rulesets: [default_branch, protected_branches, tags])))
+        .to eq(['ruleset "Git workflow" differs: include, rules',
+                'ruleset "Project and release branches" differs: target, rules',
+                'ruleset "Tags" differs: enforcement, exclude, rules'])
+    end
+
+    it "leaves the default branch's ruleset's rules to the rules in force there, so a defect in them is reported " \
+       'once, while the other templates still report theirs' do
+      default_branch, protected_branches, tags = scratch_details
+      default_branch['rules'].delete_at(1)
+      default_branch['rules'][1]['parameters']['allowed_merge_methods'] = %w[merge squash]
+      protected_branches['rules'].pop
+      tags['rules'].pop
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+      state.rules = default_branch['rules']
+
+      expect(drift(state))
+        .to eq(['rule missing: non_fast_forward', 'pull_request allows squash',
+                'ruleset "Project and release branches" differs: rules', 'ruleset "Tags" differs: rules'])
+    end
+
+    it "still compares the default branch's ruleset for what the rules in force aren't checked for: the other " \
+       'parameters the template states, and rule types beyond its own and linear history' do
+      default_branch, protected_branches, tags = scratch_details
+      default_branch['rules'][2]['parameters']['require_code_owner_review'] = true
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+      state.rules = default_branch['rules']
+
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+
+      default_branch['rules'][2]['parameters']['require_code_owner_review'] = false
+      default_branch['rules'] << { 'type' => 'required_linear_history' }
+
+      expect(drift(state)).to eq(['rule present: required_linear_history'])
+
+      default_branch['rules'] << { 'type' => 'required_signatures' }
+
+      expect(drift(state)).to eq(['rule present: required_linear_history', 'ruleset "Git workflow" differs: rules'])
+    end
+
+    it "reports a default branch's ruleset requiring approvals once, whichever pull_request rule in force is first" do
+      default_branch, protected_branches, tags = scratch_details
+      compliant = default_branch['rules'][2]
+      strict = Marshal.load(Marshal.dump(compliant))
+      strict['parameters']['required_approving_review_count'] = 2
+      default_branch['rules'][2] = strict
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+
+      state.rules = default_branch['rules'][0, 2] + [compliant, strict]
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+
+      state.rules = default_branch['rules'][0, 2] + [strict, compliant]
+      expect(drift(state)).to eq(['pull_request requires 2 approvals'])
+    end
+
+    it "reports a default branch's ruleset lacking a rule, or with malformed rules, that the rules in force carry " \
+       'from elsewhere' do
+      default_branch, protected_branches, tags = scratch_details
+      state = applied(real_template, rulesets: [default_branch, protected_branches, tags])
+      state.rules = default_branch['rules'].map(&:dup)
+      default_branch['rules'].pop
+
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+
+      default_branch['rules'] = 'not an array'
+
+      expect(drift(state)).to eq(['ruleset "Git workflow" differs: rules'])
+    end
+
+    it 'reports a template ruleset missing by name, and reads a malformed detail as differing rather than failing' do
+      default_branch, protected_branches, = scratch_details
+      protected_branches['conditions'] = 'not an object'
+      protected_branches['rules'] = [{ 'type' => 'deletion', 'parameters' => [] }, 'non_fast_forward']
+
+      expect(drift(applied(real_template, rulesets: [default_branch, protected_branches])))
+        .to eq(['ruleset "Project and release branches" differs: include, rules', 'ruleset "Tags" missing'])
+    end
   end
 end

@@ -104,7 +104,7 @@ module RepoConsistency
           stderr: "gh: #{message} (HTTP #{status})\n" }
       end
 
-      # The five file reads of +repository+ at +branch+, each answered with
+      # The vendored file reads of +repository+ at +branch+, each answered with
       # its text in +files+ or GitHub's recorded 404.
       def file_entries(repository, branch, files)
         VendoredPaths::ALL.map do |path|

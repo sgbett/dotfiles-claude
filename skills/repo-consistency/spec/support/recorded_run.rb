@@ -17,17 +17,21 @@ module RepoConsistency
       RECORDED_CLAUDE_TREE = 'eecdcc7a616b52dd805c6b3cda68eeb89907ccd6'
       # A CLAUDE.md without a tier line, standing for sgbett/bsv-ruby-sdk's
       # (spec/fixtures/README.md says why that one isn't recorded).
-      UNDECLARED_CLAUDE_MD = "# bsv-ruby-sdk\n\nRuby SDK. No tier line yet.\n"
+      SYNTHESISED_CLAUDE_MD = "# bsv-ruby-sdk\n\nRuby SDK. No tier line.\n"
+      # A vendored rules file the repository doesn't carry, so that the run
+      # exercises the protected checks; its body matches no profile.
+      SYNTHESISED_RULES_FILE = "<!-- vendored from sgbett/dotfiles-claude profiles/git-workflow.md -->\n\n" \
+                               "# Git workflow\n\nA stand-in for a vendored copy.\n"
 
-      # The answers in the order the reader calls, apart from CLAUDE.md,
-      # which holds +claude_md+.
-      def recorded_entries(claude_md: UNDECLARED_CLAUDE_MD)
+      # The answers in the order the reader calls.
+      def recorded_entries
         [entry(repository_call(RECORDED), stdout_file: recorded('repos/bsv-ruby-sdk.json')),
          entry(rules_call(RECORDED, 'master'), stdout_file: recorded('rules/bsv-ruby-sdk-master.json')),
          entry(rulesets_call(RECORDED), stdout_file: recorded('rulesets/bsv-ruby-sdk.json')),
          *recorded_ruleset_entries,
          entry(protection_call(RECORDED, 'master'), **not_protected_answer),
-         *file_entries(RECORDED, 'master', VendoredPaths::CLAUDE_MD => claude_md),
+         *file_entries(RECORDED, 'master', VendoredPaths::CLAUDE_MD => SYNTHESISED_CLAUDE_MD,
+                                           VendoredPaths::RULES_FILE => SYNTHESISED_RULES_FILE),
          *recorded_tree_entries]
       end
 
@@ -47,11 +51,10 @@ module RepoConsistency
       # What it differs from the template in, as the audit lists it.
       def recorded_drift
         ['rule missing: deletion', 'rule missing: non_fast_forward', 'rule missing: pull_request',
-         'ruleset "Git workflow" missing', 'ruleset "Block unless CI green" grants a bypass',
+         'ruleset "Git workflow" missing', 'ruleset "Project and release branches" missing', 'ruleset "Tags" missing',
+         'ruleset "Block unless CI green" grants a bypass',
          'ruleset "Copilot review for default branch" grants a bypass', 'allow_squash_merge on',
-         'allow_rebase_merge on', 'tier line undeclared', 'vendored rules file missing',
-         'vendored hook missing: push-guard', 'vendored hook missing: push-guard.rb',
-         'hooks entry missing from .claude/settings.json']
+         'allow_rebase_merge on', 'vendored rules file differs from the profile']
       end
     end
   end

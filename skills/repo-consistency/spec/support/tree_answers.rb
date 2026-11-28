@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'script_calls'
-require_relative '../../lib/repo_consistency/tier_line'
+require_relative '../../lib/repo_consistency/tier'
 require_relative '../../lib/repo_consistency/user_skills'
 require_relative '../../lib/repo_consistency/vendored_paths'
 
@@ -42,12 +42,12 @@ module RepoConsistency
       end
 
       # The entries for +repository+ at +branch+, whose files are +files+ by
-      # path; none when CLAUDE.md declares it personal. A spec whose scan
-      # stops early, on a truncated tree, a link where it looks or an
-      # oversized file, has no file to read after that point, so these
-      # needn't know where the reader stops.
+      # path; none for a personal repository. A spec whose scan stops early,
+      # on a truncated tree, a link where it looks or an oversized file, has
+      # no file to read after that point, so these needn't know where the
+      # reader stops.
       def entries(repository, branch, files)
-        return [] if TierLine.read(files[VendoredPaths::CLAUDE_MD]).tier == TierLine::PERSONAL
+        return [] if Tier.of(files) == Tier::PERSONAL
 
         reads = (unread_instruction_files(files.keys) + shipping_links(files.keys)).map do |path|
           entry(contents_call(repository, path, branch), **file_answer(path, files[path]))
