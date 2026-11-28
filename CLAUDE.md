@@ -10,6 +10,8 @@ This global holds my **universal doctrine** plus `@import`s of **shareable pract
 
 @~/.claude/profiles/work-organisation.md
 
+@~/.claude/profiles/fork-and-pull.md
+
 A project's `CLAUDE.md` can import the same bundles (or none — global-only is the floor). Modules stay flat: no imports between them. Extract a new bundle on the second real duplication, not before.
 
 ## HLR (High-Level Requirement) Issues

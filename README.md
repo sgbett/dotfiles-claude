@@ -5,7 +5,7 @@ Personal configuration for [Claude Code](https://claude.ai/code).
 ## Contents
 
 - `settings.json` - MCP server configuration
-- `profiles/` - Shareable practice bundles imported by `CLAUDE.md` (`git-workflow.md`, `work-organisation.md`); `profiles/git-workflow/` holds the git profile's enforcement assets (ruleset templates, setup runbook)
+- `profiles/` - Shareable practice bundles imported by `CLAUDE.md` (`git-workflow.md`, `work-organisation.md`, `fork-and-pull.md`); `profiles/git-workflow/` holds the git profile's enforcement assets (ruleset templates, setup runbook)
 - `agents/` - Sub-agent definitions (`white-hat`, `technical-analyst`)
 - `mcp/` - Custom MCP servers
   - `ruby-fetch/` - Ruby-based web fetch server
